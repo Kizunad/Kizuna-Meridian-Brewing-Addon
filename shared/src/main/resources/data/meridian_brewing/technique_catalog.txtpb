@@ -1,0 +1,27 @@
+schema_version: 1
+namespace: "meridian_brewing"
+definitions {
+  id: "meridian_brewing:brew"
+  version: 1
+  category: CULTIVATION
+  minimum_realm: WANDERING_QI
+  cost {}
+  phases {
+    warmup_millis: 1000
+    active_millis: 30000
+    recovery_millis: 1000
+    interruptible_by_damage: true
+  }
+  cooldown_millis: 5000
+  presentation {
+    display_name: "熬药"
+    description: "在巫釜或铜釜中按药方熬制巫药。"
+  }
+}
+books { id: "meridian_brewing:brewing" display_name: "炼药卷" }
+volumes {
+  id: "meridian_brewing:brewing_basics"
+  book_id: "meridian_brewing:brewing"
+  display_name: "熬药"
+  techniques { id: "meridian_brewing:brew" version: 1 }
+}

@@ -1,0 +1,9 @@
+description = '炼药的纯规则、配方、品质、药效和残药生命周期。'
+
+dependencies {
+    testImplementation libs.junit4
+}
+
+test {
+    useJUnit()
+}

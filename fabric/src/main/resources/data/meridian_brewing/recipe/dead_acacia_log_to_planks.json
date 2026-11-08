@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "building",
+  "group": "planks",
+  "ingredients": [
+    "meridian_brewing:dead_acacia_log"
+  ],
+  "result": {
+    "count": 2,
+    "id": "minecraft:acacia_planks"
+  }
+}

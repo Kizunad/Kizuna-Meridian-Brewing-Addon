@@ -1,0 +1,32 @@
+{
+  "replace": false,
+  "values": [
+    "#minecraft:dark_oak_logs",
+    "#minecraft:pale_oak_logs",
+    "#minecraft:oak_logs",
+    "#minecraft:acacia_logs",
+    "#minecraft:birch_logs",
+    "#minecraft:jungle_logs",
+    "#minecraft:spruce_logs",
+    "#minecraft:mangrove_logs",
+    "#minecraft:cherry_logs",
+    "meridian_brewing:dead_oak_log",
+    "meridian_brewing:dead_spruce_log",
+    "meridian_brewing:dead_birch_log",
+    "meridian_brewing:dead_jungle_log",
+    "meridian_brewing:dead_acacia_log",
+    "meridian_brewing:dead_dark_oak_log",
+    "meridian_brewing:dead_mangrove_log",
+    "meridian_brewing:dead_cherry_log",
+    "meridian_brewing:dead_pale_oak_log",
+    "meridian_brewing:dead_oak_wood",
+    "meridian_brewing:dead_spruce_wood",
+    "meridian_brewing:dead_birch_wood",
+    "meridian_brewing:dead_jungle_wood",
+    "meridian_brewing:dead_acacia_wood",
+    "meridian_brewing:dead_dark_oak_wood",
+    "meridian_brewing:dead_mangrove_wood",
+    "meridian_brewing:dead_cherry_wood",
+    "meridian_brewing:dead_pale_oak_wood"
+  ]
+}

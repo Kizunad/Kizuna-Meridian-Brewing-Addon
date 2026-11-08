@@ -1,0 +1,15 @@
+description = '炼药规则的独立契约验证。'
+
+dependencies {
+    api project(':server')
+    implementation 'dev.kizuna.meridian.technique:server'
+    testImplementation libs.junit4
+}
+
+processResources {
+    from(project(':shared').sourceSets.main.resources)
+}
+
+test {
+    useJUnit()
+}

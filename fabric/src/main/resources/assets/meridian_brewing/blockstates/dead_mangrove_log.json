@@ -1,0 +1,16 @@
+{
+  "variants": {
+    "axis=x": {
+      "model": "meridian_brewing:block/dead_mangrove_log",
+      "x": 90,
+      "y": 90
+    },
+    "axis=y": {
+      "model": "meridian_brewing:block/dead_mangrove_log"
+    },
+    "axis=z": {
+      "model": "meridian_brewing:block/dead_mangrove_log",
+      "x": 90
+    }
+  }
+}

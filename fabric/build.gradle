@@ -1,0 +1,31 @@
+plugins {
+    id 'net.fabricmc.fabric-loom'
+}
+
+description = '炼药的 26.2 Fabric 注册与世界接线。'
+
+dependencies {
+    minecraft libs.minecraft
+    implementation libs.fabric.loader
+    implementation libs.fabric.api
+    implementation project(':server')
+    include project(':server')
+    testImplementation libs.junit4
+}
+
+test {
+    useJUnit()
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') { expand version: project.version }
+    from(project(':shared').sourceSets.main.resources)
+}
+
+loom {
+    mods {
+        meridian_brewing { sourceSet sourceSets.main }
+    }
+    runs { server { runDir 'build/server' } }
+}

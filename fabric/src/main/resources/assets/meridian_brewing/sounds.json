@@ -1,0 +1,242 @@
+{
+  "brew.stir": {
+    "sounds": [
+      {
+        "name": "minecraft:entity.generic.swim",
+        "type": "event"
+      }
+    ]
+  },
+  "brew.fan": {
+    "sounds": [
+      {
+        "name": "minecraft:item.armor.equip_leather",
+        "type": "event"
+      }
+    ]
+  },
+  "brew.sniff": {
+    "sounds": [
+      {
+        "name": "minecraft:entity.fox.sniff",
+        "type": "event"
+      }
+    ]
+  },
+  "cauldron.done": {
+    "sounds": [
+      {
+        "name": "minecraft:block.brewing_stand.brew",
+        "type": "event"
+      }
+    ]
+  },
+  "cauldron.bubble": {
+    "sounds": [
+      {
+        "name": "minecraft:block.bubble_column.bubble_pop",
+        "type": "event"
+      }
+    ]
+  },
+  "cauldron.add": {
+    "sounds": [
+      {
+        "name": "minecraft:entity.generic.splash",
+        "type": "event"
+      }
+    ]
+  },
+  "cauldron.quality": {
+    "sounds": [
+      {
+        "name": "minecraft:block.amethyst_block.chime",
+        "type": "event"
+      }
+    ]
+  },
+  "cauldron.dump": {
+    "sounds": [
+      {
+        "name": "minecraft:entity.generic.splash",
+        "type": "event"
+      }
+    ]
+  },
+  "cauldron.scorch": {
+    "sounds": [
+      {
+        "name": "minecraft:block.lava.extinguish",
+        "type": "event"
+      }
+    ]
+  },
+  "cauldron.scrub": {
+    "sounds": [
+      {
+        "name": "minecraft:item.bucket.empty",
+        "type": "event"
+      }
+    ]
+  },
+  "brazier.stoke": {
+    "sounds": [
+      {
+        "name": "minecraft:block.campfire.crackle",
+        "type": "event"
+      }
+    ]
+  },
+  "brazier.rake": {
+    "sounds": [
+      {
+        "name": "minecraft:block.wood.place",
+        "type": "event"
+      }
+    ]
+  },
+  "candle.flicker": {
+    "sounds": [
+      {
+        "name": "minecraft:block.campfire.crackle",
+        "type": "event"
+      }
+    ]
+  },
+  "knife.cut": {
+    "sounds": [
+      {
+        "name": "minecraft:entity.sheep.shear",
+        "type": "event"
+      }
+    ]
+  },
+  "potion.depletion": {
+    "sounds": [
+      {
+        "name": "minecraft:entity.zombie_villager.cure",
+        "type": "event"
+      }
+    ]
+  },
+  "depletion.hiss": {
+    "sounds": [
+      {
+        "name": "minecraft:block.fire.extinguish",
+        "type": "event"
+      }
+    ]
+  },
+  "depletion.wither": {
+    "sounds": [
+      {
+        "name": "minecraft:block.fire.extinguish",
+        "type": "event"
+      }
+    ]
+  },
+  "depletion.leaves": {
+    "sounds": [
+      {
+        "name": "minecraft:block.azalea_leaves.break",
+        "type": "event"
+      }
+    ]
+  },
+  "depletion.smoke": {
+    "sounds": [
+      {
+        "name": "minecraft:entity.generic.extinguish_fire",
+        "type": "event"
+      }
+    ]
+  },
+  "potion.armor_rot": {
+    "sounds": [
+      {
+        "name": "minecraft:block.lava.extinguish",
+        "type": "event"
+      }
+    ]
+  },
+  "potion.insect_lure": {
+    "sounds": [
+      {
+        "name": "minecraft:entity.bee.pollinate",
+        "type": "event"
+      }
+    ]
+  },
+  "potion.bitter_yellow": {
+    "sounds": [
+      {
+        "name": "minecraft:block.honey_block.place",
+        "type": "event"
+      }
+    ]
+  },
+  "potion.bitter_yellow.retch": {
+    "sounds": [
+      {
+        "name": "minecraft:entity.player.burp",
+        "type": "event"
+      }
+    ]
+  },
+  "potion.qi_gather": {
+    "sounds": [
+      {
+        "name": "minecraft:block.conduit.activate",
+        "type": "event"
+      }
+    ]
+  },
+  "residue.plant": {
+    "sounds": [
+      {
+        "name": "minecraft:block.sculk.spread",
+        "type": "event"
+      }
+    ]
+  },
+  "potion.charm": {
+    "sounds": [
+      {
+        "name": "minecraft:block.amethyst_block.resonate",
+        "type": "event"
+      }
+    ]
+  },
+  "charm.shrug": {
+    "sounds": [
+      {
+        "name": "minecraft:block.amethyst_block.hit",
+        "type": "event"
+      }
+    ]
+  },
+  "charm.stagger": {
+    "sounds": [
+      {
+        "name": "minecraft:block.bell.resonate",
+        "type": "event"
+      }
+    ]
+  },
+  "charm.charmed": {
+    "sounds": [
+      {
+        "name": "minecraft:entity.allay.ambient_without_item",
+        "type": "event"
+      }
+    ]
+  },
+  "charm.wake": {
+    "sounds": [
+      {
+        "name": "minecraft:entity.illusioner.prepare_mirror",
+        "type": "event"
+      }
+    ]
+  }
+}

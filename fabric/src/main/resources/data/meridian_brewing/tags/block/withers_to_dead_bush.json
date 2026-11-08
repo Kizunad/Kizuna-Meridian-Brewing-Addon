@@ -1,0 +1,22 @@
+{
+  "replace": false,
+  "values": [
+    "minecraft:short_grass",
+    "minecraft:fern",
+    "#minecraft:small_flowers",
+    "#minecraft:saplings",
+    "#minecraft:crops",
+    "minecraft:sweet_berry_bush",
+    "minecraft:sugar_cane",
+    "minecraft:bamboo",
+    "minecraft:cactus",
+    "minecraft:cactus_flower",
+    "minecraft:firefly_bush",
+    "minecraft:bush",
+    "minecraft:short_dry_grass",
+    "minecraft:tall_dry_grass",
+    "minecraft:leaf_litter",
+    "minecraft:wildflowers",
+    "minecraft:pink_petals"
+  ]
+}

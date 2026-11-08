@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "building",
+  "group": "planks",
+  "ingredients": [
+    "meridian_brewing:dead_pale_oak_wood"
+  ],
+  "result": {
+    "count": 2,
+    "id": "minecraft:pale_oak_planks"
+  }
+}

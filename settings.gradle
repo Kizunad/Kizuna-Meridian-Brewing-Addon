@@ -1,0 +1,18 @@
+pluginManagement {
+    repositories {
+        maven { url = 'https://maven.fabricmc.net/' }
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
+apply from: new File(rootDir.parentFile, 'Kizuna-Meridian-Mod-Framework/scripts/workspace.gradle')
+
+rootProject.name = 'kizuna-meridian-brewing-addon'
+include 'shared', 'server', 'fabric', 'verification', 'gametest'
+
+// 目录验证只使用功法库的有界解析器；正式运行时由功法库按 Fabric 清单发现本仓目录。
+kizunaWorkspace.includeSource('technique', [
+        server: 'dev.kizuna.meridian.technique:server',
+        shared: 'dev.kizuna.meridian.technique:shared'
+])

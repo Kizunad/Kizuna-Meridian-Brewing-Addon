@@ -1,0 +1,23 @@
+{
+  "replace": false,
+  "values": [
+    "meridian_brewing:dead_oak_log",
+    "meridian_brewing:dead_spruce_log",
+    "meridian_brewing:dead_birch_log",
+    "meridian_brewing:dead_jungle_log",
+    "meridian_brewing:dead_acacia_log",
+    "meridian_brewing:dead_dark_oak_log",
+    "meridian_brewing:dead_mangrove_log",
+    "meridian_brewing:dead_cherry_log",
+    "meridian_brewing:dead_pale_oak_log",
+    "meridian_brewing:dead_oak_wood",
+    "meridian_brewing:dead_spruce_wood",
+    "meridian_brewing:dead_birch_wood",
+    "meridian_brewing:dead_jungle_wood",
+    "meridian_brewing:dead_acacia_wood",
+    "meridian_brewing:dead_dark_oak_wood",
+    "meridian_brewing:dead_mangrove_wood",
+    "meridian_brewing:dead_cherry_wood",
+    "meridian_brewing:dead_pale_oak_wood"
+  ]
+}

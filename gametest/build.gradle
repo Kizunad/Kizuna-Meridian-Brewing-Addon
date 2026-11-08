@@ -1,0 +1,34 @@
+plugins { alias(libs.plugins.fabric.loom) }
+
+description = '独立的炼药 Fabric GameTest 装配。'
+
+dependencies {
+    minecraft libs.minecraft
+    implementation libs.fabric.loader
+    implementation libs.fabric.api
+    implementation project(':server')
+    implementation project(':fabric')
+}
+
+processResources {
+    from(project(':fabric').sourceSets.main.resources) { exclude 'fabric.mod.json' }
+    from(project(':shared').sourceSets.main.resources)
+}
+
+loom {
+    mods {
+        meridian_brewing_test { sourceSet sourceSets.main }
+    }
+    runs {
+        gametest {
+            server()
+            name '炼药 GameTest'
+            runDir providers.gradleProperty('gametestRunDir').getOrElse('build/gametest')
+            vmArg '-Dfabric-api.gametest'
+            vmArg '-Dfabric-api.gametest.report-file=build/gametest-results.xml'
+            if (providers.gradleProperty('gametestFilter').isPresent()) {
+                vmArg "-Dfabric.api.gametest.filter=${providers.gradleProperty('gametestFilter').get()}"
+            }
+        }
+    }
+}
