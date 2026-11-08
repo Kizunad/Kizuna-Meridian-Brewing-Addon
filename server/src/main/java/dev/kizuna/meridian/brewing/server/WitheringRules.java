@@ -20,6 +20,16 @@ public final class WitheringRules {
             Map.entry("minecraft:mangrove_log", "meridian_brewing:dead_mangrove_log"),
             Map.entry("minecraft:cherry_log", "meridian_brewing:dead_cherry_log"),
             Map.entry("minecraft:pale_oak_log", "meridian_brewing:dead_pale_oak_log"));
+    private static final Map<String, String> DEAD_WOODS = Map.ofEntries(
+            Map.entry("minecraft:oak_wood", "meridian_brewing:dead_oak_wood"),
+            Map.entry("minecraft:spruce_wood", "meridian_brewing:dead_spruce_wood"),
+            Map.entry("minecraft:birch_wood", "meridian_brewing:dead_birch_wood"),
+            Map.entry("minecraft:jungle_wood", "meridian_brewing:dead_jungle_wood"),
+            Map.entry("minecraft:acacia_wood", "meridian_brewing:dead_acacia_wood"),
+            Map.entry("minecraft:dark_oak_wood", "meridian_brewing:dead_dark_oak_wood"),
+            Map.entry("minecraft:mangrove_wood", "meridian_brewing:dead_mangrove_wood"),
+            Map.entry("minecraft:cherry_wood", "meridian_brewing:dead_cherry_wood"),
+            Map.entry("minecraft:pale_oak_wood", "meridian_brewing:dead_pale_oak_wood"));
 
     private WitheringRules() {
         // 枯萎转换不保存世界状态。
@@ -56,6 +66,10 @@ public final class WitheringRules {
         String logTarget = DEAD_LOGS.get(blockId);
         if (logTarget != null) {
             return new WitheringDecision(blockId, logTarget, WitheringOutcome.DEAD_LOG);
+        }
+        String woodTarget = DEAD_WOODS.get(blockId);
+        if (woodTarget != null) {
+            return new WitheringDecision(blockId, woodTarget, WitheringOutcome.DEAD_LOG);
         }
         if (blockId.endsWith("_leaves")) {
             return new WitheringDecision(blockId, "minecraft:air", WitheringOutcome.AIR);

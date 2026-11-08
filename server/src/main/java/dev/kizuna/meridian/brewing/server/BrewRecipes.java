@@ -3,6 +3,7 @@ package dev.kizuna.meridian.brewing.server;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.Optional;
 
 /** 首版六张药方；数值集中于此，后续试熬只需改配置来源。 */
 public final class BrewRecipes {
@@ -24,6 +25,33 @@ public final class BrewRecipes {
             throw new IllegalArgumentException("没有登记药方：" + kind);
         }
         return recipe;
+    }
+
+    public static Optional<BrewRecipe> forPreparedPrimary(String itemId) {
+        if (itemId == null || itemId.isBlank()) {
+            return Optional.empty();
+        }
+        return RECIPES.values().stream()
+                .filter(recipe -> sameItemId(recipe.ingredients().preparedPrimary(), itemId))
+                .findFirst();
+    }
+
+    public static boolean sameItemId(String expected, String actual) {
+        if (expected == null || actual == null) {
+            return false;
+        }
+        if (expected.equals(actual)) {
+            return true;
+        }
+        return itemPath(expected).equals(itemPath(actual));
+    }
+
+    private static String itemPath(String itemId) {
+        int separator = itemId.indexOf(':');
+        if (separator < 0) {
+            return itemId;
+        }
+        return itemId.substring(separator + 1);
     }
 
     private static Map<BrewKind, BrewRecipe> buildRecipes() {

@@ -25,6 +25,16 @@ public enum VesselKind {
         return convergencePerSecond;
     }
 
+    public double convergencePerSecond(CopperOxidation oxidation) {
+        if (this != COPPER_CAULDRON) {
+            return convergencePerSecond;
+        }
+        if (oxidation == null) {
+            throw new IllegalArgumentException("铜釜氧化状态不能为空");
+        }
+        return oxidation.convergencePerSecond();
+    }
+
     public double waterCoolingDegrees() {
         return waterCoolingDegrees;
     }

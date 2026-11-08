@@ -1,12 +1,20 @@
 package dev.kizuna.meridian.brewing.server;
 
 /** 投入巫釜的一份物品及其炮制日期。 */
-public record IngredientBatch(String itemId, PreparationKind preparation, long preparedGameDay) {
+public record IngredientBatch(String itemId, PreparationKind preparation, long preparedGameDay,
+                              int count) {
     private static final long UNPREPARED_DAY = -1L;
+
+    public IngredientBatch(String itemId, PreparationKind preparation, long preparedGameDay) {
+        this(itemId, preparation, preparedGameDay, 1);
+    }
 
     public IngredientBatch {
         if (itemId == null || itemId.isBlank() || preparation == null) {
             throw new IllegalArgumentException("投料信息不完整");
+        }
+        if (count <= 0) {
+            throw new IllegalArgumentException("投料数量必须为正数");
         }
         if (preparation == PreparationKind.RAW && preparedGameDay != UNPREPARED_DAY) {
             throw new IllegalArgumentException("生料不能带炮制日期");
@@ -20,8 +28,16 @@ public record IngredientBatch(String itemId, PreparationKind preparation, long p
         return new IngredientBatch(itemId, PreparationKind.RAW, UNPREPARED_DAY);
     }
 
+    public static IngredientBatch raw(String itemId, int count) {
+        return new IngredientBatch(itemId, PreparationKind.RAW, UNPREPARED_DAY, count);
+    }
+
     public static IngredientBatch prepared(String itemId, long preparedGameDay) {
         return new IngredientBatch(itemId, PreparationKind.PREPARED, preparedGameDay);
+    }
+
+    public static IngredientBatch prepared(String itemId, long preparedGameDay, int count) {
+        return new IngredientBatch(itemId, PreparationKind.PREPARED, preparedGameDay, count);
     }
 
     public double scoreMultiplier(long currentGameDay) {

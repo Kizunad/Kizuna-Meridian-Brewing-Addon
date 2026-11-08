@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "CCC",
+    "CWC",
+    " C "
+  ],
+  "key": {
+    "C": "minecraft:copper_ingot",
+    "W": "meridian_brewing:witch_cauldron"
+  },
+  "result": {
+    "count": 1,
+    "id": "meridian_brewing:copper_cauldron"
+  }
+}

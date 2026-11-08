@@ -13,6 +13,7 @@ definitions {
     interruptible_by_damage: true
   }
   cooldown_millis: 5000
+  movement_speed_multiplier: 0.0001
   presentation {
     display_name: "熬药"
     description: "在巫釜或铜釜中按药方熬制巫药。"

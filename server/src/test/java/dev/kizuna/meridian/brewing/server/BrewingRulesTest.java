@@ -3,11 +3,13 @@ package dev.kizuna.meridian.brewing.server;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.util.EnumSet;
 import java.util.List;
 import java.util.UUID;
 import org.junit.Test;
 
 public final class BrewingRulesTest {
+    private static final double COLLECTION_COOLING_SECONDS = 1.25;
     private static final BrewStructure STABLE_HEAT = new BrewStructure(
             HeatSourceKind.SUN_BRAZIER_2,
             BrewStructure.REQUIRED_HEARTH_STONES,
@@ -82,8 +84,7 @@ public final class BrewingRulesTest {
 
     @Test
     public void cauldronCollectsThreeQualityCheckedBottles() {
-        BrewCauldron cauldron = new BrewCauldron(
-                BrewRecipes.require(BrewKind.BITTER_YELLOW), VesselKind.WITCH_CAULDRON, BrewForm.DRINK);
+        BrewCauldron cauldron = new BrewCauldron(VesselKind.WITCH_CAULDRON, BrewForm.DRINK);
         cauldron.addWater(3);
         cauldron.addIngredient(IngredientSlot.PRIMARY,
                 IngredientBatch.prepared("dry_moss", 0));
@@ -97,7 +98,7 @@ public final class BrewingRulesTest {
                 IngredientBatch.raw("cobweb"));
         cauldron.tick(10.0, STABLE_HEAT);
         assertEquals(BrewCauldronState.BREWED, cauldron.state());
-        cauldron.tick(1.0, new BrewStructure(
+        cauldron.tick(COLLECTION_COOLING_SECONDS, new BrewStructure(
                 HeatSourceKind.NONE, 0, SmokeVentState.OPEN, HerbState.PRESENT));
         BrewCollectionResult result = cauldron.collectBottle(3);
         assertEquals(BrewCollectionKind.POTION, result.kind());
@@ -111,8 +112,7 @@ public final class BrewingRulesTest {
                 HeatSourceKind.SUN_BRAZIER_4, 3, SmokeVentState.OPEN, HerbState.PRESENT);
         assertEquals(BrewStructure.BLOCKED_STRUCTURE_MAXIMUM, blocked.maximumTemperature(), 0.0001);
 
-        BrewCauldron cauldron = new BrewCauldron(
-                BrewRecipes.require(BrewKind.DEPLETION), VesselKind.WITCH_CAULDRON, BrewForm.SPLASH);
+        BrewCauldron cauldron = new BrewCauldron(VesselKind.WITCH_CAULDRON, BrewForm.SPLASH);
         cauldron.addWater(1);
         cauldron.addIngredient(IngredientSlot.PRIMARY,
                 IngredientBatch.prepared("withered_bush_ash", 0));
@@ -135,5 +135,84 @@ public final class BrewingRulesTest {
                 HerbState.PRESENT));
         assertTrue(cauldron.state() == BrewCauldronState.SCORCHED
                 || cauldron.scorchCount() > 0);
+    }
+
+    @Test
+    public void allFourHearthDirectionsAreRequired() {
+        for (BrewDirection missing : BrewDirection.values()) {
+            EnumSet<BrewDirection> present = EnumSet.allOf(BrewDirection.class);
+            present.remove(missing);
+            BrewStructure structure = BrewStructure.fromHearthDirections(
+                    HeatSourceKind.SUN_BRAZIER_4,
+                    present,
+                    SmokeVentState.OPEN,
+                    HerbState.PRESENT);
+            assertEquals(3, structure.hearthStoneCount());
+            assertEquals(BrewStructure.BLOCKED_STRUCTURE_MAXIMUM,
+                    structure.maximumTemperature(), 0.0001);
+        }
+        BrewStructure complete = BrewStructure.fromHearthDirections(
+                HeatSourceKind.SUN_BRAZIER_4,
+                EnumSet.allOf(BrewDirection.class),
+                SmokeVentState.OPEN,
+                HerbState.PRESENT);
+        assertTrue(complete.accepts(FireKind.SUN_FIRE));
+        assertEquals(BrewStructure.COMPLETE_STRUCTURE_MAXIMUM,
+                complete.maximumTemperature(), 0.0001);
+    }
+
+    @Test
+    public void wrongPrimaryIsReturnedWithoutChoosingRecipe() {
+        BrewCauldron cauldron = new BrewCauldron(VesselKind.WITCH_CAULDRON, BrewForm.DRINK);
+        cauldron.addWater(1);
+        IngredientBatch wrongPrimary = IngredientBatch.prepared("meridian_brewing:unknown", 0);
+        BrewActionResult result = cauldron.addIngredient(IngredientSlot.PRIMARY, wrongPrimary);
+        assertTrue(!result.accepted());
+        assertTrue(result.returnedIngredient().orElseThrow() == wrongPrimary);
+        assertTrue(cauldron.recipe().isEmpty());
+    }
+
+    @Test
+    public void adjustableFireConsumesFuelAndChangesHeatKind() {
+        BrewFireState fire = BrewFireState.brazier(FireKind.SUN_FIRE);
+        assertEquals(0, fire.level());
+        fire.addFuel("minecraft:coal");
+        assertEquals(1, fire.level());
+        assertEquals(HeatSourceKind.SUN_BRAZIER_1, fire.heatSource());
+        fire.changeFireKind(FireKind.SOUL_FIRE);
+        assertEquals(HeatSourceKind.SOUL_BRAZIER_1, fire.heatSource());
+        fire.tick(BrewFireState.FUEL_SECONDS_PER_LEVEL);
+        assertEquals(0, fire.level());
+        assertEquals(HeatSourceKind.NONE, fire.heatSource());
+    }
+
+    @Test
+    public void copperParametersMatchSecondTierRules() {
+        assertEquals(4, VesselKind.COPPER_CAULDRON.waterCapacity());
+        assertEquals(10.0, VesselKind.COPPER_CAULDRON.waterCoolingDegrees(), 0.0001);
+        assertEquals(1.3, VesselKind.COPPER_CAULDRON.qiCost(), 0.0001);
+        CopperCauldronState state = new CopperCauldronState(
+                CopperOxidation.UNAFFECTED, false);
+        state = state.age(CopperExposure.EXPOSED);
+        assertEquals(CopperOxidation.EXPOSED, state.oxidation());
+        state = state.wax();
+        assertTrue(state.age(CopperExposure.EXPOSED).waxed());
+        assertEquals(CopperOxidation.UNAFFECTED, state.scrape().oxidation());
+    }
+
+    @Test
+    public void witheringBudgetAndPermissionsAreEnforced() {
+        List<WitheringCandidate> candidates = java.util.stream.IntStream.range(0, 12)
+                .mapToObj(index -> new WitheringCandidate(
+                        "minecraft:grass_block", index, 0.0))
+                .toList();
+        assertEquals(WitheringRules.MAX_BLOCKS_PER_TICK,
+                WitheringRules.budget(candidates).size());
+        WitheringPermissions protectedSpawn = new WitheringPermissions(
+                WitheringSource.PLAYER, true, true, true);
+        WitheringPermissions disabledForMob = new WitheringPermissions(
+                WitheringSource.MOB, true, false, false);
+        assertTrue(!protectedSpawn.allowsBlockChange());
+        assertTrue(!disabledForMob.allowsBlockChange());
     }
 }

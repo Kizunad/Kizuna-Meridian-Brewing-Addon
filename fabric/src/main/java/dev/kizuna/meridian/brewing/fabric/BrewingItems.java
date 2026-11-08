@@ -25,16 +25,28 @@ final class BrewingItems {
         registerPrepared("poison_potato_slice");
         registerPrepared("berry_mash");
         registerItem("brew_residue", new Item.Properties());
-        registerItem("brew_recipe", new Item.Properties().stacksTo(1));
-        registerItem("herb_knife", new Item.Properties().stacksTo(1).durability(128));
+        registerCustomItem("brew_recipe", new RecipeScrollItem(itemProperties("brew_recipe")
+                .stacksTo(1)
+                .component(BrewingComponents.RECIPE_KIND, "depletion")));
+        registerCustomItem("herb_knife", new HerbKnifeItem(itemProperties("herb_knife")
+                .stacksTo(1)
+                .durability(128)));
     }
 
     static Map<String, Item> all() {
         return Map.copyOf(ITEMS);
     }
 
+    static Item item(String path) {
+        Item item = ITEMS.get(path);
+        if (item == null) {
+            throw new IllegalArgumentException("未登记物品：" + path);
+        }
+        return item;
+    }
+
     private static void registerPrepared(String path) {
-        registerItem(path, new Item.Properties());
+        registerCustomItem(path, new PreparedIngredientItem(itemProperties(path)));
     }
 
     private static void registerItem(String path, Item.Properties properties) {
@@ -42,5 +54,16 @@ final class BrewingItems {
         ResourceKey<Item> itemKey = ResourceKey.create(Registries.ITEM, id);
         Item item = Registry.register(BuiltInRegistries.ITEM, id, new Item(properties.setId(itemKey)));
         ITEMS.put(path, item);
+    }
+
+    private static Item.Properties itemProperties(String path) {
+        Identifier id = Identifier.fromNamespaceAndPath(BrewingFabric.MOD_ID, path);
+        ResourceKey<Item> itemKey = ResourceKey.create(Registries.ITEM, id);
+        return new Item.Properties().setId(itemKey);
+    }
+
+    private static void registerCustomItem(String path, Item item) {
+        Identifier id = Identifier.fromNamespaceAndPath(BrewingFabric.MOD_ID, path);
+        ITEMS.put(path, Registry.register(BuiltInRegistries.ITEM, id, item));
     }
 }

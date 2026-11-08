@@ -1,0 +1,7 @@
+{
+  "type": "minecraft:campfire_cooking",
+  "ingredient": "minecraft:short_grass",
+  "result": "meridian_brewing:withered_bush_ash",
+  "experience": 0.0,
+  "cookingtime": 600
+}

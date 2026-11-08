@@ -27,5 +27,9 @@
   "item.minecraft.splash_potion.effect.meridian_brewing_armor_rot": "Splash Armor Rot Brew",
   "item.minecraft.splash_potion.effect.meridian_brewing_insect_lure": "Splash Insect Lure Brew",
   "item.minecraft.splash_potion.effect.meridian_brewing_charm": "Splash Charm Brew",
-  "tag.item.meridian_brewing.stirrers": "Brewing Stirrers"
+  "tag.item.meridian_brewing.stirrers": "Brewing Stirrers",
+  "block.meridian_brewing.iron_brazier": "Iron Brazier",
+  "block.meridian_brewing.iron_stove": "Iron Stove",
+  "block.meridian_brewing.herb_crate": "Herb Crate",
+  "container.meridian_brewing.herb_crate": "Herb Crate"
 }

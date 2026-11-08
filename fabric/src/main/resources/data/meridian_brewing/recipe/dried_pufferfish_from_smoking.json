@@ -1,0 +1,7 @@
+{
+  "type": "minecraft:smoking",
+  "ingredient": "minecraft:pufferfish",
+  "result": "meridian_brewing:dried_pufferfish",
+  "experience": 0.0,
+  "cookingtime": 100
+}

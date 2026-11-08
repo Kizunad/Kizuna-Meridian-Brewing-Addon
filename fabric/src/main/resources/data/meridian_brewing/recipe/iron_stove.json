@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "ISI",
+    "IBI",
+    "III"
+  ],
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "S": "minecraft:stone_bricks",
+    "B": "meridian_brewing:iron_brazier"
+  },
+  "result": {
+    "count": 1,
+    "id": "meridian_brewing:iron_stove"
+  }
+}
