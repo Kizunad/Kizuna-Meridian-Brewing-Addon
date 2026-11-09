@@ -43,6 +43,9 @@ import net.minecraft.core.Direction;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.network.chat.Component;
+import net.fabricmc.fabric.impl.networking.RegistrationPayload;
+import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket;
+import dev.kizuna.meridian.human.fabric.HumanChannels;
 
 /** Brewing、Threatening、Human 的正式会话与玩家网络门禁回归。 */
 public final class BrewingCharmGameTest {
@@ -348,6 +351,71 @@ public final class BrewingCharmGameTest {
         scoreboard.removePlayerTeam(team);
         BrewingTestPlayers.close(teammate);
         close(caster, List.of(subject, second, pet));
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void missingControlChannelDisconnectsOnlyThatPlayer(GameTestHelper context) {
+        // 登录恢复完成后撤销控制通道，服务器必须继续 tick 并关闭这一连接的会话。
+        ServerPlayer caster = BrewingTestPlayers.create(context);
+        ServerPlayer subject = BrewingTestPlayers.create(context);
+        context.runAfterDelay(INTENT_DELAY, () -> {
+            var unregister = new RegistrationPayload(RegistrationPayload.UNREGISTER,
+                    List.of(HumanChannels.CONTROL.type().id()));
+            subject.connection.handleCustomPayload(new ServerboundCustomPayloadPacket(unregister));
+            charm(subject, caster);
+            context.runAfterDelay(INTENT_DELAY, () -> {
+                context.assertTrue(!subject.connection.isAcceptingMessages(), "缺少通道的连接未断开");
+                context.assertTrue(BrewingTestPlayers.disconnectReason(subject)
+                        .contains("缺少 Human 客户端控制通道"), "断线原因不明确");
+                context.assertTrue(!HumanControl.controlled(subject.getUUID())
+                        && !BrewCharmSessions.controlled(subject.getUUID()), "断线后会话未结束");
+                context.assertTrue(caster.connection.isAcceptingMessages(), "正常玩家连接受到影响");
+                BrewingTestPlayers.close(subject);
+                BrewingTestPlayers.close(caster);
+                context.succeed();
+            });
+        });
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void environmentalDamageDoesNotShortenCharm(GameTestHelper context) {
+        // 环境伤害走正式伤害入口；五秒之后仍受控，且没有产生玩家命中记忆。
+        ServerPlayer caster = BrewingTestPlayers.create(context);
+        Villager subject = villager(context, 2);
+        charm(subject, caster);
+        var source = subject.damageSources().fall();
+        VanillaDamageFabric.damageDirect(new VanillaDamageFabric.DirectDamage(
+                subject, source, "right_upper_arm", HIT_HP)).orElseThrow();
+        context.runAfterDelay(SHORTENED_END, () -> {
+            context.assertTrue(BrewCharmSessions.controlled(subject.getUUID()), "摔伤扣掉了一秒控制");
+            context.assertTrue(BrewCharmTargets.opponent(caster, subject) == null, "环境伤害产生敌人记忆");
+            close(caster, List.of(subject));
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void mobAlliesAndOwnedSummonsAreProtected(GameTestHelper context) {
+        // 袭击者同盟与可拥有的召唤物都属于生物施药者一方。
+        var caster = context.spawn(EntityTypes.EVOKER, new BlockPos(1, HEIGHT, 1));
+        var ally = context.spawn(EntityTypes.PILLAGER, new BlockPos(2, HEIGHT, 1));
+        var summon = context.spawn(EntityTypes.VEX, new BlockPos(3, HEIGHT, 1));
+        caster.setNoAi(true /* noAi */);
+        ally.setNoAi(true /* noAi */);
+        summon.setNoAi(true /* noAi */);
+        summon.setOwner(caster);
+        Villager subject = villager(context, 2);
+        charm(subject, caster);
+        context.assertTrue(BrewCharmTargets.sameSide(caster, ally), "袭击者原版同盟未受保护");
+        context.assertTrue(BrewCharmTargets.sameSide(caster, summon), "召唤物主人未受保护");
+        hit(subject, ally);
+        context.assertTrue(!BrewCharmSessions.controlled(subject.getUUID()), "生物同伴命中没有叫醒");
+        Villager second = villager(context, 3);
+        charm(second, caster);
+        hit(second, summon);
+        context.assertTrue(!BrewCharmSessions.controlled(second.getUUID()), "召唤物命中没有叫醒");
+        List.of(caster, ally, summon, subject, second).forEach(Mob::discard);
         context.succeed();
     }
 

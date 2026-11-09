@@ -28,4 +28,7 @@ message BrewDose {
   repeated string fading_part_ids = 10;
   // 提前治满后的退封计划，用于按状态剩余时间恢复离线暂停的曲线。
   repeated kizuna.meridian.v1.CapabilityModifier fading_modifiers = 11;
+  optional double strength_multiplier = 12;
+  optional int32 strength_quality = 13;
+  optional double duration_multiplier = 14;
 }

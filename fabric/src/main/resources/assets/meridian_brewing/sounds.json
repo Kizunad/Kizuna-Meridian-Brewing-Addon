@@ -112,6 +112,7 @@
     ]
   },
   "potion.depletion": {
+    "subtitle": "subtitles.meridian_brewing.potion.depletion",
     "sounds": [
       {
         "name": "minecraft:entity.zombie_villager.cure",
@@ -152,6 +153,7 @@
     ]
   },
   "potion.armor_rot": {
+    "subtitle": "subtitles.meridian_brewing.potion.armor_rot",
     "sounds": [
       {
         "name": "minecraft:block.lava.extinguish",
@@ -160,6 +162,7 @@
     ]
   },
   "potion.insect_lure": {
+    "subtitle": "subtitles.meridian_brewing.potion.insect_lure",
     "sounds": [
       {
         "name": "minecraft:entity.bee.pollinate",
@@ -168,6 +171,7 @@
     ]
   },
   "potion.bitter_yellow": {
+    "subtitle": "subtitles.meridian_brewing.potion.bitter_yellow",
     "sounds": [
       {
         "name": "minecraft:block.honey_block.place",
@@ -184,6 +188,7 @@
     ]
   },
   "potion.qi_gather": {
+    "subtitle": "subtitles.meridian_brewing.potion.qi_gather",
     "sounds": [
       {
         "name": "minecraft:block.conduit.activate",
@@ -192,6 +197,7 @@
     ]
   },
   "residue.plant": {
+    "subtitle": "subtitles.meridian_brewing.residue.plant",
     "sounds": [
       {
         "name": "minecraft:block.sculk.spread",
@@ -200,6 +206,7 @@
     ]
   },
   "potion.charm": {
+    "subtitle": "subtitles.meridian_brewing.potion.charm",
     "sounds": [
       {
         "name": "minecraft:block.amethyst_block.resonate",

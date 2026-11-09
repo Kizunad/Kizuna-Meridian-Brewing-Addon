@@ -53,11 +53,11 @@ public final class BitterHealing {
     public static Map<String, Double> doses(BodySnapshot body, BrewDose dose, long nowMillis) {
         // 每秒按实际曲线积分，服务端跳过 tick 也不会重复治疗已结算区间。
         BrewUse use = BrewUse.valueOf(dose.getUse());
-        var profile = BrewEffectProfiles.bitterYellow(BrewQuality.fromComponentValue(dose.getQuality()), use);
+        var profile = BrewEffectProfiles.bitterYellow(BrewPotency.quality(dose), use);
         double seconds = healingSeconds(dose, nowMillis);
-        double budget = profile.healingPerSecond() * seconds;
+        double budget = profile.healingPerSecond() * seconds * BrewPotency.strength(dose);
         var result = new LinkedHashMap<String, Double>();
-        if (use == BrewUse.DRINK) {
+        if (use == BrewUse.DRINK || use == BrewUse.ANOINT) {
             allocateDrink(body, dose.getPartIdsList(), budget, result);
         } else {
             for (String partId : dose.getPartIdsList()) {

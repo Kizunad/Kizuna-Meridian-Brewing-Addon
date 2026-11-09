@@ -65,7 +65,7 @@ import net.minecraft.world.phys.Vec3;
 public final class BrewingRuntime {
     private static final int TICKS_PER_SECOND = 20;
     private static final int MIN_EFFECT_TICKS = 1;
-    private static final double DEFAULT_SPLASH_RADIUS = 3.0;
+    static final double DEFAULT_SPLASH_RADIUS = 3.0;
     private static final int SILVERFISH_SEARCH_RADIUS = 4;
     private static final String BLOCK_WORK_PROCESSOR = "meridian_brewing:block_work";
     private static final String USE_BREW_PROCESSOR = "meridian_brewing:use_brew";
@@ -82,6 +82,8 @@ public final class BrewingRuntime {
     static void register() {
         // 世界生命周期、功法处理器和持物事实在初始化时各注册一次。
         WitheringService.register();
+        BrewResidues.initialize();
+        BrewProjectiles.initialize();
         ServerTickEvents.END_SERVER_TICK.register(WitheringService::tick);
         ServerLifecycleEvents.SERVER_STARTED.register(server -> activeServer = server);
         TechniqueFabric.SERVICE_STARTED.register(service -> BrewingTechniqueContract.validate(service.registry()));
@@ -115,6 +117,7 @@ public final class BrewingRuntime {
         }
         activeBrews.clear();
         handledEffects.clear();
+        BrewTechniqueUse.clear();
         activeServer = null;
     }
 
@@ -126,6 +129,7 @@ public final class BrewingRuntime {
             active.cauldron().interruptTechniqueBrew();
         }
         handledEffects.remove(key);
+        BrewTechniqueUse.end(event.entityUuid(), event.castId());
     }
 
     private static void tickSounds() {
@@ -165,6 +169,10 @@ public final class BrewingRuntime {
     private static EffectHandling handleTechniqueEffect(TechniqueEffectEvent event) {
         // 只接管本仓声明的两个处理器，其余处理器交给其他附属模组。
         EffectIntent intent = event.intent();
+        EffectHandling techniqueBrew = BrewTechniqueUse.handle(activeServer, event);
+        if (techniqueBrew.status() != EffectHandling.Status.NOT_APPLICABLE) {
+            return techniqueBrew;
+        }
         if (intent.hasBlockWork()) {
             return handleBlockWork(event);
         }
@@ -539,8 +547,21 @@ public final class BrewingRuntime {
 
     private static void spawnSilverfish(ServerLevel level, Vec3 position,
                                         ResolvedEffect effect, Entity source) {
+        // 普通喷溅保留整瓶的孵化数量。
         InsectData data = (InsectData) effect.data();
-        for (int index = 0; index < data.profile().silverfishCount(); index++) {
+        spawnSilverfishCount(level, position, data.profile().silverfishCount(), source);
+    }
+
+    static void spawnSilverfish(ServerLevel level, Vec3 position, BrewQuality quality, Entity source,
+                                 double strength) {
+        // 催发以剩余剂量缩减数量，向下取整，仍复用出生点保护和石头检查。
+        int count = (int) Math.floor(BrewEffectProfiles.insectLure(quality).silverfishCount() * strength);
+        spawnSilverfishCount(level, position, count, source);
+    }
+
+    private static void spawnSilverfishCount(ServerLevel level, Vec3 position, int count, Entity source) {
+        // 每只虫独立寻找可出生的表面，任何一次无候选即结束本轮孵化。
+        for (int index = 0; index < count; index++) {
             BlockPos spawnPos = findStoneSpawn(level, BlockPos.containing(position), source);
             if (spawnPos == null) {
                 return;

@@ -19,7 +19,25 @@ public final class BrewDoseOperations {
     }
 
     public record DoseRequest(BrewKind kind, BrewQuality quality, BrewUse use,
-                               List<String> partIds, double durationSeconds) { }
+                               List<String> partIds, DoseTiming timing) {
+        public DoseRequest(BrewKind kind, BrewQuality quality, BrewUse use,
+                           List<String> partIds, double durationSeconds) {
+            // 原版物品入口沿用无加成的剂量。
+            this(kind, quality, use, partIds, new DoseTiming(durationSeconds, BrewPotency.ordinary(quality)));
+        }
+
+        public double durationSeconds() {
+            // 剂量时长独立于强度品质，便于兼容原始物品入口。
+            return timing.durationSeconds();
+        }
+
+        public BrewPotency potency() {
+            // 同一次用药共用完整的强度与代价参数。
+            return timing.potency();
+        }
+    }
+
+    public record DoseTiming(double durationSeconds, BrewPotency potency) { }
 
     public static BodyActivity install(BodySnapshot body, DoseRequest request) {
         // 保留不重叠部位的旧剂量，替换部分同时撤销旧修正并登记新修正。
@@ -61,7 +79,8 @@ public final class BrewDoseOperations {
         }
         if (request.kind() == BrewKind.BITTER_YELLOW && request.use() == BrewUse.DRINK) {
             var profile = BrewEffectProfiles.bitterYellow(request.quality(), request.use());
-            long nauseaEnd = incoming.getStartedMillis() + Math.round(profile.nauseaSeconds() * MILLIS_PER_SECOND);
+            double nauseaSeconds = profile.nauseaSeconds() * request.potency().nausea();
+            long nauseaEnd = incoming.getStartedMillis() + Math.round(nauseaSeconds * MILLIS_PER_SECOND);
             state.setNauseaUntilMillis(Math.max(state.getNauseaUntilMillis(), nauseaEnd));
         }
         BrewBodyProgress.write(activity, state.build());
@@ -98,11 +117,15 @@ public final class BrewDoseOperations {
         long now = body.getSettledAt().getElapsedMillis();
         double loss = 0;
         if (request.kind() == BrewKind.DEPLETION) {
-            loss = 1 - BrewEffectProfiles.depletion(request.quality()).muscleEnduranceMultiplier();
+            double baseLoss = 1 - BrewEffectProfiles.depletion(request.potency().quality()).muscleEnduranceMultiplier();
+            loss = Math.min(MAX_ENDURANCE_LOSS, baseLoss * request.potency().strength());
         }
         return BrewDose.newBuilder()
                 .setKind(request.kind().name())
                 .setQuality(request.quality().componentValue())
+                .setStrengthQuality(request.potency().quality().componentValue())
+                .setStrengthMultiplier(request.potency().strength())
+                .setDurationMultiplier(request.potency().duration())
                 .setUse(request.use().name())
                 .addAllPartIds(request.partIds())
                 .setStartedMillis(now)
@@ -121,6 +144,15 @@ public final class BrewDoseOperations {
 
     private static void merge(BrewDose.Builder incoming, BrewDose old) {
         // 枯竭耐力扣减相加封顶，持续取较长者，迟滞取较强品质。
+        BrewDose fresh = incoming.build();
+        double freshTempoLoss = (1 - BrewEffectProfiles.depletion(BrewPotency.quality(fresh)).tempoMultiplier())
+                * BrewPotency.strength(fresh);
+        double oldTempoLoss = (1 - BrewEffectProfiles.depletion(BrewPotency.quality(old)).tempoMultiplier())
+                * BrewPotency.strength(old);
+        if (oldTempoLoss > freshTempoLoss) {
+            incoming.setStrengthQuality(BrewPotency.quality(old).componentValue());
+            incoming.setStrengthMultiplier(BrewPotency.strength(old));
+        }
         incoming.setEndsMillis(Math.max(incoming.getEndsMillis(), old.getEndsMillis()));
         incoming.setQuality(Math.max(incoming.getQuality(), old.getQuality()));
         incoming.setEnduranceLoss(Math.min(MAX_ENDURANCE_LOSS,

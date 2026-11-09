@@ -11,8 +11,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.TamableAnimal;
-import net.minecraft.world.entity.animal.equine.AbstractHorse;
+import net.minecraft.world.entity.OwnableEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.monster.Enemy;
 
@@ -28,15 +27,15 @@ public final class BrewCharmTargets {
     }
 
     public static boolean sameSide(LivingEntity caster, Entity candidate) {
-        // 队伍规则仅包含玩家；宠物按真实主人识别，不把所有同类生物算作盟友。
+        // 主人与召唤物共享阵营；生物同伴由原版同盟关系决定，玩家仍遵循计分板队伍。
         if (candidate == caster) {
             return true;
         }
-        if (candidate instanceof TamableAnimal pet && pet.isOwnedBy(caster)) {
+        if (candidate instanceof OwnableEntity owned && owned.getOwner() == caster) {
             return true;
         }
-        if (candidate instanceof AbstractHorse horse && horse.isTamed() && horse.getOwner() == caster) {
-            return true;
+        if (caster instanceof Mob && candidate instanceof Mob) {
+            return caster.isAlliedTo(candidate);
         }
         return candidate instanceof Player && caster.getTeam() != null && caster.isAlliedTo(candidate);
     }

@@ -155,8 +155,8 @@ public final class BrewCharmSessions {
     }
 
     private static void damaged(VanillaDamageFabric.DamageEvent event) {
-        // 只读已提交的真实伤害；零剂量、盾挡与无敌拒绝不会写入命中记忆。
-        if (event.input().damageAfterEffects() <= 0) {
+        // 只有别人造成的有效伤害才缩时并记忆；环境伤害不改变受惑期限。
+        if (event.input().damageAfterEffects() <= 0 || event.attacker() == null) {
             return;
         }
         LivingEntity target = event.target();

@@ -11,7 +11,11 @@
       "dev.kizuna.meridian.brewing.test.BrewingCastGameTest",
       "dev.kizuna.meridian.brewing.fabric.BrewingBodyGameTest",
       "dev.kizuna.meridian.brewing.fabric.BrewingHostGameTest",
-      "dev.kizuna.meridian.brewing.fabric.BrewingCharmGameTest"
+      "dev.kizuna.meridian.brewing.fabric.BrewingCharmGameTest",
+      "dev.kizuna.meridian.brewing.fabric.WitchBrewGameTest",
+      "dev.kizuna.meridian.brewing.fabric.WitchResidueGameTest",
+      "dev.kizuna.meridian.brewing.fabric.WitchProjectileGameTest",
+      "dev.kizuna.meridian.brewing.fabric.WitchSoundResourceGameTest"
     ]
   },
   "depends": {

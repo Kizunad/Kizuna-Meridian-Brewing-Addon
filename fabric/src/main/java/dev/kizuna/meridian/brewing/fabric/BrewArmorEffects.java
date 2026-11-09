@@ -5,6 +5,7 @@ import dev.kizuna.meridian.brewing.server.BrewBodyProgress;
 import dev.kizuna.meridian.brewing.server.BrewEffectProfiles;
 import dev.kizuna.meridian.brewing.server.BrewKind;
 import dev.kizuna.meridian.brewing.server.BrewQuality;
+import dev.kizuna.meridian.brewing.server.BrewPotency;
 import dev.kizuna.meridian.protocol.pb.BodyMessages.BodySnapshot;
 import dev.kizuna.meridian.vanilla.fabric.VanillaDamageFabric;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -47,7 +48,8 @@ final class BrewArmorEffects {
         for (BrewDose dose : BrewBodyProgress.read(body).getDosesList()) {
             if (dose.getKind().equals(BrewKind.ARMOR_ROT.name()) && dose.getPartIdsList().contains(partId)) {
                 var profile = BrewEffectProfiles.armorRot(BrewQuality.fromComponentValue(dose.getQuality()));
-                double reduction = (1 - profile.armorMultiplier()) * material(stack) * curve(dose, now);
+                double reduction = (1 - profile.armorMultiplier()) * material(stack) * curve(dose, now)
+                        * BrewPotency.strength(dose);
                 strongest = Math.min(strongest, 1 - reduction);
             }
         }
@@ -63,7 +65,7 @@ final class BrewArmorEffects {
                 continue;
             }
             var profile = BrewEffectProfiles.armorRot(BrewQuality.fromComponentValue(dose.getQuality()));
-            double percent = profile.durabilityPercentPerSecond() * curve(dose, now);
+            double percent = profile.durabilityPercentPerSecond() * curve(dose, now) * BrewPotency.strength(dose);
             for (String part : dose.getPartIdsList()) {
                 VanillaDamageFabric.coveredEquipmentSlot(body, part)
                         .ifPresent(slot -> slots.merge(slot, percent, Math::max));

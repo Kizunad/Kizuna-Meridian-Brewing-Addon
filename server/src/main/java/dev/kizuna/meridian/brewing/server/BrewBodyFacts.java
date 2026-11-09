@@ -30,8 +30,15 @@ public final class BrewBodyFacts {
     }
 
     public static CharmOutcome charm(BodySnapshot body, BrewQuality quality, BrewThresholds thresholds) {
+        // 普通药瓶以单位药力压制脑力。
+        return charm(body, quality, thresholds, 1);
+    }
+
+    public static CharmOutcome charm(BodySnapshot body, BrewQuality quality, BrewThresholds thresholds,
+                                      double strength) {
         // 脑疲劳以焦耳计，注意组织以自身疲劳上限计，不能直接相加原始刻度。
-        double power = brainPower(body) + attentionPower(body) - BrewEffectProfiles.charm(quality).suppression();
+        double suppression = BrewEffectProfiles.charm(quality).suppression() * strength;
+        double power = brainPower(body) + attentionPower(body) - suppression;
         if (power >= thresholds.brain().ignore()) {
             return CharmOutcome.IGNORE;
         }

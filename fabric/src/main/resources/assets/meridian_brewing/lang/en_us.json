@@ -1,4 +1,11 @@
 {
+  "subtitles.meridian_brewing.potion.depletion": "Brew corrodes skin",
+  "subtitles.meridian_brewing.potion.armor_rot": "Armor sizzles",
+  "subtitles.meridian_brewing.potion.insect_lure": "Insects catch the scent",
+  "subtitles.meridian_brewing.potion.bitter_yellow": "Salve coats wounds",
+  "subtitles.meridian_brewing.potion.qi_gather": "Brew surges through lungs",
+  "subtitles.meridian_brewing.residue.plant": "Brew seeps into flesh",
+  "subtitles.meridian_brewing.potion.charm": "Charm resonates",
   "item.meridian_brewing.withered_bush_ash": "Withered Bush Ash",
   "item.meridian_brewing.dry_moss": "Dried Moss",
   "item.meridian_brewing.dry_poppy": "Dried Poppy",

@@ -2,6 +2,7 @@ package dev.kizuna.meridian.brewing.fabric.mixin;
 
 import dev.kizuna.meridian.brewing.fabric.BrewingRuntime;
 import dev.kizuna.meridian.brewing.fabric.BrewItemStacks;
+import dev.kizuna.meridian.brewing.fabric.BrewProjectiles;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownSplashPotion;
 import net.minecraft.world.item.ItemStack;
@@ -21,7 +22,9 @@ public abstract class ThrownSplashPotionBrewMixin {
             return;
         }
         ThrownSplashPotion potion = (ThrownSplashPotion) (Object) this;
-        BrewingRuntime.splash(level, stack, potion.position(), potion.getOwner());
+        if (!BrewProjectiles.impact(potion, stack)) {
+            BrewingRuntime.splash(level, stack, potion.position(), potion.getOwner());
+        }
         callback.cancel();
     }
 }

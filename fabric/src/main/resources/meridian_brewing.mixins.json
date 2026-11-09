@@ -10,6 +10,7 @@
     "RecipeKnowledgePlayerMixin",
     "BrewEffectLifecycleMixin",
     "BrewArmorTargetMixin",
-    "BrewNauseaMixin"
+    "BrewNauseaMixin",
+    "BrewMilkResidueMixin"
   ]
 }

@@ -19,6 +19,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.GameType;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.network.protocol.common.ClientboundKeepAlivePacket;
+import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
+import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.network.protocol.common.ServerboundKeepAlivePacket;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 
@@ -34,6 +36,7 @@ public final class BrewingTestPlayers {
     private static final Map<UUID, RecordingConnection> CONNECTIONS = new HashMap<>();
     private static boolean ticking;
     private static final Map<UUID, List<ControlIntent>> CONTROL = new HashMap<>();
+    private static final Map<UUID, List<SoundPlayed>> SOUNDS = new HashMap<>();
     private static final List<Identifier> CHANNELS = List.of(
             Identifier.parse("meridian:body_view"),
             Identifier.parse("meridian:gathering_response"),
@@ -67,6 +70,7 @@ public final class BrewingTestPlayers {
         var connection = new RecordingConnection(CHANNELS);
         CONNECTIONS.put(profile.id(), connection);
         CONTROL.put(profile.id(), new ArrayList<>());
+        SOUNDS.put(profile.id(), new ArrayList<>());
         TestPlayers.logIn(player, connection);
         BlockPos position = context.absolutePos(new BlockPos(1, HEIGHT, 1));
         player.setPos(position.getX(), position.getY(), position.getZ());
@@ -94,6 +98,10 @@ public final class BrewingTestPlayers {
         // 长施放期间模拟客户端心跳，不能因为测试传输层缺少回包导致超时下线。
         var listener = (ServerGamePacketListenerImpl) connection.getPacketListener();
         for (var packet : List.copyOf(connection.packets())) {
+            if (packet instanceof ClientboundSoundPacket sound) {
+                SOUNDS.get(listener.player.getUUID()).add(new SoundPlayed(
+                        listener.player.level().getGameTime(), sound));
+            }
             if (packet instanceof ClientboundCustomPayloadPacket custom
                     && custom.payload() instanceof ProtobufChannel.Payload payload
                     && payload.type().equals(HumanChannels.CONTROL.type())) {
@@ -116,6 +124,22 @@ public final class BrewingTestPlayers {
         return List.copyOf(CONTROL.getOrDefault(player.getUUID(), List.of()));
     }
 
+    public record SoundPlayed(long tick, ClientboundSoundPacket packet) { }
+
+    public static List<SoundPlayed> sounds(ServerPlayer player) {
+        // 捕获真正发给客户端的声音包，以服务器 tick 核对到达时刻和播声位置。
+        return List.copyOf(SOUNDS.getOrDefault(player.getUUID(), List.of()));
+    }
+
+    public static String disconnectReason(ServerPlayer player) {
+        // 读取服务端实际发出的断线原因，不用测试替身模拟踢人。
+        return CONNECTIONS.get(player.getUUID()).packets().stream()
+                .filter(ClientboundDisconnectPacket.class::isInstance)
+                .map(ClientboundDisconnectPacket.class::cast)
+                .map(packet -> packet.reason().getString())
+                .findFirst().orElse("");
+    }
+
     private static void recordControl(ServerPlayer player, byte[] payload) {
         // 正式通道载荷必须能被客户端使用的协议解码。
         try {
@@ -132,5 +156,6 @@ public final class BrewingTestPlayers {
             connection.disconnectFromClient();
         }
         CONTROL.remove(player.getUUID());
+        SOUNDS.remove(player.getUUID());
     }
 }

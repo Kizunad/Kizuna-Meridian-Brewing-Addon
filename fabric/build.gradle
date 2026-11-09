@@ -5,6 +5,7 @@ plugins {
 description = '炼药的 26.2 Fabric 注册与世界接线。'
 
 dependencies {
+    implementation 'dev.kizuna.meridian.human:server'
     minecraft libs.minecraft
     implementation libs.fabric.loader
     implementation libs.fabric.api

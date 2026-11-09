@@ -39,7 +39,7 @@ public final class BrewEffectProfiles {
 
     public static BitterYellowProfile bitterYellow(BrewQuality quality, BrewUse use) {
         // 苦黄膏饮用和喷溅的治疗、药封和反胃曲线不同。
-        if (use == BrewUse.DRINK) {
+        if (use == BrewUse.DRINK || use == BrewUse.ANOINT) {
             return require(BITTER_DRINK, quality);
         }
         if (use == BrewUse.SPLASH || use == BrewUse.ANOINT || use == BrewUse.THROW

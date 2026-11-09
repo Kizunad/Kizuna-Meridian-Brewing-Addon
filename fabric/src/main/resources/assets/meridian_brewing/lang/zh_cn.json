@@ -1,4 +1,11 @@
 {
+  "subtitles.meridian_brewing.potion.depletion": "药液腐蚀皮肤",
+  "subtitles.meridian_brewing.potion.armor_rot": "酸液蚀甲",
+  "subtitles.meridian_brewing.potion.insect_lure": "药香引虫",
+  "subtitles.meridian_brewing.potion.bitter_yellow": "药膏敷上伤处",
+  "subtitles.meridian_brewing.potion.qi_gather": "药力涌入肺腑",
+  "subtitles.meridian_brewing.residue.plant": "药力潜入皮肉",
+  "subtitles.meridian_brewing.potion.charm": "惑心药力轻颤",
   "item.meridian_brewing.withered_bush_ash": "枯草灰",
   "item.meridian_brewing.dry_moss": "干苔",
   "item.meridian_brewing.dry_poppy": "干虞美人",

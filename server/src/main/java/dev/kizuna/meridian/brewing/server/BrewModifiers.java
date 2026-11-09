@@ -45,7 +45,8 @@ public final class BrewModifiers {
         BrewQuality quality = BrewQuality.fromComponentValue(dose.getQuality());
         if (BrewKind.valueOf(dose.getKind()) == BrewKind.DEPLETION) {
             modifier.setEndurancePeak(1 - dose.getEnduranceLoss());
-            modifier.setTempoPeak(BrewEffectProfiles.depletion(quality).tempoMultiplier());
+            double tempoLoss = 1 - BrewEffectProfiles.depletion(BrewPotency.quality(dose)).tempoMultiplier();
+            modifier.setTempoPeak(1 - tempoLoss * BrewPotency.strength(dose));
         } else {
             var profile = BrewEffectProfiles.bitterYellow(quality, BrewUse.valueOf(dose.getUse()));
             modifier.setStrengthPeak(profile.strengthMultiplier());
@@ -55,10 +56,15 @@ public final class BrewModifiers {
 
     private static List<CapabilityModifier> lungs(BodySnapshot body, BrewDose dose) {
         // 聚气和肺虚共用一条允许负值的曲线，炼化配方与守恒比例保持原值。
-        var profile = BrewEffectProfiles.qiGather(BrewQuality.fromComponentValue(dose.getQuality()));
-        long active = Math.round(profile.durationSeconds() * MILLIS_PER_SECOND);
+        var original = BrewEffectProfiles.qiGather(BrewQuality.fromComponentValue(dose.getQuality()));
+        var profile = BrewEffectProfiles.qiGather(BrewPotency.quality(dose));
+        long active = Math.round(original.durationSeconds() * BrewPotency.duration(dose) * MILLIS_PER_SECOND);
         long total = dose.getEndsMillis() - dose.getStartedMillis();
-        double exhaustion = (EXHAUSTED_INTAKE - 1) / (profile.intakeMultiplier() - 1);
+        double intakeGain = (profile.intakeMultiplier() - 1) * BrewPotency.strength(dose);
+        double exhaustion = (EXHAUSTED_INTAKE - 1) / intakeGain;
+        if (total > dev.kizuna.meridian.core.CapabilityModifier.MAX_CURVE_DURATION_MILLIS) {
+            return longLungEffect(body, dose, active, 1 + intakeGain);
+        }
         List<CurvePoint> curve = List.of(point(0, 0), point(RAMP_MILLIS, 1), point(active - RAMP_MILLIS, 1),
                 point(active, 0), point(active + RAMP_MILLIS, exhaustion),
                 point(total - RAMP_MILLIS, exhaustion), point(total, 0));
@@ -67,11 +73,43 @@ public final class BrewModifiers {
             if (organ.getKind().equals("human:lung")) {
                 var modifier = base(dose)
                         .setOrganId(organ.getId())
-                        .setIntakePeak(profile.intakeMultiplier())
+                        .setIntakePeak(1 + intakeGain)
                         .clearCurve()
                         .addAllCurve(curve)
                         .build();
                 modifiers.add(modifier);
+            }
+        }
+        return List.copyOf(modifiers);
+    }
+
+    private static List<CapabilityModifier> longLungEffect(BodySnapshot body, BrewDose dose,
+                                                           long active, double intakePeak) {
+        // 长效聚气跨过单条曲线时限时，正效与肺虚分开排期，仍由同一剂量统一撤销。
+        long total = dose.getEndsMillis() - dose.getStartedMillis();
+        long exhaustion = total - active;
+        List<CurvePoint> activeCurve = List.of(point(0, 0), point(RAMP_MILLIS, 1),
+                point(active - RAMP_MILLIS, 1), point(active, 0));
+        List<CurvePoint> exhaustedCurve = List.of(point(0, 0), point(RAMP_MILLIS, 1),
+                point(exhaustion - RAMP_MILLIS, 1), point(exhaustion, 0));
+        var modifiers = new ArrayList<CapabilityModifier>();
+        for (var organ : body.getStructure().getOrgansList()) {
+            if (organ.getKind().equals("human:lung")) {
+                var positive = base(dose)
+                        .setOrganId(organ.getId())
+                        .setIntakePeak(intakePeak)
+                        .clearCurve()
+                        .addAllCurve(activeCurve)
+                        .build();
+                var negative = base(dose)
+                        .setOrganId(organ.getId())
+                        .setStartMillis(dose.getStartedMillis() + active)
+                        .setIntakePeak(EXHAUSTED_INTAKE)
+                        .clearCurve()
+                        .addAllCurve(exhaustedCurve)
+                        .build();
+                modifiers.add(positive);
+                modifiers.add(negative);
             }
         }
         return List.copyOf(modifiers);

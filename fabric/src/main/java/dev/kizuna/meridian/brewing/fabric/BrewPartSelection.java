@@ -2,6 +2,7 @@ package dev.kizuna.meridian.brewing.fabric;
 
 import dev.kizuna.meridian.brewing.server.BitterHealing;
 import dev.kizuna.meridian.protocol.pb.BodyMessages.BodySnapshot;
+import dev.kizuna.meridian.technique.protocol.pb.TechniqueMessages.BrewPartGroup;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 
@@ -19,6 +20,7 @@ final class BrewPartSelection {
     private static final double LEG_HEIGHT = 0.2;
     private static final double FOOT_HEIGHT = 0.05;
     private static final float QUARTER_TURN = 90;
+    private static final double PREFERRED_WEIGHT = 4;
 
     enum Scope { ALL, WOUNDED_LIMBS }
 
@@ -29,6 +31,11 @@ final class BrewPartSelection {
     record Splash(LivingEntity target, Vec3 impact, int minimum, int maximum, Scope scope) { }
 
     static List<String> select(BodySnapshot body, Splash splash) {
+        // 普通喷溅没有瞄准分段偏向。
+        return select(body, splash, BrewPartGroup.BREW_PART_GROUP_UNSPECIFIED);
+    }
+
+    static List<String> select(BodySnapshot body, Splash splash, BrewPartGroup bias) {
         // 先跳过失能部位；苦黄膏只从可治疗的四肢中选。
         var remaining = new ArrayList<String>();
         for (var part : body.getPartStatesList()) {
@@ -47,19 +54,19 @@ final class BrewPartSelection {
         }
         var selected = new ArrayList<String>();
         while (!remaining.isEmpty() && selected.size() < count) {
-            String part = draw(remaining, splash);
+            String part = draw(remaining, splash, bias);
             remaining.remove(part);
             selected.add(part);
         }
         return List.copyOf(selected);
     }
 
-    private static String draw(List<String> parts, Splash splash) {
+    private static String draw(List<String> parts, Splash splash, BrewPartGroup bias) {
         // 近处权重大；每次删除已选部位后重新计算总权重。
-        double total = parts.stream().mapToDouble(part -> weight(part, splash)).sum();
+        double total = parts.stream().mapToDouble(part -> weight(part, splash, bias)).sum();
         double roll = splash.target().getRandom().nextDouble() * total;
         for (String part : parts) {
-            roll -= weight(part, splash);
+            roll -= weight(part, splash, bias);
             if (roll <= 0) {
                 return part;
             }
@@ -67,7 +74,7 @@ final class BrewPartSelection {
         return parts.getLast();
     }
 
-    private static double weight(String part, Splash splash) {
+    private static double weight(String part, Splash splash, BrewPartGroup bias) {
         // 左右随实体朝向旋转，不能按世界坐标把右臂永远放在东边。
         LivingEntity target = splash.target();
         double side = 0;
@@ -79,7 +86,43 @@ final class BrewPartSelection {
         Vec3 lateral = Vec3.directionFromRotation(0, target.getYRot() + QUARTER_TURN)
                 .scale(target.getBbWidth() * side);
         Vec3 point = target.position().add(lateral).add(0, target.getBbHeight() * height(part), 0);
-        return 1 / (DISTANCE_OFFSET + point.distanceTo(splash.impact()));
+        double preference = 1;
+        if (matches(part, bias)) {
+            preference = PREFERRED_WEIGHT;
+        }
+        return preference / (DISTANCE_OFFSET + point.distanceTo(splash.impact()));
+    }
+
+    static boolean matches(String part, BrewPartGroup group) {
+        // 分组只表达人体内容里的部位身份，偏向仍通过权重保留溅到邻近部位的可能。
+        return switch (group) {
+            case HEAD_NECK -> part.equals("head") || part.equals("neck");
+            case TORSO -> part.equals("chest") || part.equals("abdomen") || part.equals("pelvis");
+            case ARMS -> part.endsWith("_upper_arm") || part.endsWith("_forearm") || part.endsWith("_hand");
+            case LEGS -> part.endsWith("_thigh") || part.endsWith("_lower_leg") || part.endsWith("_foot");
+            case FRONT_CHEST_ARMS -> part.equals("chest") || matches(part, BrewPartGroup.ARMS);
+            default -> false;
+        };
+    }
+
+    static BrewPartGroup anointGroup(BodySnapshot body) {
+        // 两组按可修复伤势合计比较，平局固定选两臂，保证动作声音与生效选择一致。
+        double arms = wound(body, BrewPartGroup.ARMS);
+        double legs = wound(body, BrewPartGroup.LEGS);
+        return legs > arms ? BrewPartGroup.LEGS : BrewPartGroup.ARMS;
+    }
+
+    private static double wound(BodySnapshot body, BrewPartGroup group) {
+        // 复用苦黄膏表里伤势权重，不另算一套受伤判定。
+        return body.getPartStatesList().stream().map(part -> part.getId())
+                .filter(part -> matches(part, group)).mapToDouble(part -> BitterHealing.wound(body, part)).sum();
+    }
+
+    static List<String> anoint(BodySnapshot body) {
+        // 敷药覆盖选定组内仍可治疗的部位，另一组不建立药封。
+        BrewPartGroup group = anointGroup(body);
+        return body.getPartStatesList().stream().map(part -> part.getId())
+                .filter(part -> matches(part, group) && BitterHealing.wound(body, part) > 0).toList();
     }
 
     private static double height(String part) {

@@ -4,6 +4,8 @@ import dev.kizuna.meridian.brewing.server.BrewKind;
 import dev.kizuna.meridian.brewing.server.BrewEffectProfiles;
 import dev.kizuna.meridian.brewing.server.BrewQuality;
 import dev.kizuna.meridian.brewing.server.InsectLureProfile;
+import dev.kizuna.meridian.brewing.server.BrewBodyProgress;
+import dev.kizuna.meridian.brewing.server.BrewPotency;
 import java.util.List;
 import java.util.Optional;
 import net.minecraft.core.Holder;
@@ -84,11 +86,18 @@ final class BrewingEffects {
     }
 
     private static void attractInsects(ServerLevel level, LivingEntity target, BrewQuality quality) {
+        // 功法催发的气味距离随剩余剂量减弱，普通喷溅没有身体剂量时使用原值。
         InsectLureProfile profile = BrewEffectProfiles.insectLure(quality);
-        AABB bounds = target.getBoundingBox().inflate(profile.hearingDistance());
+        double strength = BrewBodyHost.inspect(target).map(binding ->
+                BrewBodyProgress.read(binding.body()).getDosesList().stream()
+                        .filter(dose -> dose.getKind().equals(BrewKind.INSECT_LURE.name()))
+                        .mapToDouble(BrewPotency::strength).max().orElse(1)).orElse(1.0);
+        double distance = profile.hearingDistance() * strength;
+        AABB bounds = target.getBoundingBox().inflate(distance);
         List<Entity> entities = level.getEntities((Entity) null, bounds,
                 entity -> entity instanceof Mob mob
-                        && mob.getType().builtInRegistryHolder().is(BrewingTags.SCENT_SEEKERS));
+                        && mob.getType().builtInRegistryHolder().is(BrewingTags.SCENT_SEEKERS)
+                        && entity.distanceToSqr(target) <= distance * distance);
         for (Entity entity : entities) {
             if (entity instanceof Mob insect) {
                 insect.setTarget(target);
