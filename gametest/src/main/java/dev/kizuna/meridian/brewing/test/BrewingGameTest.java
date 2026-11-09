@@ -25,8 +25,7 @@ import dev.kizuna.meridian.brewing.server.IngredientBatch;
 import dev.kizuna.meridian.brewing.server.IngredientSlot;
 import dev.kizuna.meridian.brewing.server.SmokeVentState;
 import dev.kizuna.meridian.brewing.server.VesselKind;
-import dev.kizuna.meridian.brewing.server.WitheringPermissions;
-import dev.kizuna.meridian.brewing.server.WitheringSource;
+import java.util.ArrayList;
 import java.util.List;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
@@ -54,6 +53,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CampfireBlock;
 import net.minecraft.world.level.block.entity.BrewingStandBlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.level.storage.TagValueInput;
@@ -199,6 +199,10 @@ public final class BrewingGameTest {
         for (int bucket = 0; bucket < 3; bucket++) {
             cauldron.use(player, InteractionHand.MAIN_HAND);
         }
+        // 最后一桶会原位变成空桶；模拟切换物品前先把容器收入背包。
+        ItemStack returnedBucket = player.getMainHandItem();
+        player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+        player.addItem(returnedBucket);
         useCauldronItem(cauldron, player, itemStack("meridian_brewing:dried_pufferfish"));
         useCauldronItem(cauldron, player, new ItemStack(Items.GLOWSTONE_DUST));
         context.assertTrue(cauldron.startBrew(player).accepted(), "方块实体入口没有开始熬制");
@@ -508,7 +512,7 @@ public final class BrewingGameTest {
         // 真实喷溅入口把十个草方块排入枯萎队列，验证第一批不超过服务端预算。
         ServerLevel level = context.getLevel();
         BlockPos origin = context.absolutePos(new BlockPos(STRUCTURE_X, STRUCTURE_Y, STRUCTURE_Z));
-        List<BlockPos> candidates = new java.util.ArrayList<>();
+        List<BlockPos> candidates = new ArrayList<>();
         int[] lateralOffsets = {-2, -1, 0, 1, 2};
         int[] depthOffsets = {-1, 1};
         for (int lateralOffset : lateralOffsets) {
@@ -518,11 +522,11 @@ public final class BrewingGameTest {
                 candidates.add(candidate);
             }
         }
-        var player = context.makeMockPlayer(GameType.SURVIVAL);
+        ServerPlayer player = context.makeMockServerPlayerInLevel();
+        player.setGameMode(GameType.SURVIVAL);
         player.setPos(origin.getX() + 0.5, origin.getY() + 1.0, origin.getZ() + 0.5);
         ItemStack brew = BrewItemStacks.create(BrewKind.DEPLETION, BrewQuality.POOR, BrewUse.SPLASH);
-        dev.kizuna.meridian.brewing.fabric.BrewingRuntime.splash(
-                level, brew, Vec3.atCenterOf(origin), player);
+        BrewingRuntime.splash(level, brew, Vec3.atCenterOf(origin), player);
         context.runAfterDelay(WITHERING_OBSERVE_TICKS, () -> {
             int changed = 0;
             for (BlockPos candidate : candidates) {
@@ -532,15 +536,64 @@ public final class BrewingGameTest {
             }
             context.assertTrue(changed > 0, "枯萎喷溅没有转换草方块");
             context.assertTrue(changed <= 8, "单 tick 枯萎超过预算：" + changed);
-            WitheringPermissions protectedSpawn = new WitheringPermissions(
-                    WitheringSource.PLAYER, true, true, true);
-            WitheringPermissions mobGriefingDisabled = new WitheringPermissions(
-                    WitheringSource.MOB, true, false, false);
-            context.assertTrue(!protectedSpawn.allowsBlockChange(), "出生点保护没有阻止枯萎");
-            context.assertTrue(!mobGriefingDisabled.allowsBlockChange(),
-                    "mobGriefing 关闭时仍允许生物枯萎");
             context.succeed();
         });
+    }
+
+    @GameTest(maxTicks = DEFAULT_TIMEOUT)
+    public void depletionWitheringRespectsWorldPermissions(GameTestHelper context) {
+        // 落点中心的草必定命中，分别验证生物规则和玩家原版建造权限。
+        ServerLevel level = context.getLevel();
+        BlockPos origin = context.absolutePos(new BlockPos(STRUCTURE_X, STRUCTURE_Y, STRUCTURE_Z));
+        ItemStack brew = BrewItemStacks.create(BrewKind.DEPLETION, BrewQuality.POOR, BrewUse.SPLASH);
+        level.setBlockAndUpdate(origin, Blocks.GRASS_BLOCK.defaultBlockState());
+        var zombie = context.spawn(EntityTypes.ZOMBIE, new BlockPos(STRUCTURE_X, STRUCTURE_Y + 1, STRUCTURE_Z));
+        boolean previousMobGriefing = level.getGameRules().get(GameRules.MOB_GRIEFING);
+        level.getGameRules().set(GameRules.MOB_GRIEFING, false /* mobGriefing */, level.getServer());
+        BrewingRuntime.splash(level, brew, Vec3.atCenterOf(origin), zombie);
+        context.runAfterDelay(WITHERING_OBSERVE_TICKS, () -> {
+            try {
+                context.assertTrue(level.getBlockState(origin).is(Blocks.GRASS_BLOCK),
+                        "mobGriefing=false 时生物来源枯萎改了方块");
+            } finally {
+                level.getGameRules().set(GameRules.MOB_GRIEFING, previousMobGriefing, level.getServer());
+            }
+            ServerPlayer player = context.makeMockServerPlayerInLevel();
+            player.setGameMode(GameType.ADVENTURE);
+            player.setPos(origin.getX() + 0.5, origin.getY() + 1.0, origin.getZ() + 0.5);
+            BrewingRuntime.splash(level, brew, Vec3.atCenterOf(origin), player);
+            context.runAfterDelay(WITHERING_OBSERVE_TICKS, () -> {
+                context.assertTrue(level.getBlockState(origin).is(Blocks.GRASS_BLOCK),
+                        "冒险模式玩家来源枯萎改了方块");
+                player.setGameMode(GameType.SURVIVAL);
+                BrewingRuntime.splash(level, brew, Vec3.atCenterOf(origin), player);
+                context.runAfterDelay(WITHERING_OBSERVE_TICKS, () -> {
+                    context.assertTrue(level.getBlockState(origin).is(Blocks.DIRT),
+                            "生存模式玩家来源枯萎没有修改方块");
+                    context.succeed();
+                });
+            });
+        });
+    }
+
+    private static List<BlockPos> placeWitheringGrass(ServerLevel level, BlockPos origin,
+                                                      int lateralRadius) {
+        // 放置真实可枯萎方块，保留位置供异步处理后的世界状态断言使用。
+        List<BlockPos> candidates = new ArrayList<>();
+        for (int offset = -lateralRadius; offset <= lateralRadius; offset++) {
+            BlockPos candidate = origin.offset(offset, 0, 1);
+            level.setBlockAndUpdate(candidate, Blocks.GRASS_BLOCK.defaultBlockState());
+            candidates.add(candidate);
+        }
+        return candidates;
+    }
+
+    private static void assertUnchanged(GameTestHelper context, ServerLevel level,
+                                        List<BlockPos> candidates, String message) {
+        // 逐格检查权限拒绝后的世界状态，不能只检查权限对象的计算结果。
+        for (BlockPos candidate : candidates) {
+            context.assertTrue(level.getBlockState(candidate).is(Blocks.GRASS_BLOCK), message);
+        }
     }
 
     private static <T> void assertRegistered(GameTestHelper context,

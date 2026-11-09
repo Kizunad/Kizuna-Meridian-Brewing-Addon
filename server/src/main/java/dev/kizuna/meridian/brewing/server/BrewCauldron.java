@@ -214,6 +214,23 @@ public final class BrewCauldron {
         return BrewActionResult.accepted("开始熬制");
     }
 
+    public BrewActionResult interruptBrew() {
+        // 已投材料与浸泡累计保留，重新起熬时必须重新计算火候和投料时窗。
+        if (state != BrewCauldronState.BREWING) {
+            return BrewActionResult.returned("巫釜当前没有正在进行的熬制");
+        }
+        state = BrewCauldronState.RAW;
+        brewElapsedSeconds = 0.0;
+        inBandSeconds = 0.0;
+        overheatSeconds = 0.0;
+        evaporationSeconds = 0.0;
+        heatPhaseSeconds = 0.0;
+        scorchCount = 0;
+        remainingBottles = 0;
+        ingredientTimes.clear();
+        return BrewActionResult.accepted("熬制已中断，投料和浸泡分保留");
+    }
+
     public BrewTickResult tick(double seconds, BrewStructure structure) {
         if (!Double.isFinite(seconds) || seconds <= 0 || structure == null) {
             throw new IllegalArgumentException("巫釜推进参数非法");

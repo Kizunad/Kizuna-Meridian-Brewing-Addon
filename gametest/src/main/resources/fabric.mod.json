@@ -6,7 +6,12 @@
   "environment": "server",
   "entrypoints": {
     "fabric-gametest": [
-      "dev.kizuna.meridian.brewing.test.BrewingGameTest"
+      "dev.kizuna.meridian.brewing.test.BrewingGameTest",
+      "dev.kizuna.meridian.brewing.test.BrewingC4cGameTest",
+      "dev.kizuna.meridian.brewing.test.BrewingCastGameTest"
+    ],
+    "meridian_technique_host": [
+      "dev.kizuna.meridian.brewing.test.BrewingTechniqueTestHost"
     ]
   },
   "depends": {

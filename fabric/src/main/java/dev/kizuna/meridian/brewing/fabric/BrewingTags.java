@@ -12,6 +12,9 @@ final class BrewingTags {
     static final TagKey<Block> HEARTH_STONES = blockTag("hearth_stones");
     static final TagKey<Block> POTTED_HERBS = blockTag("potted_herbs");
     static final TagKey<Block> POTTED_FUNGI = blockTag("potted_fungi");
+    static final TagKey<Block> BREW_CAULDRONS = blockTag("brew_cauldrons");
+    static final TagKey<Block> BREW_FIRES = blockTag("brew_fires");
+    static final TagKey<Item> STIRRERS = itemTag("stirrers");
     static final TagKey<Block> WITHERS_TO_DIRT = blockTag("withers_to_dirt");
     static final TagKey<Block> WITHERS_TO_NETHERRACK = blockTag("withers_to_netherrack");
     static final TagKey<Block> WITHERS_TO_DEAD_BUSH = blockTag("withers_to_dead_bush");

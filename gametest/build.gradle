@@ -9,6 +9,8 @@ dependencies {
     implementation project(':server')
     implementation project(':fabric')
     implementation('dev.kizuna.meridian.technique:fabric') { transitive = false }
+    implementation 'dev.kizuna.meridian.technique:server'
+    implementation 'dev.kizuna.meridian.technique:shared'
     // 功法 Fabric 模组硬依赖 Framework；只取功法模块本身时，运行时单独装入 Framework。
     runtimeOnly 'dev.kizuna.meridian:fabric'
 }

@@ -5,6 +5,7 @@ import dev.kizuna.meridian.brewing.server.BrewFireSource;
 import dev.kizuna.meridian.brewing.server.BrewFireState;
 import dev.kizuna.meridian.brewing.server.FireKind;
 import dev.kizuna.meridian.brewing.server.HeatSourceKind;
+import java.util.Optional;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -54,8 +55,20 @@ public final class BrewFireBlockEntity extends BlockEntity {
     }
 
     public InteractionResult use(Player player, InteractionHand hand) {
+        // 活动熬药先走受限副手入口，普通交互只在规则接受后消费物品。
         if (level == null || level.isClientSide()) {
             return InteractionResult.SUCCESS;
+        }
+        if (player instanceof ServerPlayer serverPlayer) {
+            Optional<BrewActionResult> techniqueResult = BrewingRuntime.tryTechniqueFire(
+                    serverPlayer, hand, worldPosition);
+            if (techniqueResult.isPresent()) {
+                BrewActionResult result = techniqueResult.orElseThrow();
+                if (!result.accepted()) {
+                    sendOverlay(player, result.reason());
+                }
+                return InteractionResult.SUCCESS;
+            }
         }
         ItemStack stack = player.getItemInHand(hand);
         BrewActionResult result = useStack(stack);
@@ -63,12 +76,34 @@ public final class BrewFireBlockEntity extends BlockEntity {
             sendOverlay(player, result.reason());
             return InteractionResult.SUCCESS;
         }
-        if (!player.hasInfiniteMaterials()) {
-            stack.shrink(1);
-        }
+        consumeAcceptedUse(player, hand, stack);
         sendOverlay(player, result.reason());
         setChanged();
         return InteractionResult.SUCCESS;
+    }
+
+    public BrewActionResult useTechnique(ServerPlayer player, InteractionHand hand) {
+        // 熬药副手操作仍需通过世界权限，成功后才消费物品或损耗工具。
+        if (level == null || level.isClientSide()) {
+            return BrewActionResult.returned("火源只能在服务端操作");
+        }
+        if (player == null || !level.mayInteract(player, worldPosition)) {
+            return BrewActionResult.returned("没有权限操作火源");
+        }
+        ItemStack stack = player.getItemInHand(hand);
+        if (!stack.is(Items.COAL) && !stack.is(Items.CHARCOAL)
+                && !stack.is(ItemTags.SHOVELS) && !stack.is(Items.WATER_BUCKET)) {
+            return BrewActionResult.returned("熬药中副手只能加炭、拨灰或扑灭火源");
+        }
+        BrewActionResult result = useStack(stack);
+        if (!result.accepted()) {
+            sendOverlay(player, result.reason());
+            return result;
+        }
+        consumeAcceptedUse(player, hand, stack);
+        sendOverlay(player, result.reason());
+        setChanged();
+        return result;
     }
 
     private static void sendOverlay(Player player, String message) {
@@ -79,11 +114,15 @@ public final class BrewFireBlockEntity extends BlockEntity {
     }
 
     private BrewActionResult useStack(ItemStack stack) {
+        // 持物决定调火操作，物品消耗和容器返还由调用方在成功后统一处理。
         if (stack.is(Items.COAL) || stack.is(Items.CHARCOAL)) {
             return fire.addFuel("minecraft:coal");
         }
         if (stack.is(ItemTags.SHOVELS)) {
             return fire.lowerLevel();
+        }
+        if (stack.is(Items.WATER_BUCKET)) {
+            return fire.extinguish();
         }
         if (stack.is(Items.SOUL_SAND) || stack.is(Items.SOUL_SOIL)) {
             return fire.changeFireKind(FireKind.SOUL_FIRE);
@@ -92,6 +131,22 @@ public final class BrewFireBlockEntity extends BlockEntity {
             return fire.changeFireKind(FireKind.SUN_FIRE);
         }
         return BrewActionResult.returned("铁火盆和铁炉座只接受煤炭、木炭、锹或火种材料");
+    }
+
+    private void consumeAcceptedUse(Player player, InteractionHand hand, ItemStack stack) {
+        // 工具损耗、容器置换与耗材扣除分别处理，空堆叠不再用于识别原物品。
+        if (player.hasInfiniteMaterials() || stack.isEmpty()) {
+            return;
+        }
+        if (stack.is(ItemTags.SHOVELS)) {
+            stack.hurtAndBreak(1, player, hand);
+            return;
+        }
+        if (stack.is(Items.WATER_BUCKET)) {
+            BrewingItemReturns.consumeWaterBucket(player, hand, stack);
+            return;
+        }
+        stack.shrink(1);
     }
 
     private void tick(Level currentLevel) {

@@ -3,9 +3,7 @@ package dev.kizuna.meridian.brewing.fabric;
 import dev.kizuna.meridian.brewing.server.WitheringCandidate;
 import dev.kizuna.meridian.brewing.server.WitheringDecision;
 import dev.kizuna.meridian.brewing.server.WitheringOutcome;
-import dev.kizuna.meridian.brewing.server.WitheringPermissions;
 import dev.kizuna.meridian.brewing.server.WitheringRules;
-import dev.kizuna.meridian.brewing.server.WitheringSource;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -29,7 +27,6 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.RotatedPillarBlock;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.phys.Vec3;
 
 /** 枯竭药水落点的延迟枯萎队列，负责预算和世界权限检查。 */
@@ -48,16 +45,15 @@ final class WitheringService {
     }
 
     static void enqueue(ServerLevel level, Vec3 center, double radius, Entity source) {
+        // 只在喷溅时扫描有限范围，逐 tick 执行时再检查权限和方块现状。
         int searchRadius = (int) Math.ceil(radius) + SEARCH_MARGIN;
         List<PendingWither> pending = new ArrayList<>();
         BlockPos origin = BlockPos.containing(center);
-        WitheringSource sourceKind = source instanceof Player
-                ? WitheringSource.PLAYER : WitheringSource.MOB;
+        WitheringArea area = new WitheringArea(level, center, radius, source);
         for (int x = -searchRadius; x <= searchRadius; x++) {
             for (int y = -searchRadius; y <= searchRadius; y++) {
                 for (int z = -searchRadius; z <= searchRadius; z++) {
-                    addCandidate(level, center, origin.offset(x, y, z), radius,
-                            source, sourceKind, pending);
+                    addCandidate(area, origin.offset(x, y, z), pending);
                 }
             }
         }
@@ -65,25 +61,26 @@ final class WitheringService {
     }
 
     static void tick(MinecraftServer server) {
+        // 每个世界独立消化预算，完成的队列立即释放。
         Iterator<Map.Entry<ServerLevel, List<PendingWither>>> iterator = QUEUES.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<ServerLevel, List<PendingWither>> entry = iterator.next();
             List<PendingWither> ready = advance(entry.getValue());
-            applyReady(server, entry.getKey(), ready);
+            applyReady(entry.getKey(), ready);
             if (entry.getValue().isEmpty()) {
                 iterator.remove();
             }
         }
     }
 
-    private static void addCandidate(ServerLevel level, Vec3 center, BlockPos pos,
-                                     double radius, Entity source, WitheringSource sourceKind,
-                                     List<PendingWither> pending) {
+    private static void addCandidate(WitheringArea area, BlockPos pos, List<PendingWither> pending) {
+        // 候选只包含已加载、暴露且可枯萎的方块，不因喷溅加载新区块。
+        ServerLevel level = area.level();
         if (!level.hasChunkAt(pos)) {
             return;
         }
-        double distance = Math.sqrt(Vec3.atCenterOf(pos).distanceToSqr(center));
-        if (distance > radius || !isExposed(level, pos)) {
+        double distance = Math.sqrt(Vec3.atCenterOf(pos).distanceToSqr(area.center()));
+        if (distance > area.radius() || !isExposed(level, pos)) {
             return;
         }
         BlockState state = level.getBlockState(pos);
@@ -95,11 +92,11 @@ final class WitheringService {
         WitheringCandidate candidate = new WitheringCandidate(
                 state.getBlock().builtInRegistryHolder().key().identifier().toString(),
                 distance, randomValue);
-        if (!WitheringRules.shouldWither(candidate, radius)) {
+        if (!WitheringRules.shouldWither(candidate, area.radius())) {
             return;
         }
         long delayTicks = Math.max(0L, Math.round(distance * DELAY_TICKS_PER_BLOCK));
-        pending.add(new PendingWither(pos.immutable(), candidate, source, sourceKind, delayTicks));
+        pending.add(new PendingWither(pos.immutable(), candidate, area.source(), delayTicks));
     }
 
     private static List<PendingWither> advance(List<PendingWither> queue) {
@@ -124,14 +121,15 @@ final class WitheringService {
         return List.copyOf(ready);
     }
 
-    private static void applyReady(MinecraftServer server, ServerLevel level,
-                                   List<PendingWither> ready) {
+    private static void applyReady(ServerLevel level, List<PendingWither> ready) {
+        // 延迟期间方块或权限可能变化，每格在写入前重新确认。
         for (PendingWither task : ready) {
-            applyOne(server, level, task);
+            applyOne(level, task);
         }
     }
 
-    private static void applyOne(MinecraftServer server, ServerLevel level, PendingWither task) {
+    private static void applyOne(ServerLevel level, PendingWither task) {
+        // 玩家使用原版交互与建造权限，生物使用游戏规则；只有允许后才生成世界变化。
         BlockPos pos = task.pos();
         BlockState sourceState = level.getBlockState(pos);
         WitheringDecision decision = classify(sourceState);
@@ -139,14 +137,7 @@ final class WitheringService {
                 || !isExposed(level, pos)) {
             return;
         }
-        boolean protectedSpawn = isProtectedSpawn(server, level, pos, task.source());
-        boolean mobGriefing = level.getGameRules().get(GameRules.MOB_GRIEFING);
-        WitheringPermissions permissions = new WitheringPermissions(
-                task.sourceKind(), true, mobGriefing, protectedSpawn);
-        if (!permissions.allowsBlockChange()) {
-            return;
-        }
-        if (task.source() instanceof Player player && !level.mayInteract(player, pos)) {
+        if (!mayWither(level, pos, task.source())) {
             return;
         }
         BlockState targetState = targetState(level, pos, sourceState, decision);
@@ -208,32 +199,28 @@ final class WitheringService {
         return false;
     }
 
-    private static boolean isProtectedSpawn(MinecraftServer server, ServerLevel level,
-                                            BlockPos pos, Entity source) {
+    private static boolean mayWither(ServerLevel level, BlockPos pos, Entity source) {
+        // 玩家遵守原版逐格交互和建造权限；生物来源只服从 mobGriefing。
         if (source instanceof Player player) {
-            return server.isUnderSpawnProtection(level, pos, player);
+            return player.mayBuild() && level.mayInteract(player, pos);
         }
-        LevelData.RespawnData respawn = level.getRespawnData();
-        if (!level.dimension().equals(respawn.dimension())) {
-            return false;
-        }
-        int spawnRadius = level.getGameRules().get(GameRules.RESPAWN_RADIUS);
-        return pos.distSqr(respawn.pos()) <= (double) spawnRadius * spawnRadius;
+        return level.getGameRules().get(GameRules.MOB_GRIEFING);
     }
+
+    private record WitheringArea(ServerLevel level, Vec3 center, double radius, Entity source) { }
 
     private static final class PendingWither {
         private final BlockPos pos;
         private final WitheringCandidate candidate;
         private final Entity source;
-        private final WitheringSource sourceKind;
         private long delayTicks;
 
         private PendingWither(BlockPos pos, WitheringCandidate candidate, Entity source,
-                              WitheringSource sourceKind, long delayTicks) {
+                              long delayTicks) {
+            // 保存来源实体以便执行时重新判断权限，不缓存起手时的授权结论。
             this.pos = pos;
             this.candidate = candidate;
             this.source = source;
-            this.sourceKind = sourceKind;
             this.delayTicks = delayTicks;
         }
 
@@ -261,8 +248,5 @@ final class WitheringService {
             return source;
         }
 
-        private WitheringSource sourceKind() {
-            return sourceKind;
-        }
     }
 }

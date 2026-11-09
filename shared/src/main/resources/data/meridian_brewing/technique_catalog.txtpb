@@ -7,19 +7,64 @@ definitions {
   minimum_realm: WANDERING_QI
   cost {}
   phases {
-    warmup_millis: 1000
-    active_millis: 30000
+    warmup_millis: 31000
+    active_millis: 0
     recovery_millis: 1000
     interruptible_by_damage: true
   }
   cooldown_millis: 5000
   movement_speed_multiplier: 0.0001
+  allow_off_hand_use_while_casting: true
+  off_hand_use_block_tags: "meridian_brewing:brew_cauldrons"
+  off_hand_use_block_tags: "meridian_brewing:brew_fires"
+  effects {
+    at_millis: 1000
+    block_work {
+      processor_id: "meridian_brewing:block_work"
+      block_tags: "meridian_brewing:brew_cauldrons"
+      maximum_distance { value: 3 unit: METER }
+      interval_millis: 1000
+      duration_millis: 30000
+    }
+  }
   presentation {
     display_name: "熬药"
-    description: "在巫釜或铜釜中按药方熬制巫药。"
+    description: "沼泽高脚屋里那口大锅沿上，刻着密密麻麻深浅不一的细槽，木勺的一侧被锅底磨平了半寸。拨开灶膛，底下的柴灰分出黑、白、红三层，后人这才明白，每一锅药都是调了三次火候熬成的。"
   }
 }
-books { id: "meridian_brewing:brewing" display_name: "炼药卷" }
+books {
+  id: "meridian_brewing:brewing"
+  display_name: "炼药卷"
+  held_item_rules {
+    categories {
+      id: "stirrers"
+      item_tags: "meridian_brewing:stirrers"
+      selection_priority: 0
+      base_damage_source: ITEM_ATTACK_DAMAGE
+      base_damage { value: 1 unit: RATIO }
+      injury_kind: BLUNT
+      shield_interaction: NO_SHIELD_BREAK
+      can_break_doors: false
+    }
+    categories {
+      id: "other_items"
+      selection_priority: 1
+      base_damage_source: ITEM_ATTACK_DAMAGE
+      base_damage { value: 1 unit: RATIO }
+      injury_kind: BLUNT
+      shield_interaction: NO_SHIELD_BREAK
+      can_break_doors: false
+    }
+    durability {
+      item_tags: "meridian_brewing:stirrers"
+      multiplier { value: 1 unit: RATIO }
+    }
+    durability { multiplier { value: 1 unit: RATIO } }
+    selection_order: CATEGORY_PRIORITY
+    selection_order: DURABILITY_MULTIPLIER
+    selection_order: PREFER_MAIN_HAND
+  }
+}
 volumes {
   id: "meridian_brewing:brewing_basics"
   book_id: "meridian_brewing:brewing"
