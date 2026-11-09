@@ -9,10 +9,12 @@ dependencies {
     implementation libs.fabric.loader
     implementation libs.fabric.api
     implementation project(':server')
+    implementation 'dev.kizuna.meridian.vanilla:fabric'
     implementation 'dev.kizuna.meridian.technique:fabric'
     implementation 'dev.kizuna.meridian.technique:server'
     implementation 'dev.kizuna.meridian.technique:shared'
     include project(':server')
+    include project(':shared')
     testImplementation libs.junit4
 }
 

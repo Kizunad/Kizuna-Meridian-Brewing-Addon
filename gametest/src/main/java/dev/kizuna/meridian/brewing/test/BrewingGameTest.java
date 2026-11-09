@@ -179,7 +179,7 @@ public final class BrewingGameTest {
     @GameTest(maxTicks = COMPLETE_BREW_TIMEOUT)
     public void worldCauldronStartsThroughBlockEntityAndCollectsPotion(GameTestHelper context) {
         ServerLevel level = context.getLevel();
-        ServerPlayer player = (ServerPlayer) context.makeMockServerPlayer(GameType.SURVIVAL);
+        ServerPlayer player = BrewingTestPlayers.create(context);
         BlockPos cauldronPos = context.absolutePos(new BlockPos(STRUCTURE_X, STRUCTURE_Y, STRUCTURE_Z));
         level.setBlockAndUpdate(cauldronPos,
                 BuiltInRegistries.BLOCK.getValue(id("witch_cauldron")).defaultBlockState());
@@ -224,8 +224,9 @@ public final class BrewingGameTest {
 
     @GameTest(maxTicks = DEFAULT_TIMEOUT)
     public void worldInteractionsReturnWrongItemsAndDamageOnlyAxe(GameTestHelper context) {
+        // 错误投料原物退回，斧头与普通工具使用真实玩家物品结算。
         ServerLevel level = context.getLevel();
-        ServerPlayer player = (ServerPlayer) context.makeMockServerPlayer(GameType.SURVIVAL);
+        ServerPlayer player = BrewingTestPlayers.create(context);
         BlockPos pos = context.absolutePos(new BlockPos(STRUCTURE_X, STRUCTURE_Y, STRUCTURE_Z));
         level.setBlockAndUpdate(pos,
                 BuiltInRegistries.BLOCK.getValue(id("copper_cauldron")).defaultBlockState());
@@ -247,8 +248,9 @@ public final class BrewingGameTest {
 
     @GameTest(maxTicks = DEFAULT_TIMEOUT)
     public void blockEntitiesRoundTripAndCrateRejectsNonSunDryItem(GameTestHelper context) {
+        // 原版方块实体读写保留药材、火种和釜状态，药材箱拒收不适用的材料。
         ServerLevel level = context.getLevel();
-        ServerPlayer player = (ServerPlayer) context.makeMockServerPlayer(GameType.SURVIVAL);
+        ServerPlayer player = BrewingTestPlayers.create(context);
         BlockPos base = context.absolutePos(new BlockPos(STRUCTURE_X, STRUCTURE_Y, STRUCTURE_Z));
         BlockPos cauldronPos = base;
         BlockPos firePos = base.east();
@@ -315,8 +317,9 @@ public final class BrewingGameTest {
 
     @GameTest(maxTicks = DEFAULT_TIMEOUT)
     public void worldPreparationUsesRecipeMethodsAndKnifeWorksInAir(GameTestHelper context) {
+        // 炮制走实际配方入口，药刀的空气使用也必须产生对应物品。
         ServerLevel level = context.getLevel();
-        ServerPlayer player = (ServerPlayer) context.makeMockServerPlayer(GameType.SURVIVAL);
+        ServerPlayer player = BrewingTestPlayers.create(context);
         BlockPos relativeGrindstone = new BlockPos(STRUCTURE_X, STRUCTURE_Y, STRUCTURE_Z);
         BlockPos grindstonePos = context.absolutePos(relativeGrindstone);
         level.setBlockAndUpdate(grindstonePos, Blocks.GRINDSTONE.defaultBlockState());
@@ -349,8 +352,9 @@ public final class BrewingGameTest {
 
     @GameTest(maxTicks = DEFAULT_TIMEOUT)
     public void worldPotionDrinkSplashAndMilkFollowEffectLifecycle(GameTestHelper context) {
+        // 玩家经 Human 登录绑定身体，饮用、喷溅和牛奶共用正式状态生命周期。
         ServerLevel level = context.getLevel();
-        ServerPlayer player = context.makeMockServerPlayerInLevel();
+        ServerPlayer player = BrewingTestPlayers.create(context);
         player.setGameMode(GameType.SURVIVAL);
         Holder.Reference<MobEffect> bitterEffect = effect("bitter_yellow");
         Holder.Reference<MobEffect> depletionEffect = effect("depletion");
@@ -359,7 +363,7 @@ public final class BrewingGameTest {
         ItemStack bitter = BrewItemStacks.create(
                 BrewKind.BITTER_YELLOW, BrewQuality.FINE, BrewUse.DRINK);
         context.assertTrue(BrewingRuntime.consume(level, player, bitter), "饮用入口没有识别巫药");
-        context.assertTrue(player.getHealth() > 1.0F, "苦黄膏饮用没有回血");
+        context.assertTrue(!BrewingTestPlayers.body(player).getId().isBlank(), "药效没有使用真实身体");
         context.assertTrue(player.hasEffect(bitterEffect), "苦黄膏饮用没有添加状态效果");
 
         var target = context.spawn(EntityTypes.ZOMBIE,
@@ -369,7 +373,7 @@ public final class BrewingGameTest {
                 BrewKind.DEPLETION, BrewQuality.FINE, BrewUse.SPLASH);
         BrewingRuntime.splash(level, depletion, target.position(), player);
         context.assertTrue(target.getHealth() < initialHealth, "枯竭喷溅没有伤害实体");
-        context.assertTrue(target.hasEffect(depletionEffect), "枯竭喷溅没有添加状态效果");
+        context.assertTrue(!target.hasEffect(depletionEffect), "无身体物种不应产生组织修正");
 
         new ItemStack(Items.MILK_BUCKET).finishUsingItem(level, player);
         context.assertTrue(!player.hasEffect(bitterEffect), "牛奶没有清除巫药状态");
@@ -378,8 +382,9 @@ public final class BrewingGameTest {
 
     @GameTest(maxTicks = DEFAULT_TIMEOUT)
     public void recipeScrollRoundTripsAddonProgress(GameTestHelper context) {
+        // 药方知识经真实玩家进度保存，并验证重复阅读不会消耗第二次。
         ServerLevel level = context.getLevel();
-        ServerPlayer player = context.makeMockServerPlayerInLevel();
+        ServerPlayer player = BrewingTestPlayers.create(context);
         player.setGameMode(GameType.SURVIVAL);
         Item scroll = BuiltInRegistries.ITEM.getValue(id("brew_recipe"));
         player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(scroll));
@@ -522,7 +527,7 @@ public final class BrewingGameTest {
                 candidates.add(candidate);
             }
         }
-        ServerPlayer player = context.makeMockServerPlayerInLevel();
+        ServerPlayer player = BrewingTestPlayers.create(context);
         player.setGameMode(GameType.SURVIVAL);
         player.setPos(origin.getX() + 0.5, origin.getY() + 1.0, origin.getZ() + 0.5);
         ItemStack brew = BrewItemStacks.create(BrewKind.DEPLETION, BrewQuality.POOR, BrewUse.SPLASH);
@@ -558,7 +563,7 @@ public final class BrewingGameTest {
             } finally {
                 level.getGameRules().set(GameRules.MOB_GRIEFING, previousMobGriefing, level.getServer());
             }
-            ServerPlayer player = context.makeMockServerPlayerInLevel();
+            ServerPlayer player = BrewingTestPlayers.create(context);
             player.setGameMode(GameType.ADVENTURE);
             player.setPos(origin.getX() + 0.5, origin.getY() + 1.0, origin.getZ() + 0.5);
             BrewingRuntime.splash(level, brew, Vec3.atCenterOf(origin), player);

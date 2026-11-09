@@ -1,1 +1,12 @@
-description = '炼药的目录与数据资源；不携带执行代码。'
+plugins { id 'com.google.protobuf' }
+
+description = '炼药的目录、药效进度协议与数据资源。'
+
+dependencies {
+    api libs.protobuf.java
+    compileOnlyApi 'local.meridian:client'
+}
+
+protobuf {
+    protoc { artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.java.get()}" }
+}

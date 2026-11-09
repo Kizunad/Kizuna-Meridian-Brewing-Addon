@@ -1,10 +1,18 @@
 schema_version: 1
 namespace: "meridian_brewing"
+binding_templates { id: "human:adult" version: 1 }
 definitions {
   id: "meridian_brewing:brew"
   version: 1
   category: CULTIVATION
   minimum_realm: WANDERING_QI
+  slots {
+    id: "arms"
+    module: TISSUE
+    tags: "human:arm_muscle"
+    minimum_count: 1
+    maximum_count: 16
+  }
   cost {}
   phases {
     warmup_millis: 31000

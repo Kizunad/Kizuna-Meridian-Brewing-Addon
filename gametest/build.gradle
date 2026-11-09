@@ -8,12 +8,21 @@ dependencies {
     implementation libs.fabric.api
     implementation project(':server')
     implementation project(':fabric')
+    implementation 'dev.kizuna.meridian.human:fabric'
+    implementation testFixtures('dev.kizuna.meridian.human:fabric')
+    implementation 'dev.kizuna.meridian.human:server'
+    implementation 'dev.kizuna.meridian.progression:shared'
+    implementation 'dev.kizuna.meridian.vanilla:fabric'
+    implementation 'dev.kizuna.meridian.vanilla:server'
+    implementation testFixtures('dev.kizuna.meridian.technique:fabric')
     implementation('dev.kizuna.meridian.technique:fabric') { transitive = false }
     implementation 'dev.kizuna.meridian.technique:server'
     implementation 'dev.kizuna.meridian.technique:shared'
     // 功法 Fabric 模组硬依赖 Framework；只取功法模块本身时，运行时单独装入 Framework。
     runtimeOnly 'dev.kizuna.meridian:fabric'
 }
+
+apply from: new File(kizunaWorkspace.directory('framework'), 'scripts/full-assembly.gradle')
 
 processResources {
     from(project(':fabric').sourceSets.main.resources) { exclude 'fabric.mod.json' }

@@ -142,9 +142,6 @@ public final class BrewingRuntime {
         if (active == null) {
             return Optional.empty();
         }
-        if (hand != InteractionHand.OFF_HAND) {
-            return Optional.of(BrewActionResult.returned("熬药中主手不能操作火源"));
-        }
         BlockPos targetFirePos = active.pos().below();
         if (active.level() != player.level() || !targetFirePos.equals(firePos)) {
             return Optional.of(BrewActionResult.returned("熬药式只能操作目标巫釜下方火源"));
@@ -301,6 +298,9 @@ public final class BrewingRuntime {
                                                      BrewAction brew, BrewEffectKey effectKey) {
         // 先按物理形态应用效果，再按生存规则消费已校验的堆叠。
         if (brew.use() == BrewUse.DRINK) {
+            if (BrewNausea.blocks(player, stack)) {
+                return EffectHandling.rejected("苦得咽不下去");
+            }
             if (!consumeBrew(player, stack)) {
                 return EffectHandling.rejected("巫药饮用入口拒绝了已验证物品");
             }
@@ -485,17 +485,21 @@ public final class BrewingRuntime {
     private record BlockTarget(ServerLevel level, BlockPos pos) { }
 
     public static boolean consume(Level level, LivingEntity entity, ItemStack stack) {
+        // 物品身份在服务端解析，消费由原版处理，身体效果由可信宿主提交。
         if (!BrewItemStacks.isBrew(stack)) {
             return false;
         }
         BrewKind kind = BrewItemStacks.kind(stack);
         BrewQuality quality = BrewItemStacks.quality(stack);
-        ResolvedEffect effect = resolve(kind, quality);
-        applyDrink(entity, effect);
+        if (!level.isClientSide()) {
+            var application = new BrewBodyEffects.Application(kind, quality, BrewUse.DRINK, entity.position(), entity);
+            BrewBodyEffects.apply(entity, application);
+        }
         return true;
     }
 
     public static void splash(ServerLevel level, ItemStack stack, Vec3 position, Entity source) {
+        // 每个目标独立抽部位，来源实体一路保留到直接伤害的击杀归属。
         if (!BrewItemStacks.isBrew(stack)) {
             return;
         }
@@ -509,7 +513,12 @@ public final class BrewingRuntime {
                 value -> value instanceof LivingEntity living
                         && living.distanceToSqr(position) <= radiusSquared)) {
             if (entity instanceof LivingEntity target) {
-                applySplashToTarget(level, target, effect);
+                if (kind == BrewKind.INSECT_LURE) {
+                    addEffect(target, effect.data().status(), effect.data().duration(BrewUse.SPLASH), quality);
+                } else {
+                    var application = new BrewBodyEffects.Application(kind, quality, BrewUse.SPLASH, position, source);
+                    BrewBodyEffects.apply(target, application);
+                }
             }
         }
         if (kind == BrewKind.DEPLETION) {
@@ -518,51 +527,6 @@ public final class BrewingRuntime {
         if (kind == BrewKind.INSECT_LURE) {
             spawnSilverfish(level, position, effect, source);
         }
-    }
-
-    private static void applyDrink(LivingEntity entity, ResolvedEffect effect) {
-        if (effect.kind() == BrewKind.BITTER_YELLOW) {
-            BitterData data = (BitterData) effect.data();
-            entity.heal((float) data.drink().totalHealing());
-        }
-        addEffect(entity, effect.data().status(), effect.data().duration(BrewUse.DRINK),
-                effect.quality());
-    }
-
-    private static void applySplashToTarget(ServerLevel level, LivingEntity target,
-                                            ResolvedEffect effect) {
-        switch (effect.kind()) {
-            case DEPLETION -> applyDepletion(level, target, effect);
-            case ARMOR_ROT -> applyArmorRot(target, effect);
-            case INSECT_LURE, QI_GATHER -> addEffect(target, effect.data().status(),
-                    effect.data().duration(BrewUse.SPLASH), effect.quality());
-            case BITTER_YELLOW -> applyBitterSplash(target, effect);
-            case CHARM -> addEffect(target, effect.data().status(),
-                    effect.data().duration(BrewUse.SPLASH), effect.quality());
-        }
-    }
-
-    private static void applyDepletion(ServerLevel level, LivingEntity target,
-                                       ResolvedEffect effect) {
-        DepletionData data = (DepletionData) effect.data();
-        target.hurtServer(level, level.damageSources().magic(),
-                (float) data.profile().partDamageHp());
-        addEffect(target, effect.data().status(), effect.data().duration(BrewUse.SPLASH),
-                effect.quality());
-    }
-
-    private static void applyArmorRot(LivingEntity target, ResolvedEffect effect) {
-        ArmorData data = (ArmorData) effect.data();
-        BrewingEffects.damageArmor(target, data.profile());
-        addEffect(target, effect.data().status(), effect.data().duration(BrewUse.SPLASH),
-                effect.quality());
-    }
-
-    private static void applyBitterSplash(LivingEntity target, ResolvedEffect effect) {
-        BitterData data = (BitterData) effect.data();
-        target.heal((float) data.splash().healingPerSecond());
-        addEffect(target, effect.data().status(), effect.data().duration(BrewUse.SPLASH),
-                effect.quality());
     }
 
     private static void addEffect(LivingEntity target, Holder<MobEffect> effect,

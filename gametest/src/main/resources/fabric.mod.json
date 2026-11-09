@@ -8,10 +8,9 @@
     "fabric-gametest": [
       "dev.kizuna.meridian.brewing.test.BrewingGameTest",
       "dev.kizuna.meridian.brewing.test.BrewingC4cGameTest",
-      "dev.kizuna.meridian.brewing.test.BrewingCastGameTest"
-    ],
-    "meridian_technique_host": [
-      "dev.kizuna.meridian.brewing.test.BrewingTechniqueTestHost"
+      "dev.kizuna.meridian.brewing.test.BrewingCastGameTest",
+      "dev.kizuna.meridian.brewing.fabric.BrewingBodyGameTest",
+      "dev.kizuna.meridian.brewing.fabric.BrewingHostGameTest"
     ]
   },
   "depends": {

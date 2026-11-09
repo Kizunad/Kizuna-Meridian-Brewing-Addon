@@ -31,5 +31,9 @@
   "block.meridian_brewing.iron_brazier": "铁火盆",
   "block.meridian_brewing.iron_stove": "铁炉座",
   "block.meridian_brewing.herb_crate": "药材箱",
-  "container.meridian_brewing.herb_crate": "药材箱"
+  "container.meridian_brewing.herb_crate": "药材箱",
+  "message.meridian_brewing.nausea": "苦得咽不下去",
+  "message.meridian_brewing.modifier_limit": "身上药效太多，药劲未能入体",
+  "death.attack.meridian_brewing.depletion": "%1$s 被枯竭药水腐蚀殆尽",
+  "death.attack.meridian_brewing.depletion.player": "%1$s 被 %2$s 的枯竭药水腐蚀殆尽"
 }

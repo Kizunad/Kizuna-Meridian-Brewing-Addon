@@ -21,3 +21,13 @@ kizunaWorkspace.includeSource('technique', [
         server: 'dev.kizuna.meridian.technique:server',
         shared: 'dev.kizuna.meridian.technique:shared'
 ])
+kizunaWorkspace.includeSource('vanilla-damage', [
+        fabric: 'dev.kizuna.meridian.vanilla:fabric',
+        server: 'dev.kizuna.meridian.vanilla:server'
+])
+kizunaWorkspace.includeSource('human', [
+        fabric: 'dev.kizuna.meridian.human:fabric',
+        server: 'dev.kizuna.meridian.human:server',
+        shared: 'dev.kizuna.meridian.human:shared',
+        client: 'dev.kizuna.meridian.human:client'
+])

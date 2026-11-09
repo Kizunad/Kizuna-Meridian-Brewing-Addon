@@ -8,6 +8,7 @@ public final class BrewingFabric implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        // 先注册物品与状态身份，再安装世界事件和必需身体宿主。
         BrewingComponents.register();
         BrewingItems.register();
         BrewingEffects.register();
@@ -16,5 +17,6 @@ public final class BrewingFabric implements ModInitializer {
         BrewingRegistries.register();
         PreparationInteractions.register();
         BrewingRuntime.register();
+        BrewBodyEffects.initialize();
     }
 }

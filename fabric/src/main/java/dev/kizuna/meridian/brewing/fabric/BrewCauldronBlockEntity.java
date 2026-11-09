@@ -96,15 +96,11 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
     }
 
     public InteractionResult use(Player player, InteractionHand hand) {
+        // Human 已统一执行施放中的手位和标签门禁，这里只处理釜的投料规则。
         if (level == null || level.isClientSide()) {
             return InteractionResult.SUCCESS;
         }
         boolean controlledByCaster = techniqueControlledBy(player);
-        if (controlledByCaster && hand == InteractionHand.MAIN_HAND) {
-            // 熬药式接管期间主手的左右键由功法宿主拦截，副手仍可向巫釜投料或添水。
-            sendOverlay(player, "熬药中主手不能操作巫釜");
-            return InteractionResult.SUCCESS;
-        }
         ItemStack stack = player.getItemInHand(hand);
         BrewActionResult result;
         if (controlledByCaster) {

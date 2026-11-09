@@ -1,10 +1,11 @@
 package dev.kizuna.meridian.brewing.fabric;
 
-import dev.kizuna.meridian.brewing.server.ArmorRotProfile;
+import dev.kizuna.meridian.brewing.server.BrewKind;
 import dev.kizuna.meridian.brewing.server.BrewEffectProfiles;
 import dev.kizuna.meridian.brewing.server.BrewQuality;
 import dev.kizuna.meridian.brewing.server.InsectLureProfile;
 import java.util.List;
+import java.util.Optional;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -13,16 +14,13 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 
 /** 六种药效及魅惑两档控制状态的注册表入口和持续行为。 */
 final class BrewingEffects {
     private static final int TICKS_PER_SECOND = 20;
-    private static final double COPPER_ARMOR_FACTOR = 1.0;
     private static final BrewEffectKind NO_TICK = BrewEffectKind.NO_TICK;
 
     static Holder.Reference<MobEffect> DEPLETION;
@@ -38,14 +36,15 @@ final class BrewingEffects {
     }
 
     static void register() {
-        DEPLETION = register("depletion", MobEffectCategory.HARMFUL, 0xA08A4A, NO_TICK);
+        // 药效周期由状态效果驱动，身体进度只提供该状态的目标与曲线。
+        DEPLETION = register("depletion", MobEffectCategory.HARMFUL, 0xA08A4A, BrewEffectKind.DEPLETION);
         ARMOR_ROT = register("armor_rot", MobEffectCategory.HARMFUL, 0x5E9C7A,
                 BrewEffectKind.ARMOR_ROT);
         INSECT_LURE = register("insect_lure", MobEffectCategory.HARMFUL, 0xE0A030,
                 BrewEffectKind.INSECT_LURE);
-        QI_GATHER = register("qi_gather", MobEffectCategory.BENEFICIAL, 0x4FA3A0, NO_TICK);
+        QI_GATHER = register("qi_gather", MobEffectCategory.BENEFICIAL, 0x4FA3A0, BrewEffectKind.QI_GATHER);
         BITTER_YELLOW = register("bitter_yellow", MobEffectCategory.BENEFICIAL, 0xC9A227,
-                NO_TICK);
+                BrewEffectKind.BITTER_YELLOW);
         CHARM_STAGGER = register("charm_stagger", MobEffectCategory.HARMFUL, 0xC77DBA,
                 NO_TICK);
         CHARM_CONTROL = register("charm_control", MobEffectCategory.HARMFUL, 0xC77DBA,
@@ -59,38 +58,29 @@ final class BrewingEffects {
                 new BrewStatusEffect(category, color, behavior));
     }
 
-    static void damageArmor(LivingEntity target, ArmorRotProfile profile) {
-        for (EquipmentSlot slot : armorSlots()) {
-            ItemStack stack = target.getItemBySlot(slot);
-            if (stack.isEmpty() || !stack.isDamageableItem()) {
-                continue;
-            }
-            double materialFactor = armorMaterialFactor(stack);
-            if (materialFactor == 0.0) {
-                continue;
-            }
-            int damage = Math.max(1, (int) Math.ceil(
-                    stack.getMaxDamage() * profile.durabilityPercentPerSecond() * materialFactor));
-            stack.hurtAndBreak(damage, target, slot);
-        }
+    static Holder<MobEffect> status(BrewKind kind) {
+        // 状态身份集中管理，生命周期和用药入口共用同一注册对象。
+        return switch (kind) {
+            case DEPLETION -> DEPLETION;
+            case ARMOR_ROT -> ARMOR_ROT;
+            case QI_GATHER -> QI_GATHER;
+            case BITTER_YELLOW -> BITTER_YELLOW;
+            case INSECT_LURE -> INSECT_LURE;
+            case CHARM -> CHARM_CONTROL;
+        };
     }
 
-    private static List<EquipmentSlot> armorSlots() {
-        return List.of(EquipmentSlot.HEAD, EquipmentSlot.CHEST,
-                EquipmentSlot.LEGS, EquipmentSlot.FEET);
-    }
-
-    private static double armorMaterialFactor(ItemStack stack) {
-        if (stack.is(BrewingTags.ARMOR_ROT_IMMUNE)) {
-            return 0.0;
+    static Optional<BrewKind> kind(Holder<MobEffect> effect) {
+        // 魅惑有两个图标，但只有一个来源种类。
+        if (effect.equals(CHARM_STAGGER)) {
+            return Optional.of(BrewKind.CHARM);
         }
-        if (stack.is(BrewingTags.ARMOR_ROT_HALF)) {
-            return 0.5;
+        for (BrewKind kind : BrewKind.values()) {
+            if (effect.equals(status(kind))) {
+                return Optional.of(kind);
+            }
         }
-        if (stack.is(BrewingTags.COPPER_ARMOR)) {
-            return COPPER_ARMOR_FACTOR;
-        }
-        return 1.0;
+        return Optional.empty();
     }
 
     private static void attractInsects(ServerLevel level, LivingEntity target, BrewQuality quality) {
@@ -108,7 +98,10 @@ final class BrewingEffects {
 
     private enum BrewEffectKind {
         NO_TICK,
+        DEPLETION,
         ARMOR_ROT,
+        QI_GATHER,
+        BITTER_YELLOW,
         INSECT_LURE
     }
 
@@ -122,9 +115,10 @@ final class BrewingEffects {
 
         @Override
         public boolean applyEffectTick(ServerLevel level, LivingEntity entity, int amplifier) {
+            // 物品蚀甲和身体持续效果在状态仍存在时结算。
             BrewQuality quality = BrewQuality.fromComponentValue(amplifier);
-            if (behavior == BrewEffectKind.ARMOR_ROT) {
-                damageArmor(entity, BrewEffectProfiles.armorRot(quality));
+            if (behavior != BrewEffectKind.NO_TICK && behavior != BrewEffectKind.INSECT_LURE) {
+                BrewEffectLifecycle.tick(entity, BrewKind.valueOf(behavior.name()), quality);
             }
             if (behavior == BrewEffectKind.INSECT_LURE) {
                 if (entity.isInWaterOrRain()) {
@@ -138,8 +132,8 @@ final class BrewingEffects {
 
         @Override
         public boolean shouldApplyEffectTickThisTick(int duration, int amplifier) {
-            if (behavior == BrewEffectKind.ARMOR_ROT
-                    || behavior == BrewEffectKind.INSECT_LURE) {
+            // 每秒结算一次，时间不足一秒的尾段由移除时清理修正。
+            if (behavior != BrewEffectKind.NO_TICK) {
                 return duration % TICKS_PER_SECOND == 0;
             }
             return false;

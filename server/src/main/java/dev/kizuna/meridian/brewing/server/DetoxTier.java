@@ -2,20 +2,16 @@ package dev.kizuna.meridian.brewing.server;
 
 /** 肾脏排毒档位及对持续药效的时间倍率。 */
 public enum DetoxTier {
-    HARMLESS(4.0, Double.POSITIVE_INFINITY, 0.0),
-    EXCELLENT(2.5, 4.0, 0.7),
-    GOOD(1.8, 2.5, 1.0),
-    ORDINARY(1.0, 1.8, 1.25),
-    POOR(0.0, 1.0, 1.5);
+    HARMLESS(0.0),
+    EXCELLENT(0.7),
+    GOOD(1.0),
+    ORDINARY(1.25),
+    POOR(1.5);
 
-    private final double minimumPower;
-    private final double maximumPower;
     private final double durationMultiplier;
 
-    DetoxTier(double minimumPower, double maximumPower, double durationMultiplier) {
-        // 界线和倍率来自旧稿，集中于枚举以便未来迁移到配置文件。
-        this.minimumPower = minimumPower;
-        this.maximumPower = maximumPower;
+    DetoxTier(double durationMultiplier) {
+        // 档位只定义持续倍率，排毒力界线由配置提供。
         this.durationMultiplier = durationMultiplier;
     }
 
@@ -25,17 +21,22 @@ public enum DetoxTier {
     }
 
     static DetoxTier fromPower(double power) {
-        // 上界使用开区间，避免 2.5 或 1.8 在相邻档位重复归类。
-        if (power >= HARMLESS.minimumPower) {
+        // 纯规则调用使用安装配置的默认内容。
+        return fromPower(power, BrewThresholds.DEFAULT.kidneys());
+    }
+
+    public static DetoxTier fromPower(double power, BrewThresholds.Kidneys thresholds) {
+        // 上界使用开区间，档位界线由宿主配置提供。
+        if (power >= thresholds.harmless()) {
             return HARMLESS;
         }
-        if (power >= EXCELLENT.minimumPower) {
+        if (power >= thresholds.excellent()) {
             return EXCELLENT;
         }
-        if (power >= GOOD.minimumPower) {
+        if (power >= thresholds.good()) {
             return GOOD;
         }
-        if (power >= ORDINARY.minimumPower) {
+        if (power >= thresholds.ordinary()) {
             return ORDINARY;
         }
         return POOR;

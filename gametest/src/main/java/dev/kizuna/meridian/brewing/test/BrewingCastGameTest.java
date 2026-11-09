@@ -3,8 +3,12 @@ package dev.kizuna.meridian.brewing.test;
 import dev.kizuna.meridian.brewing.fabric.BrewCauldronBlockEntity;
 import dev.kizuna.meridian.brewing.fabric.BrewFireBlockEntity;
 import dev.kizuna.meridian.brewing.fabric.BrewingTechniqueContract;
+import dev.kizuna.meridian.brewing.fabric.BrewingBodyGameTest;
+import dev.kizuna.meridian.brewing.server.BrewKind;
+import dev.kizuna.meridian.brewing.server.BrewUse;
 import dev.kizuna.meridian.brewing.server.BrewCauldron;
 import dev.kizuna.meridian.brewing.server.BrewCauldronState;
+import dev.kizuna.meridian.protocol.BodyProtobuf;
 import dev.kizuna.meridian.technique.fabric.TechniqueFabric;
 import dev.kizuna.meridian.technique.protocol.pb.TechniqueMessages.CastOutcome;
 import dev.kizuna.meridian.technique.protocol.pb.TechniqueMessages.CastRequest;
@@ -44,6 +48,8 @@ public final class BrewingCastGameTest {
     private static final long STAGGER_MILLIS = 500;
     private static final double STAGGER_SPEED = 0.5;
     private static final String VOLUME = "meridian_brewing:brewing_basics";
+    private static final int SLOWED_TIMEOUT = 1_000;
+    private static final long SLOWED_FINISHED_TICK = 900;
 
     @GameTest(maxTicks = SHORT_TIMEOUT)
     public void realCastRejectsIncompleteStructureWithReason(GameTestHelper context) {
@@ -82,7 +88,8 @@ public final class BrewingCastGameTest {
         });
         context.runAfterDelay(FINISHED_TICK, () -> {
             ended(context, fixture, TechniqueCastEndReason.COMPLETED);
-            context.assertTrue(!TechniqueState.read(BrewingTechniqueTestHost.body(fixture.player())).hasActiveCast(),
+            var body = BodyProtobuf.fromMessage(BrewingTestPlayers.body(fixture.player()));
+            context.assertTrue(!TechniqueState.read(body).hasActiveCast(),
                     "正常收势后仍保留活动施放");
             finish(context, fixture);
         });
@@ -165,12 +172,11 @@ public final class BrewingCastGameTest {
 
     private static Fixture fixture(GameTestHelper context) {
         // 通过方块交互备料，然后学会生产目录里的熬药卷，不手工构造效果事件。
-        ServerPlayer player = context.makeMockServerPlayerInLevel();
+        ServerPlayer player = BrewingTestPlayers.create(context);
         player.setGameMode(GameType.SURVIVAL);
         BlockPos pos = context.absolutePos(new BlockPos(POSITION, POSITION, POSITION));
         BrewCauldronBlockEntity cauldron = BrewingC4cGameTest.placeCauldron(context.getLevel(), pos, player);
         BrewingC4cGameTest.prepareInputs(cauldron, player, context.getLevel(), pos);
-        BrewingTechniqueTestHost.bind(player);
         TechniqueFabric.service().learn(player.getUUID(), VOLUME);
         var ended = new ArrayList<TechniqueCastEnded>();
         Consumer<TechniqueCastEnded> listener = event -> {
@@ -182,6 +188,25 @@ public final class BrewingCastGameTest {
         return new Fixture(player, pos, cauldron, ended, listener);
     }
 
+    @GameTest(maxTicks = SLOWED_TIMEOUT)
+    public void depletionActuallyDelaysBrewingAndCompletion(GameTestHelper context) {
+        // 起手读取绑定手臂的迟滞；药劲中途消退也不改写已经冻结的施放时序。
+        Fixture fixture = fixture(context);
+        BrewingBodyGameTest.install(fixture.player(), BrewKind.DEPLETION,
+                List.of("right_upper_arm"), BrewUse.SPLASH);
+        context.runAfterDelay(STARTED_TICK, () -> cast(context, fixture));
+        context.runAfterDelay(FINISHED_TICK + STARTED_TICK, () -> {
+            assertBrewing(context, fixture);
+            context.assertTrue(fixture.ended().isEmpty(), "迟滞熬药仍按普通时长结束");
+        });
+        context.runAfterDelay(SLOWED_FINISHED_TICK, () -> {
+            ended(context, fixture, TechniqueCastEndReason.COMPLETED);
+            context.assertTrue(fixture.cauldron().cauldron().state() == BrewCauldronState.BREWED,
+                    "迟滞施放结束后巫釜没有完成");
+            finish(context, fixture);
+        });
+    }
+
     private static void cast(GameTestHelper context, Fixture fixture) {
         // 绑定身体版本与正式式引用，经 TechniqueService 的公开入口起手。
         ServerPlayer player = fixture.player();
@@ -189,14 +214,14 @@ public final class BrewingCastGameTest {
         BrewingC4cGameTest.setLookingAt(player, fixture.pos());
         var definition = TechniqueFabric.service().registry().findLatest(BrewingTechniqueContract.TECHNIQUE_ID)
                 .orElseThrow();
-        var body = BrewingTechniqueTestHost.body(player);
+        var body = BrewingTestPlayers.body(player);
         TechniqueReference reference = TechniqueReference.newBuilder()
                 .setId(definition.getId())
                 .setVersion(definition.getVersion())
                 .build();
         CastRequest request = CastRequest.newBuilder()
                 .setCastId("brew_" + player.getUUID())
-                .setBodyId(body.id().value())
+                .setBodyId(body.getId())
                 .setTechnique(reference)
                 .build();
         CastOutcome outcome = TechniqueFabric.service().cast(player.getUUID(), request);
@@ -247,7 +272,7 @@ public final class BrewingCastGameTest {
         // 先结束服务会话再撤销宿主，生命周期回调不保留跨用例引用。
         TechniqueFabric.service().cancelOnUnload(fixture.player().getUUID());
         TechniqueFabric.service().removeCastEndListener(fixture.listener());
-        BrewingTechniqueTestHost.unbind(fixture.player());
+        BrewingTestPlayers.close(fixture.player());
         context.succeed();
     }
 

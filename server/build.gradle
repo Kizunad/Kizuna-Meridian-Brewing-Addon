@@ -1,6 +1,8 @@
 description = '炼药的纯规则、配方、品质、药效和残药生命周期。'
 
 dependencies {
+    api project(':shared')
+    api 'local.meridian:server'
     testImplementation libs.junit4
 }
 

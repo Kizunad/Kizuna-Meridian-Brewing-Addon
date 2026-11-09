@@ -31,5 +31,9 @@
   "block.meridian_brewing.iron_brazier": "Iron Brazier",
   "block.meridian_brewing.iron_stove": "Iron Stove",
   "block.meridian_brewing.herb_crate": "Herb Crate",
-  "container.meridian_brewing.herb_crate": "Herb Crate"
+  "container.meridian_brewing.herb_crate": "Herb Crate",
+  "message.meridian_brewing.nausea": "Too bitter to swallow",
+  "message.meridian_brewing.modifier_limit": "Too many effects; the brew could not take hold",
+  "death.attack.meridian_brewing.depletion": "%1$s was consumed by depletion brew",
+  "death.attack.meridian_brewing.depletion.player": "%1$s was consumed by %2$s's depletion brew"
 }

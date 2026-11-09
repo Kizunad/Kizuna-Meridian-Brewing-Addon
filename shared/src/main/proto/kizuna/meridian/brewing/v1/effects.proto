@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package kizuna.meridian.brewing.v1;
+
+option java_package = "dev.kizuna.meridian.brewing.protocol.pb";
+option java_outer_classname = "BrewEffectMessages";
+
+import "kizuna/meridian/v1/body.proto";
+
+// 存在身体 addon_progress 中；显示状态移除时由可信活动撤销其能力修正。
+message BrewBodyState {
+  int32 schema_version = 1;
+  repeated BrewDose doses = 2;
+  int64 nausea_until_millis = 3;
+  int64 charm_immunity_until_millis = 4;
+}
+
+message BrewDose {
+  string kind = 1;
+  int32 quality = 2;
+  string use = 3;
+  repeated string part_ids = 4;
+  int64 started_millis = 5;
+  int64 ends_millis = 6;
+  int64 last_healed_millis = 7;
+  double endurance_loss = 8;
+  repeated string modifier_ids = 9;
+  repeated string fading_part_ids = 10;
+  // 提前治满后的退封计划，用于按状态剩余时间恢复离线暂停的曲线。
+  repeated kizuna.meridian.v1.CapabilityModifier fading_modifiers = 11;
+}

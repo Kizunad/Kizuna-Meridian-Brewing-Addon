@@ -22,6 +22,9 @@ import dev.kizuna.meridian.technique.protocol.pb.TechniqueMessages.UseBrew;
 import dev.kizuna.meridian.technique.server.EffectHandling;
 import dev.kizuna.meridian.technique.server.TechniqueEffectEvent;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.fabricmc.fabric.api.event.player.UseBlockCallback;
+import net.fabricmc.fabric.api.event.player.UseItemCallback;
+import net.fabricmc.fabric.api.event.player.UseEntityCallback;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -42,6 +45,8 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.InteractionResult;
 
 /** 处理器的补充测试使用服务端玩家、视线、方块实体和药水物品。 */
 public final class BrewingC4cGameTest {
@@ -62,7 +67,7 @@ public final class BrewingC4cGameTest {
     public void blockWorkStartsAdvancesAndInterruptsThroughWorldTarget(GameTestHelper context) {
         // 直接处理器测试补充视线与幂等边界，正式施放另由服务流程用例覆盖。
         ServerLevel level = context.getLevel();
-        ServerPlayer player = context.makeMockServerPlayerInLevel();
+        ServerPlayer player = BrewingTestPlayers.create(context);
         player.setGameMode(GameType.SURVIVAL);
         BlockPos cauldronPos = context.absolutePos(
                 new BlockPos(STRUCTURE_X, STRUCTURE_Y, STRUCTURE_Z));
@@ -70,7 +75,6 @@ public final class BrewingC4cGameTest {
         assertIncompleteStart(context, player, cauldronPos);
         prepareInputs(cauldron, player, level, cauldronPos);
         assertBrewProgress(context, player, cauldron, cauldronPos);
-        assertOffHandOperations(context, player, cauldron, level, cauldronPos);
         assertDistanceInterrupt(context, player, cauldron, cauldronPos);
         context.succeed();
     }
@@ -79,7 +83,7 @@ public final class BrewingC4cGameTest {
     public void useBrewRecognizesFactsAndConsumesDrinkAndSplash(GameTestHelper context) {
         // 使用真实物品和持物事实验证用药消费，不依赖客户端输入。
         ServerLevel level = context.getLevel();
-        ServerPlayer player = context.makeMockServerPlayerInLevel();
+        ServerPlayer player = BrewingTestPlayers.create(context);
         player.setGameMode(GameType.SURVIVAL);
 
         ItemStack drink = BrewItemStacks.create(BrewKind.QI_GATHER,
@@ -87,8 +91,7 @@ public final class BrewingC4cGameTest {
         player.setItemInHand(InteractionHand.MAIN_HAND, drink);
         HeldItems drinkFacts = TechniqueWorldItems.inspect(player);
         assertDrink(context, player, drinkFacts);
-        LivingEntity target = context.spawn(EntityTypes.ZOMBIE,
-                new BlockPos(STRUCTURE_X, STRUCTURE_Y, STRUCTURE_Z));
+        LivingEntity target = BrewingTestPlayers.create(context);
         player.setPos(target.position());
         assertSplash(context, player, target);
         assertMismatchedFacts(context, player);
@@ -125,19 +128,52 @@ public final class BrewingC4cGameTest {
                                                 BrewCauldronBlockEntity cauldron, ServerLevel level,
                                                 BlockPos cauldronPos) {
         // 熬制中主手被接管，副手只允许向釜投料或操作釜下火源。
+        assertUndeclaredTargets(context, player, cauldronPos);
         ItemStack mainIngredient = new ItemStack(Items.PRISMARINE_SHARD);
         player.setItemInHand(InteractionHand.MAIN_HAND, mainIngredient);
-        cauldron.use(player, InteractionHand.MAIN_HAND);
+        var cauldronHit = new BlockHitResult(Vec3.atCenterOf(cauldronPos), Direction.UP,
+                cauldronPos, false /* inside */);
+        context.assertTrue(UseBlockCallback.EVENT.invoker()
+                .interact(player, level, InteractionHand.MAIN_HAND, cauldronHit) == InteractionResult.FAIL,
+                "Human 没有拦截施放中主手");
         context.assertTrue(mainIngredient.getCount() == 1, "熬制中主手右键没有被拦截");
         ItemStack offIngredient = new ItemStack(Items.PRISMARINE_SHARD);
         player.setItemInHand(InteractionHand.OFF_HAND, offIngredient);
+        context.assertTrue(UseBlockCallback.EVENT.invoker()
+                .interact(player, level, InteractionHand.OFF_HAND, cauldronHit) != InteractionResult.FAIL,
+                "Human 拒绝了标签允许的副手目标");
         cauldron.use(player, InteractionHand.OFF_HAND);
         context.assertTrue(offIngredient.isEmpty(), "熬制中副手投料没有生效");
+        assertFireOperations(context, player, level, cauldronPos);
+    }
+
+    private static void assertUndeclaredTargets(GameTestHelper context, ServerPlayer player, BlockPos cauldronPos) {
+        // 方块白名单不能成为空气、实体或无标签方块的副手豁免。
+        BlockPos target = cauldronPos.above();
+        var hit = new BlockHitResult(Vec3.atCenterOf(target), Direction.UP, target, false /* inside */);
+        context.assertTrue(UseBlockCallback.EVENT.invoker()
+                .interact(player, player.level(), InteractionHand.OFF_HAND, hit) == InteractionResult.FAIL,
+                "副手放行了未声明方块");
+        context.assertTrue(UseItemCallback.EVENT.invoker()
+                .interact(player, player.level(), InteractionHand.OFF_HAND) == InteractionResult.FAIL,
+                "副手空气操作借用了方块白名单");
+        context.assertTrue(UseEntityCallback.EVENT.invoker()
+                .interact(player, player.level(), InteractionHand.OFF_HAND, player, null) == InteractionResult.FAIL,
+                "副手实体操作借用了方块白名单");
+    }
+
+    private static void assertFireOperations(GameTestHelper context, ServerPlayer player,
+                                              ServerLevel level, BlockPos cauldronPos) {
+        // 火源使用同一 Human 门禁，放行后才交给正式方块实体操作。
         BrewFireBlockEntity fire = (BrewFireBlockEntity) level.getBlockEntity(cauldronPos.below());
         int fuelLevel = fire.fire().level();
         ItemStack mainCoal = new ItemStack(Items.COAL);
         player.setItemInHand(InteractionHand.MAIN_HAND, mainCoal);
-        fire.use(player, InteractionHand.MAIN_HAND);
+        var fireHit = new BlockHitResult(Vec3.atCenterOf(cauldronPos.below()), Direction.UP,
+                cauldronPos.below(), false /* inside */);
+        context.assertTrue(UseBlockCallback.EVENT.invoker()
+                .interact(player, level, InteractionHand.MAIN_HAND, fireHit) == InteractionResult.FAIL,
+                "Human 没有拦截主手调火");
         context.assertTrue(mainCoal.getCount() == 1, "熬制中主手加炭没有被拦截");
         context.assertTrue(fire.fire().level() == fuelLevel, "熬制中主手操作改变了火档");
         ItemStack offCoal = new ItemStack(Items.COAL);
