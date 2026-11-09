@@ -29,8 +29,8 @@ public final class BrewNausea {
     }
 
     public static boolean blocks(LivingEntity entity, ItemStack stack) {
-        // 本入口只处理玩家；生物的自主喝药由其身体宿主执行。
-        if (!(entity instanceof Player) || !(entity.level() instanceof ServerLevel)
+        // 玩家使用回调与生物自主喝药共享同一身体期限。
+        if (!(entity.level() instanceof ServerLevel)
                 || !entity.hasEffect(BrewingEffects.BITTER_YELLOW)) {
             return false;
         }

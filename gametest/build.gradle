@@ -19,7 +19,7 @@ dependencies {
     implementation 'dev.kizuna.meridian.technique:server'
     implementation 'dev.kizuna.meridian.technique:shared'
     // 功法 Fabric 模组硬依赖 Framework；只取功法模块本身时，运行时单独装入 Framework。
-    runtimeOnly 'dev.kizuna.meridian:fabric'
+    implementation 'dev.kizuna.meridian:fabric'
 }
 
 apply from: new File(kizunaWorkspace.directory('framework'), 'scripts/full-assembly.gradle')
@@ -41,7 +41,7 @@ loom {
             vmArg '-Dfabric-api.gametest'
             vmArg '-Dfabric-api.gametest.report-file=build/gametest-results.xml'
             if (providers.gradleProperty('gametestFilter').isPresent()) {
-                vmArg "-Dfabric.api.gametest.filter=${providers.gradleProperty('gametestFilter').get()}"
+                vmArg "-Dfabric-api.gametest.filter=${providers.gradleProperty('gametestFilter').get()}"
             }
         }
     }

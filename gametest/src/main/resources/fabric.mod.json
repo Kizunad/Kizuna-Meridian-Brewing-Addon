@@ -10,7 +10,8 @@
       "dev.kizuna.meridian.brewing.test.BrewingC4cGameTest",
       "dev.kizuna.meridian.brewing.test.BrewingCastGameTest",
       "dev.kizuna.meridian.brewing.fabric.BrewingBodyGameTest",
-      "dev.kizuna.meridian.brewing.fabric.BrewingHostGameTest"
+      "dev.kizuna.meridian.brewing.fabric.BrewingHostGameTest",
+      "dev.kizuna.meridian.brewing.fabric.BrewingCharmGameTest"
     ]
   },
   "depends": {

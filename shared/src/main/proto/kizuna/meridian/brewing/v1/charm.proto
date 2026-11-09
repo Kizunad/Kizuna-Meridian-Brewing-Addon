@@ -1,0 +1,37 @@
+syntax = "proto3";
+package kizuna.meridian.brewing.v1;
+option java_package = "dev.kizuna.meridian.brewing.protocol.pb";
+option java_outer_classname = "CharmMessages";
+
+// 仅限可信服务端主线程；时钟统一使用主世界 gameTime，绝不接受客户端写入。
+message CharmSession {
+  string session_id = 1;
+  string subject_uuid = 2;
+  string caster_uuid = 3;
+  int64 started_tick = 4;
+  int64 ends_tick = 5;
+  string opponent_uuid = 6; // 空表示跟随施药者。
+}
+enum CharmEndReason {
+  CHARM_END_UNSPECIFIED = 0;
+  EXPIRED = 1;
+  ALLY_DAMAGE = 2;
+  CASTER_DIED = 3;
+  OUT_OF_RANGE = 4;
+  DISCONNECTED = 5;
+  SUBJECT_DIED = 6;
+  EFFECT_REMOVED = 7;
+  UNLOADED = 8;
+  SERVER_STOPPED = 9;
+}
+message CharmCommand {
+  enum Action { ACTION_UNSPECIFIED = 0; START = 1; UPDATE = 2; END = 3; }
+  Action action = 1;
+  CharmSession session = 2;
+  CharmEndReason reason = 3;
+}
+message CharmReply {
+  string session_id = 1;
+  bool accepted = 2;
+  string rejection = 3;
+}

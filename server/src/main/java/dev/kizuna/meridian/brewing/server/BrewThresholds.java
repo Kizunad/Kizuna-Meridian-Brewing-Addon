@@ -7,7 +7,8 @@ import java.nio.file.Path;
 import java.util.Properties;
 
 /** 肾脏和脑力档位由服务端配置统一决定。 */
-public record BrewThresholds(Kidneys kidneys, Brain brain) {
+public record BrewThresholds(Kidneys kidneys, Brain brain, PlayerCharm playerCharm) {
+    public enum PlayerCharm { CONTROL, STAGGER }
     public static final BrewThresholds DEFAULT = defaults();
 
     public static BrewThresholds load(Path path) {
@@ -52,7 +53,16 @@ public record BrewThresholds(Kidneys kidneys, Brain brain) {
         var kidneys = new Kidneys(number(properties, "kidney.ordinary"), number(properties, "kidney.good"),
                 number(properties, "kidney.excellent"), number(properties, "kidney.harmless"));
         var brain = new Brain(number(properties, "brain.stagger"), number(properties, "brain.ignore"));
-        return new BrewThresholds(kidneys, brain);
+        String controls = properties.getProperty("charm_controls_players", "true");
+        PlayerCharm playerCharm;
+        if (controls.equals("true")) {
+            playerCharm = PlayerCharm.CONTROL;
+        } else if (controls.equals("false")) {
+            playerCharm = PlayerCharm.STAGGER;
+        } else {
+            throw new IllegalArgumentException("charm_controls_players 必须为 true 或 false");
+        }
+        return new BrewThresholds(kidneys, brain, playerCharm);
     }
 
     private static double number(Properties properties, String key) {

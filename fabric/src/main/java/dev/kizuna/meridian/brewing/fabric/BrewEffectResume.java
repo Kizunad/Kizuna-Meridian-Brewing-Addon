@@ -44,6 +44,9 @@ final class BrewEffectResume {
 
     private static void resume(ServerPlayer player) {
         // 死亡由身体核心清账；无药效历史的登录无需生成空活动。
+        if (!BrewCharmSessions.controlled(player.getUUID())) {
+            player.removeEffect(BrewingEffects.CHARM_CONTROL);
+        }
         var binding = BrewBodyHost.inspect(player).orElseThrow();
         if (binding.body().getVitality().getDead()
                 || !binding.body().containsAddonProgress(BrewBodyProgress.KEY)) {

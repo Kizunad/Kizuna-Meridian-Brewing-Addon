@@ -5,6 +5,12 @@ import dev.kizuna.meridian.protocol.pb.BodyMessages.BodySnapshot;
 import dev.kizuna.meridian.technique.fabric.testing.RecordingConnection;
 import dev.kizuna.meridian.technique.fabric.testing.TestPlayers;
 import dev.kizuna.meridian.vanilla.fabric.VanillaDamageFabric;
+import dev.kizuna.meridian.fabric.ProtobufChannel;
+import dev.kizuna.meridian.human.fabric.HumanChannels;
+import dev.kizuna.meridian.human.protocol.pb.ControlMessages.ControlIntent;
+import com.google.protobuf.InvalidProtocolBufferException;
+import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
+import java.util.ArrayList;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.Identifier;
@@ -27,10 +33,12 @@ public final class BrewingTestPlayers {
     private static final int HEIGHT = 3;
     private static final Map<UUID, RecordingConnection> CONNECTIONS = new HashMap<>();
     private static boolean ticking;
+    private static final Map<UUID, List<ControlIntent>> CONTROL = new HashMap<>();
     private static final List<Identifier> CHANNELS = List.of(
             Identifier.parse("meridian:body_view"),
             Identifier.parse("meridian:gathering_response"),
             Identifier.parse("meridian:opening_response"),
+            Identifier.parse("meridian_human:control"),
             Identifier.parse("meridian_progression:event"),
             Identifier.parse("kizuna_players_animation:play"),
             Identifier.parse("kizuna_players_animation:stop"));
@@ -58,6 +66,7 @@ public final class BrewingTestPlayers {
         var player = new ServerPlayer(level.getServer(), level, profile, ClientInformation.createDefault());
         var connection = new RecordingConnection(CHANNELS);
         CONNECTIONS.put(profile.id(), connection);
+        CONTROL.put(profile.id(), new ArrayList<>());
         TestPlayers.logIn(player, connection);
         BlockPos position = context.absolutePos(new BlockPos(1, HEIGHT, 1));
         player.setPos(position.getX(), position.getY(), position.getZ());
@@ -85,6 +94,11 @@ public final class BrewingTestPlayers {
         // 长施放期间模拟客户端心跳，不能因为测试传输层缺少回包导致超时下线。
         var listener = (ServerGamePacketListenerImpl) connection.getPacketListener();
         for (var packet : List.copyOf(connection.packets())) {
+            if (packet instanceof ClientboundCustomPayloadPacket custom
+                    && custom.payload() instanceof ProtobufChannel.Payload payload
+                    && payload.type().equals(HumanChannels.CONTROL.type())) {
+                recordControl(listener.player, payload.bytes());
+            }
             if (packet instanceof ClientboundKeepAlivePacket keepAlive) {
                 listener.handleKeepAlive(new ServerboundKeepAlivePacket(keepAlive.getId()));
             }
@@ -97,11 +111,26 @@ public final class BrewingTestPlayers {
         return VanillaDamageFabric.inspectBody(player).orElseThrow();
     }
 
+    public static List<ControlIntent> controlIntents(ServerPlayer player) {
+        // 测试只读取内存网络捕获的下行意图，不直接调用决策函数代替发包。
+        return List.copyOf(CONTROL.getOrDefault(player.getUUID(), List.of()));
+    }
+
+    private static void recordControl(ServerPlayer player, byte[] payload) {
+        // 正式通道载荷必须能被客户端使用的协议解码。
+        try {
+            CONTROL.get(player.getUUID()).add(ControlIntent.parseFrom(payload));
+        } catch (InvalidProtocolBufferException invalid) {
+            throw new IllegalStateException("测试收到损坏的受控意图", invalid);
+        }
+    }
+
     public static void close(ServerPlayer player) {
         // 真实断线同时清除施放、身体认领和服务端玩家列表。
         RecordingConnection connection = CONNECTIONS.remove(player.getUUID());
         if (connection != null) {
             connection.disconnectFromClient();
         }
+        CONTROL.remove(player.getUUID());
     }
 }

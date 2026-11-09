@@ -2,6 +2,7 @@ package dev.kizuna.meridian.brewing.fabric;
 
 import dev.kizuna.meridian.brewing.protocol.pb.BrewEffectMessages.BrewBodyState;
 import dev.kizuna.meridian.brewing.protocol.pb.BrewEffectMessages.BrewDose;
+import dev.kizuna.meridian.brewing.protocol.pb.CharmMessages.CharmEndReason;
 import dev.kizuna.meridian.brewing.server.BitterHealing;
 import dev.kizuna.meridian.brewing.server.BrewBodyProgress;
 import dev.kizuna.meridian.brewing.server.BrewDoseOperations;
@@ -129,6 +130,9 @@ public final class BrewEffectLifecycle {
         }
         Set<BrewKind> kinds = new HashSet<>();
         for (MobEffectInstance effect : removed) {
+            if (effect.getEffect().equals(BrewingEffects.CHARM_CONTROL)) {
+                BrewCharmSessions.end(entity, CharmEndReason.EFFECT_REMOVED);
+            }
             BrewingEffects.kind(effect.getEffect()).ifPresent(kinds::add);
         }
         if (kinds.isEmpty()) {

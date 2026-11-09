@@ -56,6 +56,7 @@ final class BrewBodyEffects {
         VanillaDamageFabric.registerPartArmorModifier(BrewArmorEffects::multiplier);
         BrewNausea.initialize();
         BrewEffectResume.initialize();
+        BrewCharmSessions.initialize();
     }
 
     record Application(BrewKind kind, BrewQuality quality, BrewUse use, Vec3 impact, Entity source) { }
@@ -78,7 +79,7 @@ final class BrewBodyEffects {
             return;
         }
         if (application.kind() == BrewKind.CHARM) {
-            charm(target, binding, application.quality());
+            charm(target, binding, application);
             return;
         }
         List<String> parts = parts(target, binding.body(), application);
@@ -204,35 +205,36 @@ final class BrewBodyEffects {
         }
     }
 
-    private static void charm(LivingEntity target, BrewBodyHost.Binding binding, BrewQuality quality) {
+    private static void charm(LivingEntity target, BrewBodyHost.Binding binding, Application application) {
         // 判定和醒后免疫在本仓；受控目标的决策由控制宿主接续。
         BrewBodyState state = BrewBodyProgress.read(binding.body());
         long now = binding.body().getSettledAt().getElapsedMillis();
-        if (state.getCharmImmunityUntilMillis() > now) {
+        if (state.getCharmImmunityUntilMillis() > now || BrewCharmSessions.controlled(target.getUUID())) {
             return;
         }
+        BrewQuality quality = application.quality();
         CharmOutcome outcome = BrewBodyFacts.charm(binding.body(), quality, thresholds);
         if (outcome == CharmOutcome.IGNORE) {
             return;
         }
         var profile = BrewEffectProfiles.charm(quality);
-        Holder<MobEffect> status = BrewingEffects.CHARM_CONTROL;
-        double duration = profile.controlSeconds();
-        if (outcome == CharmOutcome.STAGGER) {
-            status = BrewingEffects.CHARM_STAGGER;
-            duration = profile.staggerSeconds();
+        boolean playerStagger = target instanceof ServerPlayer
+                && thresholds.playerCharm() == BrewThresholds.PlayerCharm.STAGGER;
+        if (outcome == CharmOutcome.CONTROL && !playerStagger
+                && application.source() instanceof LivingEntity caster) {
+            BrewCharmSessions.start(target, caster, profile.controlSeconds(), quality);
+            return;
         }
+        double duration = profile.staggerSeconds();
         long immuneUntil = now + Math.round((duration + profile.immunitySeconds()) * MILLIS_PER_SECOND);
         var updated = state.toBuilder().setCharmImmunityUntilMillis(immuneUntil).build();
         var activity = BodyActivity.newBuilder();
         BrewBodyProgress.write(activity, updated);
         BrewBodyHost.activity(binding, activity.build());
-        addStatus(target, status, duration, quality);
-        if (outcome == CharmOutcome.STAGGER) {
-            long millis = Math.round(duration * MILLIS_PER_SECOND);
-            var stagger = new TechniqueService.Stagger(millis, 0, TechniqueService.StaggerKind.CHARM);
-            TechniqueFabric.service().stagger(target.getUUID(), stagger);
-        }
+        addStatus(target, BrewingEffects.CHARM_STAGGER, duration, quality);
+        long millis = Math.round(duration * MILLIS_PER_SECOND);
+        var stagger = new TechniqueService.Stagger(millis, 0, TechniqueService.StaggerKind.CHARM);
+        TechniqueFabric.service().stagger(target.getUUID(), stagger);
     }
 
     private static void applyUnbound(ServerLevel level, LivingEntity target, Application application) {
