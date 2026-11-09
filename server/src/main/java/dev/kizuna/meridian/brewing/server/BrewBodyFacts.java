@@ -38,7 +38,7 @@ public final class BrewBodyFacts {
                                       double strength) {
         // 脑疲劳以焦耳计，注意组织以自身疲劳上限计，不能直接相加原始刻度。
         double suppression = BrewEffectProfiles.charm(quality).suppression() * strength;
-        double power = brainPower(body) + attentionPower(body) - suppression;
+        double power = mentalPower(body) - suppression;
         if (power >= thresholds.brain().ignore()) {
             return CharmOutcome.IGNORE;
         }
@@ -46,6 +46,11 @@ public final class BrewBodyFacts {
             return CharmOutcome.STAGGER;
         }
         return CharmOutcome.CONTROL;
+    }
+
+    public static double mentalPower(BodySnapshot body) {
+        // AI 与药效判定读取同一脑器官及注意组织，不另存推测的疲劳状态。
+        return brainPower(body) + attentionPower(body);
     }
 
     private static double brainPower(BodySnapshot body) {

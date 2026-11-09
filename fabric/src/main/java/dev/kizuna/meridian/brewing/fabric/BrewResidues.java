@@ -22,17 +22,30 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.loader.api.FabricLoader;
+import net.fabricmc.fabric.api.event.Event;
+import net.fabricmc.fabric.api.event.EventFactory;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 
 /** 世界只提供当前身体事实；剂量、覆盖与指数衰减复用纯规则存储。 */
 public final class BrewResidues {
+    public interface Triggered {
+        void onTriggered(LivingEntity source, BrewKind kind, int targets);
+    }
+
+    public static final Event<Triggered> TRIGGERED = EventFactory.createArrayBacked(Triggered.class,
+            callbacks -> (source, kind, count) -> {
+                for (Triggered callback : callbacks) {
+                    callback.onTriggered(source, kind, count);
+                }
+            });
     private static final double SECONDS_PER_TICK = 0.05;
     private static ResidueStore store = new ResidueStore();
     private static final Map<UUID, LivingEntity> targets = new HashMap<>();
@@ -107,12 +120,33 @@ public final class BrewResidues {
                 count++;
             }
         }
+        if (count > 0) {
+            TRIGGERED.invoker().onTriggered(source, kind, count);
+        }
         return count;
     }
 
     static List<ResidueSnapshot> snapshots() {
         // 只读结果也用于核对跨仓用药后实际留下的来源与部位。
         return store.snapshots();
+    }
+
+    public static List<ResidueSnapshot> onTarget(UUID source, UUID target) {
+        // 返回该来源在目标上的各药种、部位和当前剂量，不向调用方暴露可变存储。
+        return store.snapshots().stream()
+                .filter(snapshot -> snapshot.key().source().equals(source)
+                        && snapshot.key().target().equals(target)).toList();
+    }
+
+    public static boolean canTrigger(LivingEntity source, BrewKind kind, double range) {
+        // 起手查询与催发共用同一存储；只检查来源、药种、维度和实际距离。
+        return store.snapshots().stream().anyMatch(snapshot -> {
+            var key = snapshot.key();
+            LivingEntity target = targets.get(key.target());
+            return key.source().equals(source.getUUID()) && key.kind() == kind
+                    && target != null && target.isAlive() && target.level() == source.level()
+                    && source.distanceToSqr(target) <= range * range;
+        });
     }
 
     public static void clear(UUID target) {
@@ -124,7 +158,7 @@ public final class BrewResidues {
     private static void tick(MinecraftServer server) {
         // 身体恢复与肾脏每 tick 重读，不能把下引时的状态永久缓存。
         store.tick(SECONDS_PER_TICK, BrewResidues::conditions);
-        var retained = store.snapshots().stream().map(snapshot -> snapshot.key().target()).toList();
+        var retained = store.snapshots().stream().map(snapshot -> snapshot.key().target()).collect(Collectors.toSet());
         targets.keySet().removeIf(id -> !retained.contains(id));
     }
 

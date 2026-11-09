@@ -117,8 +117,7 @@ final class BrewTechniqueUse {
         BrewQuality quality = BrewItemStacks.quality(stack);
         var potency = potency(quality, use);
         switch (method) {
-            case DRINK, ANOINT -> self(actor, new BrewBodyEffects.Application(
-                    kind, quality, BrewUse.DRINK, actor.position(), actor), potency, method, cast);
+            case DRINK, ANOINT -> self(actor, new SelfDose(kind, quality, potency), method, cast);
             case FAN -> fan(actor, kind, quality, use);
             case MIST -> BrewResidues.trigger(actor, kind, use.getTechnique());
             case THROW -> BrewProjectiles.launch(actor, stack, event.intent().getLaunchProjectile().getProjectile(),
@@ -129,8 +128,7 @@ final class BrewTechniqueUse {
         return EffectHandling.handled();
     }
 
-    private static void self(LivingEntity actor, BrewBodyEffects.Application dose, BrewPotency potency,
-                             BrewUseMethod method, CastKey cast) {
+    private static void self(LivingEntity actor, SelfDose dose, BrewUseMethod method, CastKey cast) {
         // 服药只作用自身；外敷限定此前选定组，不能因动作期间伤势变化而换到另一边。
         BrewUse deliveryUse = BrewUse.DRINK;
         List<String> parts = List.of();
@@ -143,7 +141,7 @@ final class BrewTechniqueUse {
         }
         var application = new BrewBodyEffects.Application(dose.kind(), dose.quality(), deliveryUse,
                 actor.position(), actor);
-        var delivery = new BrewDelivery(potency, BrewPartGroup.BREW_PART_GROUP_UNSPECIFIED, parts);
+        var delivery = new BrewDelivery(dose.potency(), BrewPartGroup.BREW_PART_GROUP_UNSPECIFIED, parts);
         BrewBodyEffects.apply(actor, application, delivery);
     }
 
@@ -161,9 +159,10 @@ final class BrewTechniqueUse {
         for (LivingEntity target : targets) {
             var application = new BrewBodyEffects.Application(kind, quality, BrewUse.FAN, actor.position(), actor);
             applySeed(target, application, use, BrewPartGroup.FRONT_CHEST_ARMS);
-            if (kind == BrewKind.INSECT_LURE) {
-                BrewingRuntime.spawnSilverfish((ServerLevel) actor.level(), target.position(), quality, actor, 1);
-            }
+        }
+        if (kind == BrewKind.INSECT_LURE && !targets.isEmpty()) {
+            BrewingRuntime.spawnSilverfish((ServerLevel) actor.level(), targets.getFirst().position(),
+                    quality, actor, 1);
         }
         if (kind == BrewKind.DEPLETION) {
             WitheringService.enqueue((ServerLevel) actor.level(), actor.position().add(forward.scale(range)),
@@ -240,4 +239,5 @@ final class BrewTechniqueUse {
 
     private record CastKey(UUID actor, String cast) { }
     private record EffectKey(CastKey cast, String effect) { }
+    private record SelfDose(BrewKind kind, BrewQuality quality, BrewPotency potency) { }
 }

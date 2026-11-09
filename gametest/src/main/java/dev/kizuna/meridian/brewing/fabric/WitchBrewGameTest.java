@@ -282,7 +282,7 @@ public final class WitchBrewGameTest {
         return started;
     }
 
-    private static void rejected(GameTestHelper context, ServerPlayer player, String technique, String reason) {
+    static void rejected(GameTestHelper context, ServerPlayer player, String technique, String reason) {
         // 拒绝原因由正式起手入口返回，不直接调用内部持物判定。
         var result = TechniqueFabric.service().cast(player.getUUID(), request(player, technique));
         context.assertTrue(!result.hasBinding() && result.getReason().equals(reason), "失败原因不符：" + result);

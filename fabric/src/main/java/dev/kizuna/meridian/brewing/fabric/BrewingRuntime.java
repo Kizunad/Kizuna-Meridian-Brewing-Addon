@@ -87,6 +87,8 @@ public final class BrewingRuntime {
         ServerTickEvents.END_SERVER_TICK.register(WitheringService::tick);
         ServerLifecycleEvents.SERVER_STARTED.register(server -> activeServer = server);
         TechniqueFabric.SERVICE_STARTED.register(service -> BrewingTechniqueContract.validate(service.registry()));
+        TechniqueFabric.SERVICE_STARTED.register(service -> service.addCastCheck(
+                (entity, request) -> BrewCastChecks.rejection(activeServer, entity, request)));
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> stop());
         TechniqueFabric.EFFECT_HANDLER.register(BrewingRuntime::handleTechniqueEffect);
         TechniqueFabric.CAST_ENDED.register(BrewingRuntime::endCast);

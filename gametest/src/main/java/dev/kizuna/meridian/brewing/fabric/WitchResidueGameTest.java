@@ -44,6 +44,40 @@ public final class WitchResidueGameTest {
     private static final double RECOVERY_DIVISOR = 3;
 
     @GameTest(maxTicks = TIMEOUT)
+    public void emptyMistDoesNotChargePlayerOrConsumeBottle(GameTestHelper context) {
+        // 生存玩家无本人同种残药时不付费、不起手、不扣瓶，拒绝原因可直接显示。
+        WitchBrewGameTest.ready(context, player -> {
+            WitchBrewGameTest.hold(player, BrewKind.ARMOR_ROT, BrewQuality.COMMON, BrewUse.SPLASH);
+            ItemStack bottle = player.getMainHandItem();
+            var before = BrewingTestPlayers.body(player).getMeridianStatesList();
+            WitchBrewGameTest.rejected(context, player, "spray_trigger", "16 m 内没有你下的这种药");
+            context.assertTrue(before.equals(BrewingTestPlayers.body(player).getMeridianStatesList()),
+                    "空噀催扣了真元");
+            context.assertTrue(player.getMainHandItem() == bottle && bottle.getCount() == 1, "空噀催扣了瓶");
+            WitchBrewGameTest.finish(context, player);
+        });
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void mistStillConsumesWhenSeedDisappearsAfterStart(GameTestHelper context) {
+        // 效果边界前失去残药属于时机损失，已经开始的施放仍消费一瓶。
+        WitchBrewGameTest.ready(context, player -> {
+            var target = WitchBrewGameTest.target(context, player, 0, TARGET_DISTANCE);
+            fan(context, player, BrewKind.ARMOR_ROT);
+            context.runAfterDelay(FAN_FINISHED, () -> {
+                context.assertTrue(has(player, target), "时机损失测试没有真实残药");
+                mist(context, player, BrewKind.ARMOR_ROT);
+                BrewResidues.clear(target.getUUID());
+                context.runAfterDelay(MIST_EFFECT, () -> {
+                    context.assertTrue(player.getMainHandItem().is(Items.GLASS_BOTTLE), "时机损失未正常扣瓶");
+                    target.discard();
+                    WitchBrewGameTest.finish(context, player);
+                });
+            });
+        });
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
     public void sourceKindRangeAndMilkFilterRealSeeds(GameTestHelper context) {
         // 两名施药者各自下引；错误药种、超距与牛奶分别隔离，最后隔墙只催本人同种。
         WitchBrewGameTest.ready(context, first -> WitchBrewGameTest.ready(context, second -> {
@@ -63,8 +97,9 @@ public final class WitchResidueGameTest {
                 far.setPos(first.getX(), first.getY(), first.getZ() + OUT_OF_RANGE);
             });
             context.runAfterDelay(FAN_FINISHED, () -> {
-                mist(context, first, BrewKind.INSECT_LURE);
-                context.runAfterDelay(MIST_EFFECT, () -> context.assertTrue(has(first, near), "错误药种催掉残药"));
+                WitchBrewGameTest.hold(first, BrewKind.INSECT_LURE, BrewQuality.COMMON, BrewUse.SPLASH);
+                WitchBrewGameTest.rejected(context, first, "spray_trigger", "16 m 内没有你下的这种药");
+                context.assertTrue(has(first, near), "错误药种催掉残药");
             });
             context.runAfterDelay(MIST_READY, () -> {
                 var wall = first.blockPosition().south();

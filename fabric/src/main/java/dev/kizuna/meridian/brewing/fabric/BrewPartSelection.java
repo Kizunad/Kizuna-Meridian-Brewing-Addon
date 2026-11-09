@@ -106,16 +106,8 @@ final class BrewPartSelection {
     }
 
     static BrewPartGroup anointGroup(BodySnapshot body) {
-        // 两组按可修复伤势合计比较，平局固定选两臂，保证动作声音与生效选择一致。
-        double arms = wound(body, BrewPartGroup.ARMS);
-        double legs = wound(body, BrewPartGroup.LEGS);
-        return legs > arms ? BrewPartGroup.LEGS : BrewPartGroup.ARMS;
-    }
-
-    private static double wound(BodySnapshot body, BrewPartGroup group) {
-        // 复用苦黄膏表里伤势权重，不另算一套受伤判定。
-        return body.getPartStatesList().stream().map(part -> part.getId())
-                .filter(part -> matches(part, group)).mapToDouble(part -> BitterHealing.wound(body, part)).sum();
+        // 敷药组按两组 HP 比例选择，平局固定取两臂。
+        return BrewQueries.limbRatios(body).anointGroup();
     }
 
     static List<String> anoint(BodySnapshot body) {
