@@ -8,6 +8,7 @@ import dev.kizuna.meridian.brewing.server.BrewUse;
 import dev.kizuna.meridian.brewing.test.BrewingTestPlayers;
 import dev.kizuna.meridian.human.fabric.HumanDebugHost;
 import dev.kizuna.meridian.human.fabric.HumanGameTestAccess;
+import dev.kizuna.meridian.protocol.pb.BodyMessages.CapabilityModifier;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.DebugQi;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.DebugQiMode;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.FailureCode;
@@ -52,6 +53,10 @@ public final class WitchBrewGameTest {
     private static final long COMMON_DRINK_DURATION = 30_000;
     private static final long COMMON_NAUSEA = 4_000;
     private static final double SUPERIOR_STRENGTH = 1.2;
+    private static final long COMMON_QI_ACTIVE = 135_000;
+    private static final long COMMON_QI_EXHAUSTION = 40_000;
+    private static final long SUPERIOR_QI_ACTIVE = 270_000;
+    private static final long SUPERIOR_QI_EXHAUSTION = 60_000;
     private static final double ANOINT_STRENGTH = 1.5;
     private static final long ANOINT_DURATION = 20_000;
     private static final double TARGET_DISTANCE = 2;
@@ -106,6 +111,47 @@ public final class WitchBrewGameTest {
                         .allMatch(modifier -> Math.abs(modifier.getIntakePeak() - (1 + SUPERIOR_STRENGTH)) < TOLERANCE),
                         "聚气错误放大基础摄入");
                 context.assertTrue(player.getMainHandItem().is(Items.POTION), "创造模式扣了药瓶");
+                finish(context, player);
+            });
+        });
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void imbibeStretchesOnlyQiGatherActiveSegment(GameTestHelper context) {
+        // 寻常聚气正效 90 s 乘 1.5，肺虚 40 s 保持原长；总长未过单条曲线时限，两段在同一条肺曲线上。
+        ready(context, player -> {
+            hold(player, BrewKind.QI_GATHER, BrewQuality.COMMON, BrewUse.DRINK);
+            cast(context, player, "imbibe");
+            context.runAfterDelay(IMBIBE_EFFECT, () -> {
+                BrewDose dose = dose(player, BrewKind.QI_GATHER);
+                context.assertTrue(dose.getEndsMillis() - dose.getStartedMillis()
+                        == COMMON_QI_ACTIVE + COMMON_QI_EXHAUSTION, "聚气总长不是拉长的正效加原长肺虚");
+                List<CapabilityModifier> lungs = doseModifiers(player, dose);
+                context.assertTrue(!lungs.isEmpty() && lungs.stream()
+                        .allMatch(modifier -> activeEndMillis(modifier) == COMMON_QI_ACTIVE),
+                        "聚气正效段没有按 1.5 倍拉长");
+                finish(context, player);
+            });
+        });
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void imbibeKeepsSplitLungExhaustionAtOriginalLength(GameTestHelper context) {
+        // 优质聚气正效 180 s 乘 1.5 后总长过了单条曲线时限，肺虚另起一条曲线，长度仍是原来的 60 s。
+        ready(context, player -> {
+            hold(player, BrewKind.QI_GATHER, BrewQuality.SUPERIOR, BrewUse.DRINK);
+            cast(context, player, "imbibe");
+            context.runAfterDelay(IMBIBE_EFFECT, () -> {
+                BrewDose dose = dose(player, BrewKind.QI_GATHER);
+                context.assertTrue(dose.getEndsMillis() - dose.getStartedMillis()
+                        == SUPERIOR_QI_ACTIVE + SUPERIOR_QI_EXHAUSTION, "聚气总长不是拉长的正效加原长肺虚");
+                List<CapabilityModifier> exhausted = doseModifiers(player, dose).stream()
+                        .filter(modifier -> modifier.getStartMillis() > dose.getStartedMillis())
+                        .toList();
+                context.assertTrue(!exhausted.isEmpty() && exhausted.stream().allMatch(modifier ->
+                        modifier.getStartMillis() - dose.getStartedMillis() == SUPERIOR_QI_ACTIVE
+                                && modifier.getCurveList().getLast().getOffsetMillis() == SUPERIOR_QI_EXHAUSTION),
+                        "分开排期的肺虚段起点或长度不对");
                 finish(context, player);
             });
         });
@@ -306,6 +352,24 @@ public final class WitchBrewGameTest {
         // 读取唯一身体账本里的实际药效记录。
         return BrewBodyProgress.read(BrewingTestPlayers.body(player)).getDosesList().stream()
                 .filter(dose -> dose.getKind().equals(kind.name())).findFirst().orElseThrow();
+    }
+
+    private static List<CapabilityModifier> doseModifiers(ServerPlayer player, BrewDose dose) {
+        // 只取这一剂登记的修正，不混入身体上其他来源的曲线。
+        return BrewingTestPlayers.body(player).getModifiersList().stream()
+                .filter(modifier -> dose.getModifierIdsList().contains(modifier.getId()))
+                .toList();
+    }
+
+    private static long activeEndMillis(CapabilityModifier modifier) {
+        // 正效平台之后第一个回到零的点是正效段终点，后面接肺虚段。
+        var points = modifier.getCurveList();
+        for (int index = 1; index < points.size(); index++) {
+            if (points.get(index).getValue() == 0) {
+                return points.get(index).getOffsetMillis();
+            }
+        }
+        throw new IllegalStateException("聚气曲线没有回到零的点");
     }
 
     static void hold(ServerPlayer player, BrewKind kind, BrewQuality quality, BrewUse use) {

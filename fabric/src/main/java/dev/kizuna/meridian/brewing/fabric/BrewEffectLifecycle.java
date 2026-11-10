@@ -29,7 +29,12 @@ public final class BrewEffectLifecycle {
 
     static void tick(LivingEntity entity, BrewKind kind, BrewQuality quality) {
         // 读取此刻实际身体，随后一次治疗与一次进度事务都保持预期版本。
-        var found = BrewBodyHost.inspect(entity);
+        // 宿主暂停的身体保留现场，这一秒不治疗、不改计划，也不能当成没有身体去腐蚀物品。
+        var observed = BrewBodyHost.observe(entity);
+        if (observed.presence() == BrewBodyHost.Presence.PAUSED) {
+            return;
+        }
+        var found = observed.found();
         if (found.isEmpty()) {
             if (kind == BrewKind.ARMOR_ROT) {
                 BrewArmorEffects.tickUnbound(entity, quality);
@@ -141,7 +146,8 @@ public final class BrewEffectLifecycle {
         if (kinds.contains(BrewKind.ARMOR_ROT)) {
             ((BrewArmorTarget) entity).meridianBrewing$armorSlot("");
         }
-        var found = BrewBodyHost.inspect(entity);
+        // 宿主暂停时不撤修正；重新登录恢复时，状态已不在的剂量连同修正一起撤掉。
+        var found = BrewBodyHost.observe(entity).found();
         if (found.isEmpty() || found.get().body().getVitality().getDead()) {
             return;
         }

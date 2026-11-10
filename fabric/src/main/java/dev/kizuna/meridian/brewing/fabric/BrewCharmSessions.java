@@ -204,8 +204,8 @@ public final class BrewCharmSessions {
     }
 
     static void immunity(LivingEntity subject) {
-        // 免疫沿用唯一身体进度，以实际醒来的身体时刻计算。
-        var found = BrewBodyHost.inspect(subject);
+        // 免疫沿用唯一身体进度，以实际醒来的身体时刻计算；身体被宿主暂停时不记免疫。
+        var found = BrewBodyHost.observe(subject).found();
         if (found.isEmpty()) {
             return;
         }

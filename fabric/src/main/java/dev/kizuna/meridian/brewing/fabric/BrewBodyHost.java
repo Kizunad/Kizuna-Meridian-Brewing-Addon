@@ -10,6 +10,7 @@ import dev.kizuna.meridian.protocol.pb.HealthHostMessages.HealthHostRequest;
 import dev.kizuna.meridian.protocol.pb.HealthHostMessages.HealthHostResponse;
 import dev.kizuna.meridian.protocol.pb.HealthMessages.HealBody;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.BodyCommand;
+import dev.kizuna.meridian.protocol.pb.MeridianMessages.FailureCode;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.RequestEnvelope;
 import dev.kizuna.meridian.server.BodyActivityHost;
 import dev.kizuna.meridian.server.BodyHealthHost;
@@ -23,6 +24,7 @@ import java.util.UUID;
 /** 药效经唯一健康宿主读取、治疗，经活动宿主原子更新能力与进度。 */
 final class BrewBodyHost {
     static final String SOURCE = "meridian_brewing:effects";
+    private static final String REJECTED = "身体宿主拒绝药效：";
     private static List<BodyHealthHost> healthHosts;
     private static List<BodyActivityHost> activityHosts;
 
@@ -40,7 +42,16 @@ final class BrewBodyHost {
     }
 
     static Optional<Binding> inspect(LivingEntity entity) {
-        // 未绑定是物种事实；已认领宿主的失败必须向上传递，不能换另一具身体。
+        // 用药、施放等主动操作：未绑定是物种事实；宿主暂停和其他失败都向上传递，不能换另一具身体。
+        Observation observed = observe(entity);
+        if (observed.presence() == Presence.PAUSED) {
+            throw new IllegalStateException(REJECTED + FailureCode.BODY_PAUSED);
+        }
+        return observed.found();
+    }
+
+    static Observation observe(LivingEntity entity) {
+        // 登录恢复与周期结算：宿主暂停的身体保留现场，这一次跳过；其他宿主失败照旧向上传递。
         String requestId = UUID.randomUUID().toString();
         var request = HealthHostRequest.newBuilder()
                 .setProtocolVersion(MeridianProtocol.VERSION)
@@ -52,6 +63,9 @@ final class BrewBodyHost {
         Binding result = null;
         for (BodyHealthHost host : healthHosts) {
             var response = HealthHostProtobuf.decodeResponse(host.exchange(payload));
+            if (paused(response, requestId)) {
+                return new Observation(Presence.PAUSED, Optional.empty());
+            }
             validateResponse(response, requestId);
             if (response.hasBody()) {
                 if (result != null) {
@@ -60,7 +74,17 @@ final class BrewBodyHost {
                 result = new Binding(entity.getStringUUID(), host, response.getBody());
             }
         }
-        return Optional.ofNullable(result);
+        if (result == null) {
+            return new Observation(Presence.UNBOUND, Optional.empty());
+        }
+        return new Observation(Presence.BOUND, Optional.of(result));
+    }
+
+    private static boolean paused(HealthHostResponse response, String requestId) {
+        // 只认本次请求的明确暂停答复；身份不符仍由 validateResponse 报错。
+        return response.getRequestId().equals(requestId)
+                && response.hasFailure()
+                && response.getFailure().getCode() == FailureCode.BODY_PAUSED;
     }
 
     static Binding activity(Binding binding, BodyActivity plan) {
@@ -126,7 +150,7 @@ final class BrewBodyHost {
             throw new IllegalStateException("身体宿主响应身份不匹配");
         }
         if (response.hasFailure()) {
-            throw new IllegalStateException("身体宿主拒绝药效：" + response.getFailure().getCode());
+            throw new IllegalStateException(REJECTED + response.getFailure().getCode());
         }
     }
 
@@ -139,4 +163,14 @@ final class BrewBodyHost {
             return new Binding(subjectId, host, updated);
         }
     }
+
+    /** 被动读身体的三种情形。 */
+    enum Presence {
+        BOUND,
+        UNBOUND,
+        PAUSED
+    }
+
+    /** 被动读到的身体；只有宿主认领且没有暂停时带绑定。 */
+    record Observation(Presence presence, Optional<Binding> found) { }
 }

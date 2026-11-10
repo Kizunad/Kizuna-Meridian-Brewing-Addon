@@ -163,9 +163,9 @@ public final class BrewResidues {
     }
 
     private static ResidueStore.Decay conditions(ResidueKey key) {
-        // 只有枯竭看肾脏；任意恢复类施放均加快消散，不依赖具体基础功法 ID。
+        // 只有枯竭看肾脏；任意恢复类施放均加快消散，不依赖具体基础功法 ID。身体被宿主暂停时按原速消散。
         LivingEntity target = targets.get(key.target());
-        var found = BrewBodyHost.inspect(target);
+        var found = BrewBodyHost.observe(target).found();
         if (found.isEmpty()) {
             return new ResidueStore.Decay(1, RecoveryState.INACTIVE);
         }

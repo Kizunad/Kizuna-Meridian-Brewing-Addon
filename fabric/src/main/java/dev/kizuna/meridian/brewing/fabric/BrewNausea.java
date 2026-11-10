@@ -20,27 +20,63 @@ public final class BrewNausea {
     static void initialize() {
         // 在物品开始使用前拒绝，食物、药水和牛奶都不消耗。
         UseItemCallback.EVENT.register((player, level, hand) -> {
-            if (blocks(player, player.getItemInHand(hand))) {
-                player.sendOverlayMessage(Component.translatable("message.meridian_brewing.nausea"));
-                return InteractionResult.FAIL;
+            Refusal refusal = refusal(player, player.getItemInHand(hand));
+            if (refusal == Refusal.NONE) {
+                return InteractionResult.PASS;
             }
-            return InteractionResult.PASS;
+            player.sendOverlayMessage(Component.translatable(refusal.message()));
+            return InteractionResult.FAIL;
         });
     }
 
     public static boolean blocks(LivingEntity entity, ItemStack stack) {
         // 玩家使用回调与生物自主喝药共享同一身体期限。
-        if (!(entity.level() instanceof ServerLevel)
-                || !entity.hasEffect(BrewingEffects.BITTER_YELLOW)) {
-            return false;
+        return refusal(entity, stack) != Refusal.NONE;
+    }
+
+    private static Refusal refusal(LivingEntity entity, ItemStack stack) {
+        // 只有吃喝才查身体。身体被宿主暂停时，自己喝巫药和带着苦黄膏吃喝都按失败拒绝：
+        // 巫药生效不了，反胃期限也读不到，不能放行。
+        if (!(entity.level() instanceof ServerLevel)) {
+            return Refusal.NONE;
         }
         var consumable = stack.get(DataComponents.CONSUMABLE);
         if (consumable == null || consumable.animation() != ItemUseAnimation.EAT
                 && consumable.animation() != ItemUseAnimation.DRINK) {
-            return false;
+            return Refusal.NONE;
         }
-        var binding = BrewBodyHost.inspect(entity).orElseThrow();
-        var body = binding.body();
-        return BrewBodyProgress.read(body).getNauseaUntilMillis() > body.getSettledAt().getElapsedMillis();
+        boolean bitter = entity.hasEffect(BrewingEffects.BITTER_YELLOW);
+        if (!bitter && !BrewItemStacks.isBrew(stack)) {
+            return Refusal.NONE;
+        }
+        var observed = BrewBodyHost.observe(entity);
+        if (observed.presence() == BrewBodyHost.Presence.PAUSED) {
+            return Refusal.BODY_PAUSED;
+        }
+        if (!bitter) {
+            return Refusal.NONE;
+        }
+        var body = observed.found().orElseThrow().body();
+        if (BrewBodyProgress.read(body).getNauseaUntilMillis() > body.getSettledAt().getElapsedMillis()) {
+            return Refusal.NAUSEA;
+        }
+        return Refusal.NONE;
+    }
+
+    /** 拒绝吃喝的原因，玩家开始使用时提示对应文案。 */
+    private enum Refusal {
+        NONE(""),
+        NAUSEA("message.meridian_brewing.nausea"),
+        BODY_PAUSED("message.meridian_brewing.body_paused");
+
+        private final String message;
+
+        Refusal(String message) {
+            this.message = message;
+        }
+
+        String message() {
+            return message;
+        }
     }
 }

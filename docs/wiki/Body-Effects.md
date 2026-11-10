@@ -9,6 +9,23 @@ Threatening 类人生物的能力与进度走其活动宿主；治疗沿其已�
 药效计划保存在唯一身体的 `addon_progress["meridian_brewing:effects"]`，格式为 `effects.proto`。
 状态效果提供可见生命周期与每秒结算入口，命令清除、牛奶、自然到期撤销本药来源修正。
 重登录后首个 tick、玩家输入处理前，按原版保存的状态剩余时长平移剂量、治疗游标和退封曲线；离线不补算治疗。
+登录后到这一 tick 之间被直接移出玩家列表、没走断线事件的玩家（原版 GameTest 假玩家就是这样）查不到身体，
+恢复直接跳过，不补建身体（`BrewingBodyGameTest.mockPlayerRemovedBeforeResumeIsSkipped`）。
+
+健康宿主对已认领但暂停的身体返回 `BODY_PAUSED`（Human 在客户端缺必装接收通道等宿主故障时暂停，玩家仍在线）。
+Brewing 分两类处理，都不把异常抛进服务端 tick：
+
+- 被动读身体时跳过这一次，不改药效计划：登录恢复、每秒结算、牛奶等移除状态、蚀甲护甲折扣、残药消散、
+  魅惑免疫、招虫距离。暂停期间原版状态照常倒计时；下次正常登录恢复时，已不在的状态连同剂量和修正一起撤掉，
+  还在的状态从暂停那一刻的伤势和曲线继续。
+- 玩家自己吃喝是主动操作，开始使用和吃完那一刻都按失败拒绝，不消耗物品，提示
+  `message.meridian_brewing.body_paused`：喝巫药，以及身上有苦黄膏时吃喝任何东西（读不到反胃期限）。
+  别人泼来、扇来的药对暂停身体这一次不生效，也不登记残药；噀催时这具身体上取出的残药同样不生效。
+  施放功法由 Human 功法宿主直接回 `BODY_PAUSED`。
+
+覆盖：`BrewingBodyGameTest` 的 `pausedBodySkipsSettlementAndHealsAgainAfterRelogin`、
+`pausedBodyAtLoginResumeWaitsForNextLogin`、`milkWhilePausedIsClearedAtNextLogin`、`pausedBodyRefusesOwnBrew`、
+`splashOnPausedBodyHasNoEffect`。测试撤销 `meridian:body_view` 通道，走 Human 的真实暂停路径。
 新修正从当前身体时刻开始，只保留当前值与未来节点，遵守核心禁止回溯生效的约束。
 死亡由核心清掉能力修正；重生后按新实体的状态清理旧剂量，下一瓶不能继承死前叠层。
 刷新后直接更新本仓图标，不留下原版 hiddenEffect 的另一套期限。
@@ -68,6 +85,10 @@ Brewing 每 tick 在输入与 AI 前更新目标并检查结束条件。伤害�
 关闭玩家控制的用例需要以独立目录配置 false 再运行。
 
 功法药效通过 `BrewDose` 的可选强度品质、强度倍率、持续倍率字段保存；旧存档缺省时沿原品质与单位倍率。
-优质聚气服药的总生命周期超过单条曲线 300 秒时，正效和肺虚分为两条按时序相接的器官曲线，
+持续倍率只拉长聚气的正效段，后面的肺虚段保持药瓶品质的原长（用户 2026-11-10 定）：
+寻常聚气服药为正效 135 秒加肺虚 40 秒。
+优质聚气服药的总生命周期（正效 270 秒加肺虚 60 秒）超过单条曲线 300 秒，正效和肺虚分为两条按时序相接的器官曲线，
 剂量统一保存修正 ID，牛奶与到期处理共同撤销。不会放宽 Framework 曲线边界。
-普通女巫与灾厄村民在 26.2 默认标签下并不自动 `isAlliedTo`；是否扩大女巫阵营仍待玩法确定。
+两种情况由 `WitchBrewGameTest.imbibeStretchesOnlyQiGatherActiveSegment` 和
+`imbibeKeepsSplitLungExhaustionAtOriginalLength` 覆盖。
+普通女巫与灾厄村民在 26.2 默认标签下并不自动 `isAlliedTo`；女巫阵营维持原版，不扩大（用户 2026-11-10 定）。

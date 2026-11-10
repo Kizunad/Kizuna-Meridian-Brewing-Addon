@@ -10,6 +10,7 @@ import dev.kizuna.meridian.brewing.test.BrewingTestPlayers;
 import dev.kizuna.meridian.core.Anatomy;
 import dev.kizuna.meridian.core.CapabilityModifier;
 import dev.kizuna.meridian.core.OrganCapabilities;
+import dev.kizuna.meridian.fabric.MeridianChannels;
 import dev.kizuna.meridian.human.fabric.HumanGameTestAccess;
 import dev.kizuna.meridian.protocol.BodyProtobuf;
 import dev.kizuna.meridian.protocol.pb.BodyMessages.BodySnapshot;
@@ -20,11 +21,13 @@ import dev.kizuna.meridian.vanilla.fabric.VanillaDamageFabric;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.fabricmc.fabric.api.event.player.UseItemCallback;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.fabricmc.fabric.impl.networking.RegistrationPayload;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket;
 import net.minecraft.network.protocol.game.ServerboundClientCommandPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
@@ -59,6 +62,8 @@ public final class BrewingBodyGameTest {
     private static final double INTAKE_BOOST = 2;
     private static final double DURABILITY_PERCENT = 0.1;
     private static final int OFFLINE_TICKS = 60;
+    private static final int RESUME_TICKS = 2;
+    private static final int PAUSE_TICKS = 2;
 
     @GameTest(maxTicks = TIMEOUT)
     public void directDepletionBypassesFramesAndKeepsKiller(GameTestHelper context) {
@@ -300,6 +305,139 @@ public final class BrewingBodyGameTest {
             BrewingTestPlayers.close(player);
             context.succeed();
         });
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void mockPlayerRemovedBeforeResumeIsSkipped(GameTestHelper context) {
+        // 原版假玩家登录后同一 tick 被直接移出玩家列表，不走断线事件；下一 tick 的药效恢复查不到身体，
+        // 只能跳过，不能让服务端崩溃。PA 的挥手 GameTest 就是这样用假玩家的。
+        ServerPlayer player = context.makeMockServerPlayerInLevel();
+        context.getLevel().getServer().getPlayerList().remove(player);
+        context.runAfterDelay(RESUME_TICKS, () -> {
+            context.assertTrue(BrewBodyHost.inspect(player).isEmpty(), "移出玩家列表后仍查到身体");
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void pausedBodySkipsSettlementAndHealsAgainAfterRelogin(GameTestHelper context) {
+        // 苦黄膏治疗途中 Human 暂停身体：跨过每秒结算时跳过、不补治疗，服务端照常运行；
+        // 重登后从暂停那一刻的伤势继续治疗。
+        ServerPlayer player = BrewingTestPlayers.create(context);
+        hit(player, null, ARM, DAMAGE_HP);
+        BrewingRuntime.consume(context.getLevel(), player,
+                BrewItemStacks.create(BrewKind.BITTER_YELLOW, BrewQuality.SUPERIOR, BrewUse.DRINK));
+        context.runAfterDelay(SETTLED_TICKS, () -> {
+            double before = hp(BrewingTestPlayers.body(player), ARM);
+            pause(player);
+            context.runAfterDelay(SETTLED_TICKS, () -> {
+                assertPaused(context, player);
+                BrewingTestPlayers.close(player);
+                ServerPlayer restored = BrewingTestPlayers.rejoin(context, player);
+                context.runAfterDelay(1, () -> assertResumedHealing(context, restored, before));
+            });
+        });
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void pausedBodyAtLoginResumeWaitsForNextLogin(GameTestHelper context) {
+        // 重登当刻就被暂停：登录恢复和聚气每秒结算都跳过；下一次正常登录再恢复药效曲线。
+        ServerPlayer player = BrewingTestPlayers.create(context);
+        BrewingRuntime.consume(context.getLevel(), player,
+                BrewItemStacks.create(BrewKind.QI_GATHER, BrewQuality.SUPERIOR, BrewUse.DRINK));
+        BrewingTestPlayers.close(player);
+        ServerPlayer paused = BrewingTestPlayers.rejoin(context, player);
+        pause(paused);
+        context.runAfterDelay(SETTLED_TICKS, () -> {
+            assertPaused(context, paused);
+            BrewingTestPlayers.close(paused);
+            ServerPlayer restored = BrewingTestPlayers.rejoin(context, player);
+            context.runAfterDelay(RESUME_TICKS, () -> {
+                context.assertTrue(BrewingTestPlayers.body(restored).getModifiersCount() > 0,
+                        "正常重登没有恢复聚气修正");
+                restored.removeAllEffects();
+                context.assertTrue(BrewingTestPlayers.body(restored).getModifiersCount() == 0,
+                        "恢复后清药遗漏了修正");
+                BrewingTestPlayers.close(restored);
+                context.succeed();
+            });
+        });
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void milkWhilePausedIsClearedAtNextLogin(GameTestHelper context) {
+        // 暂停期间喝牛奶：这时撤不了修正，也不能抛异常；重登恢复时状态已不在，剂量和修正一起撤掉。
+        ServerPlayer player = BrewingTestPlayers.create(context);
+        BrewingRuntime.consume(context.getLevel(), player,
+                BrewItemStacks.create(BrewKind.QI_GATHER, BrewQuality.SUPERIOR, BrewUse.DRINK));
+        pauseAfterLogin(context, player, () -> {
+            new ItemStack(Items.MILK_BUCKET).finishUsingItem(context.getLevel(), player);
+            context.assertTrue(!player.hasEffect(BrewingEffects.QI_GATHER), "牛奶没有移除聚气状态");
+            BrewingTestPlayers.close(player);
+            ServerPlayer restored = BrewingTestPlayers.rejoin(context, player);
+            context.runAfterDelay(RESUME_TICKS, () -> {
+                BodySnapshot body = BrewingTestPlayers.body(restored);
+                context.assertTrue(body.getModifiersCount() == 0, "暂停时撤掉的药效重登后还留着修正");
+                context.assertTrue(BrewBodyProgress.read(body).getDosesCount() == 0,
+                        "暂停时撤掉的药效重登后还留着剂量");
+                BrewingTestPlayers.close(restored);
+                context.succeed();
+            });
+        });
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void pausedBodyRefusesOwnBrew(GameTestHelper context) {
+        // 自己喝药是主动操作：开始使用时就按失败拒绝，不开始喝，也不消耗药瓶。
+        ServerPlayer player = BrewingTestPlayers.create(context);
+        pauseAfterLogin(context, player, () -> {
+            player.setItemInHand(InteractionHand.MAIN_HAND,
+                    BrewItemStacks.create(BrewKind.QI_GATHER, BrewQuality.SUPERIOR, BrewUse.DRINK));
+            context.assertTrue(UseItemCallback.EVENT.invoker().interact(player, player.level(),
+                    InteractionHand.MAIN_HAND) == InteractionResult.FAIL, "暂停身体仍能开始喝药");
+            player.startUsingItem(InteractionHand.MAIN_HAND);
+            context.assertTrue(!player.isUsingItem() && player.getMainHandItem().getCount() == 1,
+                    "暂停身体开始喝药或消耗了药瓶");
+            BrewingTestPlayers.close(player);
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void splashOnPausedBodyHasNoEffect(GameTestHelper context) {
+        // 别人泼来的药对暂停身体这一次不生效，不挂状态，也不能抛异常。
+        ServerPlayer player = BrewingTestPlayers.create(context);
+        pauseAfterLogin(context, player, () -> {
+            ItemStack splash = BrewItemStacks.create(BrewKind.ARMOR_ROT, BrewQuality.SUPERIOR, BrewUse.SPLASH);
+            BrewingRuntime.splash(context.getLevel(), splash, player.position(), null);
+            context.assertTrue(!player.hasEffect(BrewingEffects.ARMOR_ROT), "泼到暂停身体上的药生效了");
+            BrewingTestPlayers.close(player);
+            context.succeed();
+        });
+    }
+
+    private static void pauseAfterLogin(GameTestHelper context, ServerPlayer player, Runnable paused) {
+        // 先让登录恢复跑完再撤通道，暂停落在运行途中，而不是登录恢复那一 tick。
+        context.runAfterDelay(RESUME_TICKS, () -> {
+            pause(player);
+            context.runAfterDelay(PAUSE_TICKS, () -> {
+                assertPaused(context, player);
+                paused.run();
+            });
+        });
+    }
+
+    private static void pause(ServerPlayer player) {
+        // 客户端撤销必装的身体推送通道，Human 在这一 tick 末按宿主故障暂停身体，和真实缺通道走同一条路。
+        var unregister = new RegistrationPayload(RegistrationPayload.UNREGISTER,
+                List.of(MeridianChannels.BODY_VIEW.type().id()));
+        player.connection.handleCustomPayload(new ServerboundCustomPayloadPacket(unregister));
+    }
+
+    private static void assertPaused(GameTestHelper context, ServerPlayer player) {
+        // 走到这里说明暂停期间的 tick 都没有把异常抛进服务端；再确认身体确实处于暂停。
+        context.assertTrue(BrewBodyHost.observe(player).presence() == BrewBodyHost.Presence.PAUSED,
+                "Human 没有暂停这具身体");
     }
 
     @GameTest(maxTicks = TIMEOUT)

@@ -47,7 +47,13 @@ final class BrewEffectResume {
         if (!BrewCharmSessions.controlled(player.getUUID())) {
             player.removeEffect(BrewingEffects.CHARM_CONTROL);
         }
-        var binding = BrewBodyHost.inspect(player).orElseThrow();
+        // 登录后到这一 tick 之间被直接移出玩家列表的玩家（如原版 GameTest 假玩家）不走断线事件，
+        // 宿主查不到在线身体；身体被宿主暂停时也读不到。两种都不恢复，也不在这里补建，暂停的身体重新登录后再恢复。
+        var found = BrewBodyHost.observe(player).found();
+        if (found.isEmpty()) {
+            return;
+        }
+        var binding = found.get();
         if (binding.body().getVitality().getDead()
                 || !binding.body().containsAddonProgress(BrewBodyProgress.KEY)) {
             return;

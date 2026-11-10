@@ -72,13 +72,18 @@ final class BrewBodyEffects {
         if (!(target.level() instanceof ServerLevel level)) {
             return List.of();
         }
-        if (application.use() != BrewUse.MIST) {
-            BrewSounds.effect(target, application.kind());
-        }
         if (application.kind() == BrewKind.BITTER_YELLOW && target.hasEffect(BrewingEffects.BITTER_YELLOW)) {
             BrewEffectLifecycle.tick(target, application.kind(), application.quality());
         }
-        var found = BrewBodyHost.inspect(target);
+        // 宿主暂停的身体读不到也改不了，这一次不生效、不沾残药；自己喝药已在开始使用时拒绝。
+        var observed = BrewBodyHost.observe(target);
+        if (observed.presence() == BrewBodyHost.Presence.PAUSED) {
+            return List.of();
+        }
+        if (application.use() != BrewUse.MIST) {
+            BrewSounds.effect(target, application.kind());
+        }
+        var found = observed.found();
         if (found.isEmpty()) {
             applyUnbound(level, target, application, delivery.potency());
             return List.of();
@@ -176,24 +181,27 @@ final class BrewBodyEffects {
 
     private static BrewDoseOperations.DoseRequest request(Application application, List<String> parts,
                                                            BrewPotency potency) {
-        // 状态倒计时涵盖聚气的虚脱段，使牛奶可以撤销整个器官曲线。
+        // 功法持续倍率只拉长药效本身；状态倒计时再加上聚气的肺虚段，使牛奶可以撤销整个器官曲线。
         double duration = switch (application.kind()) {
             case ARMOR_ROT -> BrewEffectProfiles.armorRot(application.quality()).durationSeconds();
             case BITTER_YELLOW -> BrewEffectProfiles.bitterYellow(
                     application.quality(), application.use()).durationSeconds();
-            case QI_GATHER -> qiDuration(application.quality());
+            case QI_GATHER -> BrewEffectProfiles.qiGather(application.quality()).durationSeconds();
             case INSECT_LURE -> BrewEffectProfiles.insectLure(application.quality()).durationSeconds();
             default -> throw new IllegalArgumentException("药效不支持身体持续计划：" + application.kind());
         };
-        var timing = new BrewDoseOperations.DoseTiming(duration * potency.duration(), potency);
+        double total = duration * potency.duration() + exhaustionSeconds(application);
+        var timing = new BrewDoseOperations.DoseTiming(total, potency);
         return new BrewDoseOperations.DoseRequest(application.kind(), application.quality(),
                 application.use(), parts, timing);
     }
 
-    private static double qiDuration(BrewQuality quality) {
-        // 两段共用同一状态生命周期，具体倍率在器官修正曲线里切换。
-        var profile = BrewEffectProfiles.qiGather(quality);
-        return profile.durationSeconds() + profile.exhaustionDurationSeconds();
+    private static double exhaustionSeconds(Application application) {
+        // 聚气的肺虚段是代价，接在正效之后，保持药瓶品质的原长，不随功法倍率拉长。
+        if (application.kind() != BrewKind.QI_GATHER) {
+            return 0;
+        }
+        return BrewEffectProfiles.qiGather(application.quality()).exhaustionDurationSeconds();
     }
 
     private static void installDose(LivingEntity target, BrewBodyHost.Binding binding,

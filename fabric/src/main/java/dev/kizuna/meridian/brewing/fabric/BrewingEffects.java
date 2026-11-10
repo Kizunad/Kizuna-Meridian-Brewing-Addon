@@ -86,9 +86,9 @@ final class BrewingEffects {
     }
 
     private static void attractInsects(ServerLevel level, LivingEntity target, BrewQuality quality) {
-        // 功法催发的气味距离随剩余剂量减弱，普通喷溅没有身体剂量时使用原值。
+        // 功法催发的气味距离随剩余剂量减弱，普通喷溅没有身体剂量、或身体被宿主暂停读不到剂量时使用原值。
         InsectLureProfile profile = BrewEffectProfiles.insectLure(quality);
-        double strength = BrewBodyHost.inspect(target).map(binding ->
+        double strength = BrewBodyHost.observe(target).found().map(binding ->
                 BrewBodyProgress.read(binding.body()).getDosesList().stream()
                         .filter(dose -> dose.getKind().equals(BrewKind.INSECT_LURE.name()))
                         .mapToDouble(BrewPotency::strength).max().orElse(1)).orElse(1.0);

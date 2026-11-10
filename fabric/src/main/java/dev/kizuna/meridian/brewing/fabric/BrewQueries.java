@@ -14,8 +14,8 @@ public final class BrewQueries {
     }
 
     public static long charmImmunityMillis(LivingEntity target) {
-        // 无身体时没有免疫计时；控制期间另由魅惑会话拒绝重复施药。
-        var found = BrewBodyHost.inspect(target);
+        // 无身体或身体被宿主暂停时没有免疫计时；控制期间另由魅惑会话拒绝重复施药。
+        var found = BrewBodyHost.observe(target).found();
         if (found.isEmpty()) {
             return 0;
         }

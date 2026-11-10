@@ -40,6 +40,7 @@
   "block.meridian_brewing.herb_crate": "Drying Tray",
   "container.meridian_brewing.herb_crate": "Drying Tray",
   "message.meridian_brewing.nausea": "Too bitter to swallow",
+  "message.meridian_brewing.body_paused": "Body paused; cannot eat or drink. Rejoin the world to recover",
   "message.meridian_brewing.modifier_limit": "Too many effects; the brew could not take hold",
   "death.attack.meridian_brewing.depletion": "%1$s was consumed by depletion brew",
   "death.attack.meridian_brewing.depletion.player": "%1$s was consumed by %2$s's depletion brew",

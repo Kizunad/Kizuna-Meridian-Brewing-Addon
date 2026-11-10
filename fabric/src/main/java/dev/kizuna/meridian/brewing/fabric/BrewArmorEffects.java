@@ -34,11 +34,11 @@ final class BrewArmorEffects {
     }
 
     static double multiplier(LivingEntity entity, String partId, EquipmentSlot slot, ItemStack stack) {
-        // 只有仍有显示状态的部位药效参与，牛奶移除后立即恢复额外折扣。
+        // 只有仍有显示状态的部位药效参与，牛奶移除后立即恢复额外折扣；身体被宿主暂停时不打折扣。
         if (!entity.hasEffect(BrewingEffects.ARMOR_ROT)) {
             return 1;
         }
-        var found = BrewBodyHost.inspect(entity);
+        var found = BrewBodyHost.observe(entity).found();
         if (found.isEmpty()) {
             return 1;
         }
