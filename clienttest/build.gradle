@@ -9,6 +9,8 @@ dependencies {
     implementation project(':server')
     implementation project(':fabric')
     implementation project(':client')
+    // 药刀动作场景按 PA 剪辑的确切时刻定格，直接调用 PA 服务端接口。
+    implementation 'dev.kizuna:kizuna-players-animation'
 }
 
 apply from: new File(kizunaWorkspace.directory('framework'), 'scripts/full-assembly.gradle')

@@ -14,6 +14,8 @@ dependencies {
     implementation 'dev.kizuna.meridian.technique:fabric'
     implementation 'dev.kizuna.meridian.technique:server'
     implementation 'dev.kizuna.meridian.technique:shared'
+    // 药刀开刃、切药由服务端经 PA 播放；PA 是硬依赖。
+    implementation 'dev.kizuna:kizuna-players-animation'
     include project(':server')
     include project(':shared')
     testImplementation libs.junit4

@@ -8,7 +8,8 @@
 来源只用 sources.json 记的提交（git show 读取），不读 Bong 工作副本，也不改 Bong 仓；导入前核对源文件的
 Git blob SHA-1 和 SHA-256。
 BS3D 按组 UUID 建骨骼；脚本生成、组没有 UUID 的文件按来源路径和组在 outliner 里的位置补上固定 UUID。
-收刃药刀由同一源文件生成：补 UUID 后把 sources.json 的 fold 记的组绕给定枢轴转给定角度，立方体不动。
+药刀补 UUID 后按 sources.json 的 open 加刀刃开合剪辑：记的组枢轴移到转轴上（立方体不动，静止几何不变），
+再写一段名为 open 的线性剪辑，0 s 是合刃角度、末帧回到 0。BS3D 物品定义按 progress 取这段剪辑，0 合 1 开。
 """
 
 import argparse
@@ -23,7 +24,8 @@ ROOT = Path(__file__).resolve().parent.parent
 MODELS = ROOT / 'client/src/main/resources/bs3d/meridian_brewing'
 SOURCES = MODELS / 'sources.json'
 EMBEDDED_PNG = 'data:image/png;base64,'
-CONVERSIONS = ('none', 'group-uuids', 'group-uuids+fold')
+CONVERSIONS = ('none', 'group-uuids', 'group-uuids+open')
+OPEN_CLIP = 'open'
 
 
 def sha256(data):
@@ -44,12 +46,26 @@ def add_group_uuids(nodes, seed, position):
         add_group_uuids(node['children'], seed, node_position)
 
 
-def fold(document, spec):
-    # 收刃：刀背、刀刃两组的枢轴移到转轴上并转过固定角度，BS3D 按组枢轴和旋转画骨骼。
+def add_open_clip(document, spec, seed):
+    # 刀背、刀刃两组的枢轴移到转轴上；BS3D 按组枢轴叠加剪辑旋转，组本身不转，进度 1 与来源几何相同。
     groups = {group['name']: group for group in outliner_groups(document['outliner'])}
+    animators = {}
     for name in spec['groups']:
         groups[name]['origin'] = spec['pivot']
-        groups[name]['rotation'] = spec['rotation']
+        animators[groups[name]['uuid']] = {'name': name, 'type': 'bone', 'keyframes': [
+            open_key(seed, name, 0, spec['closed_rotation']),
+            open_key(seed, name, spec['seconds'], [0, 0, 0])]}
+    animations = document.setdefault('animations', [])
+    if any(animation['name'] == OPEN_CLIP for animation in animations):
+        raise SystemExit(f'{seed}：来源已有 {OPEN_CLIP} 剪辑')
+    animations.append({'uuid': str(uuid.uuid5(uuid.NAMESPACE_URL, f'{seed}/animations/{OPEN_CLIP}')),
+                       'name': OPEN_CLIP, 'loop': 'once', 'length': spec['seconds'], 'animators': animators})
+
+
+def open_key(seed, group, time, rotation):
+    x, y, z = rotation
+    return {'channel': 'rotation', 'time': time, 'interpolation': 'linear', 'data_points': [{'x': x, 'y': y, 'z': z}],
+            'uuid': str(uuid.uuid5(uuid.NAMESPACE_URL, f'{seed}/animations/{OPEN_CLIP}/{group}/{time}'))}
 
 
 def convert(source, model, origin):
@@ -57,8 +73,8 @@ def convert(source, model, origin):
         return source
     document = json.loads(source)
     add_group_uuids(document['outliner'], origin, '')
-    if model['conversion'] == 'group-uuids+fold':
-        fold(document, model['fold'])
+    if model['conversion'] == 'group-uuids+open':
+        add_open_clip(document, model['open'], origin)
     return json.dumps(document, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
 
 
@@ -77,17 +93,33 @@ def outliner_groups(nodes):
             yield from outliner_groups(node['children'])
 
 
-def check_fold(model, document):
-    spec = model.get('fold')
-    if (model['conversion'] == 'group-uuids+fold') != (spec is not None):
-        return [f'{model["file"]}：fold 只随 group-uuids+fold 一起登记']
+def check_open(model, document):
+    spec = model.get('open')
+    if (model['conversion'] == 'group-uuids+open') != (spec is not None):
+        return [f'{model["file"]}：open 只随 group-uuids+open 一起登记']
     if spec is None:
         return []
     groups = {group['name']: group for group in outliner_groups(document['outliner'])}
-    if any(groups.get(name, {}).get('origin') != spec['pivot'] or groups[name].get('rotation') != spec['rotation']
+    if any(groups.get(name, {}).get('origin') != spec['pivot'] or groups[name].get('rotation')
            for name in spec['groups']):
-        return [f'{model["file"]}：收刃的组枢轴或旋转与 sources.json 不符']
+        return [f'{model["file"]}：刀刃组的枢轴与 sources.json 不符，或组本身带了旋转']
+    clips = [animation for animation in document.get('animations', []) if animation['name'] == OPEN_CLIP]
+    expected = {groups[name]['uuid']: [(0, spec['closed_rotation']), (spec['seconds'], [0, 0, 0])]
+                for name in spec['groups']}
+    if len(clips) != 1 or clip_keys(clips[0]) != expected or clips[0]['length'] != spec['seconds']:
+        return [f'{model["file"]}：{OPEN_CLIP} 剪辑与 sources.json 不符']
     return []
+
+
+def clip_keys(clip):
+    # 只认线性旋转键；位置、缩放或别的插值都算不符。
+    keys = {}
+    for bone, animator in clip['animators'].items():
+        frames = sorted(animator['keyframes'], key=lambda frame: frame['time'])
+        if any(frame['channel'] != 'rotation' or frame['interpolation'] != 'linear' for frame in frames):
+            return None
+        keys[bone] = [(frame['time'], [frame['data_points'][0][axis] for axis in 'xyz']) for frame in frames]
+    return keys
 
 
 def check_document(name, data):
@@ -128,7 +160,7 @@ def check(sources):
         if model['conversion'] not in CONVERSIONS:
             errors.append(f'{model["file"]}：未知转换 {model["conversion"]}')
         errors.extend(check_document(model['file'], data))
-        errors.extend(check_fold(model, json.loads(data)))
+        errors.extend(check_open(model, json.loads(data)))
     return errors
 
 

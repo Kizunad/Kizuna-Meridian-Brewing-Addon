@@ -26,18 +26,9 @@
       "source_blob_sha1": "b04aa76ac1beb6310fe9a03a2c090fe147d429c5",
       "pull_request": "https://github.com/Kizunad/Bong/pull/2148",
       "sha256": "2383c8b0da38bf1d7d30d1a84a0c1f55aee38ab3b3e8ac5677a9b76ad3990ad0",
-      "conversion": "group-uuids",
-      "shipped_sha256": "1496742a520a24c44e85ba308b75b04383d6e43d62e8819ee7a129cd7493b53d"
-    },
-    {
-      "file": "herb_knife_folded.bbmodel",
-      "path": "modelScript/models/HerbKnifeIron.bbmodel",
-      "source_blob_sha1": "b04aa76ac1beb6310fe9a03a2c090fe147d429c5",
-      "pull_request": "https://github.com/Kizunad/Bong/pull/2148",
-      "sha256": "2383c8b0da38bf1d7d30d1a84a0c1f55aee38ab3b3e8ac5677a9b76ad3990ad0",
-      "conversion": "group-uuids+fold",
-      "shipped_sha256": "cee67b52d58b0d9d859d1878928d0e47c45549798d5d468cf608e70a35e1b706",
-      "fold": {
+      "conversion": "group-uuids+open",
+      "shipped_sha256": "3823d8ed3212dffac3311b1eb12edc9ebd0f8a474fb4135fcedc09ac3a427283",
+      "open": {
         "groups": [
           "blade_spine",
           "blade_edge"
@@ -47,11 +38,12 @@
           12,
           8
         ],
-        "rotation": [
+        "closed_rotation": [
           -32,
           0,
           0
-        ]
+        ],
+        "seconds": 1.0
       }
     }
   ]

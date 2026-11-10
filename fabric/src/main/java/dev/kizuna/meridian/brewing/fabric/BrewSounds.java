@@ -15,6 +15,7 @@ final class BrewSounds {
     private static final Cue QI_GATHER = new Cue("potion.qi_gather", 0.3F, 1.4F);
     private static final Cue CHARM = new Cue("potion.charm", 0.5F, 1.3F);
     private static final Cue RESIDUE = new Cue("residue.plant", 0.25F, 1.6F);
+    private static final Cue KNIFE_CUT = new Cue("knife.cut", 0.5F, 1.2F);
 
     private BrewSounds() {
         // 事件资源只引用原版声音，不持有客户端声音对象。
@@ -36,6 +37,11 @@ final class BrewSounds {
     static void residue(LivingEntity target) {
         // 同一瓶沾多个部位仍只播一声下引。
         play(target, RESIDUE);
+    }
+
+    static void knifeCut(LivingEntity cutter) {
+        // 一刀出片时在持刀者处响一声。
+        play(cutter, KNIFE_CUT);
     }
 
     private static void play(LivingEntity target, Cue cue) {

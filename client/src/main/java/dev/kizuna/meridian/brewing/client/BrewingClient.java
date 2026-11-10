@@ -24,14 +24,13 @@ public final class BrewingClient implements ClientModInitializer {
     private static final String MODEL_DIRECTORY = "bs3d/meridian_brewing/";
     private static final String MODEL_SUFFIX = ".bbmodel";
     private static final float BLOCK_CENTER_PIXELS = 8;
-    // 器具模型以底面中心为原点画；药刀按物品方块格画，原点取格心底面。
+    // 器具模型以底面中心为原点画；药刀按物品方块格画，原点取格心底面，开合由模型里的 open 剪辑按进度画。
     private static final Vector3fc CENTERED = new Vector3f();
     private static final Vector3fc BLOCK_FRAME = new Vector3f(BLOCK_CENTER_PIXELS, 0, BLOCK_CENTER_PIXELS);
     private static final Map<String, Vector3fc> MODELS = Map.of(
             "iron_brazier", CENTERED,
             "iron_stove", CENTERED,
-            "herb_knife", BLOCK_FRAME,
-            "herb_knife_folded", BLOCK_FRAME);
+            "herb_knife", BLOCK_FRAME);
 
     @Override
     public void onInitializeClient() {

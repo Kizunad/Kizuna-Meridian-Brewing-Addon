@@ -2,7 +2,8 @@
 
 炼药的外观分两处：方块状态、方块模型、贴图和语言随 `fabric/` 进服务端和客户端；
 放置模型与枯木染色只在 `client/`（模组 ID `meridian_brewing_client`，`environment: client`），不进服务端路径。
-客户端模块硬依赖 `meridian_brewing` 和 BS3D 客户端 `backpack_storage_3d_client`。
+客户端模块硬依赖 `meridian_brewing`、BS3D 客户端 `backpack_storage_3d_client` 和 Players Animation
+`kizuna_players_animation`（药刀物品定义用它的数值属性）。
 
 ## 三件 Bong 模型
 
@@ -14,31 +15,37 @@
   读文件，核对 blob SHA-1 和 SHA-256，不读 Bong 工作副本，也不改 Bong 仓。
 - 校验：`python3 scripts/import_bong_models.py --check`，`check` 任务经 `checkModels` 一并执行。检查未登记文件、
   SHA-256、Blockbench 4.x、内嵌 PNG、只有逐面 UV 的 cube、outliner 与元素一一对应、outliner 里每个组都有 UUID，
-  以及收刃参数与分发文件一致。
+  以及刀刃开合剪辑与 `sources.json` 记的参数一致。
 - 铁火盆和铁炉座逐字节原样分发（`conversion: none`）。
 - 药刀原文件由脚本生成，outliner 里的组没有 `uuid`，BS3D 按组 UUID 建骨骼，缺了会整件导入失败。导入时按来源地址
   和组在 outliner 里的位置补固定的 UUID（`uuid5`），几何和贴图不变（`conversion: group-uuids`）。
-- 收刃药刀 `herb_knife_folded` 由导入脚本从同一源文件生成（`conversion: group-uuids+fold`）：补 UUID 后，把
-  `fold.groups` 列的刀背、刀刃两组绕转轴 `fold.pivot` 按 `fold.rotation` 转进刀柄槽，立方体和贴图不变。
-  参数只在 `sources.json` 里改，不手改分发文件。
+- 药刀补 UUID 后再加刀刃开合剪辑（`conversion: group-uuids+open`）：`open.groups` 列的刀背、刀刃两组枢轴移到
+  转轴 `open.pivot`（组本身不转，立方体和贴图不变，静止几何与来源相同），再写一段名为 `open` 的线性剪辑，
+  长 `open.seconds`，0 s 两组转 `open.closed_rotation`（转进刀柄槽，合刃），末帧回到 0（展开）。
+  参数只在 `sources.json` 里改，不手改分发文件。第二轮单独生成的收刃模型 `herb_knife_folded` 已删掉，
+  合刃就是这段剪辑的进度 0。
 
 ## 放置模型接线
 
-`BrewingClient` 按 BS3D 的放置模型入口（见 BS3D `docs/wiki/Model-Resources.md`「放置模型」）登记四份模型，
+`BrewingClient` 按 BS3D 的放置模型入口（见 BS3D `docs/wiki/Model-Resources.md`「放置模型」）登记三份模型，
 登记 ID 与方块、物品 ID 相同：
 
 | 模型 | 原点（模型像素） | 绘制 |
 |---|---|---|
 | `iron_brazier`、`iron_stove` | (0, 0, 0)：模型以中轴为原点 | `brew_fire` 方块实体，按方块 ID 取模型 |
-| `herb_knife`、`herb_knife_folded` | (8, 0, 8)：模型按方块格画 | 只作物品 |
+| `herb_knife` | (8, 0, 8)：模型按方块格画 | 只作物品，按 `progress` 画刀刃开合 |
 
 - 方块侧：火盆和炉座的方块状态按 `facing` 列四个变体，都指向只有粒子贴图的方块模型，几何全由方块实体绘制；
   碰撞和轮廓用 `BrewingBlocks` 里按模型外框量出的形状。`FacingApparatusBlock` 让正面朝向放置的玩家，
   结构旋转和镜像时朝向一起转。
 - 物品侧：客户端 `assets/meridian_brewing/items/<id>.json` 用 `minecraft:special` 引用 `bs3d:placed`；
   `base` 模型给各视角的显示变换。服务端 JAR 不带这三个物品定义。
-- 药刀物品按 `minecraft:display_context` 选模型：只有掉落物（`ground`）画收刃，其余视角
-  （物品栏、手持、展示框、头上）画展开。
+- 药刀物品按 `minecraft:display_context` 选进度，三支都指同一份 `herb_knife`：物品栏（`gui`）固定 `progress: 1`
+  展开，掉落物（`ground`）固定 `progress: 0` 收刃；其余视角（手持、展示框、头上）走 `minecraft:range_dispatch`，
+  属性 `kizuna_players_animation:item_state`（`channel: open`、`idle: 1`），八档阈值 0.125、0.25 … 1.0
+  各画同值进度，低于 0.125 画进度 0。手里的值来自持有者此刻 PA 剪辑的 `open` 轨道（见下节）；
+  展示框、头上和没在播剪辑时取 `idle`，是展开的。
+- BS3D 按模型在该进度下的外形报物品包围盒，掉落物按刀身真实最低点贴地。
 - 所有方块物品取方块的翻译键（`useBlockDescriptionPrefix`），物品名与方块名相同。
 - 第一人称由 Players Animation 画全身，手持物在身体两侧，第一人称也用第三人称视角的显示变换：
   火盆、炉座、晒药匾和药刀低头时都在右手边看得到，第三人称在手上。
@@ -54,6 +61,24 @@
   转到正对时看得到收起的刀身；
 - `head` 沿用 Bong 原值；
 - `firstperson_*` 沿用 Bong 原值；装了 Players Animation 后不用。
+
+## 药刀动作
+
+药刀的手臂动作和刀刃开合都由服务端经 Players Animation 播放（`ServerPlayerAnimations.play`），PA 已有的下发和
+客户端补帧负责同步，不另开网络包。两段动作的关键帧、规格和门禁结果在 PA `docs/animation-specs/`
+（`herb_knife_draw.md`、`herb_knife_cut.md`、`herb_knife_blade.md`、`PROGRESS-herb-knife.md`）。
+
+- **甩腕开刃** `herb_knife_draw`（0.60 s）：`HerbKnifeDraw` 每 tick 看在线玩家的主手，从别的物品换成药刀时播一次；
+  上线、换维度、重生时只记下当前主手不播，副手拿药刀不播。剪辑的 `open` 轨道 0.20 → 0.26 s 由 0 到 1，
+  物品定义按它画刀刃转开。开刃不出声。
+- **切药** `herb_knife_cut`（1.00 s）：只认主手药刀、副手毒马铃薯。右键开始使用（`startUsingItem`，不挥手），
+  服务端同时播切药；使用时长 20 tick，开始使用后的第 11 tick（0.55 s，刃口压过药材）出一片毒薯片、
+  扣一份药材、药刀耗损 1，并在持刀者处放 `meridian_brewing:knife.cut`（原版剪羊毛声，音量 0.5、音高 1.2）。
+  按住右键时原版在用满后的下一 tick 再次开始使用，一秒一刀；第 11 tick 前松手不出片，松手时停止切药剪辑。
+  开刃没播完就切，不拦，切药接管手臂和刀刃。一刀之间换走副手药材就不出片。
+- 收刀合刃不做动作：换走药刀时刀直接从手里消失。
+- 第一人称由 PA 画全身，低头才看得到切药的药材：原版视野 70° 时低头 45° 药材上沿进画面，50° 露得最多（上半截）；
+  再低头药材被前倾的躯干和两肩顶面挡住，classic 皮肤 60°、slim 皮肤 70° 起只剩刀（2026-11-11 真实客户端截图，身体和头同向）。
 
 ## 晒药匾
 

@@ -370,8 +370,8 @@ public final class BrewingGameTest {
     }
 
     @GameTest(maxTicks = DEFAULT_TIMEOUT)
-    public void worldPreparationUsesRecipeMethodsAndKnifeWorksInAir(GameTestHelper context) {
-        // 炮制走实际配方入口，药刀的空气使用也必须产生对应物品。
+    public void worldPreparationUsesRecipeMethods(GameTestHelper context) {
+        // 炮制走实际配方入口；药刀按住切药另见 HerbKnifeGameTest。
         ServerLevel level = context.getLevel();
         ServerPlayer player = BrewingTestPlayers.create(context);
         BlockPos relativeGrindstone = new BlockPos(STRUCTURE_X, STRUCTURE_Y, STRUCTURE_Z);
@@ -390,17 +390,6 @@ public final class BrewingGameTest {
         Item berryMash = BuiltInRegistries.ITEM.getValue(id("berry_mash"));
         context.assertTrue(findItem(player, berryMash).getCount() == 1,
                 "砂轮没有产出浆果泥或没有消耗一份甜浆果");
-
-        Item knife = BuiltInRegistries.ITEM.getValue(id("herb_knife"));
-        player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(knife));
-        player.setItemInHand(InteractionHand.OFF_HAND,
-                new ItemStack(Items.POISONOUS_POTATO, 2));
-        knife.use(level, player, InteractionHand.MAIN_HAND);
-        Item potatoSlice = BuiltInRegistries.ITEM.getValue(id("poison_potato_slice"));
-        context.assertTrue(player.getItemInHand(InteractionHand.OFF_HAND).getCount() == 1,
-                "药刀没有消耗一份副手毒马铃薯");
-        context.assertTrue(!findItem(player, potatoSlice).isEmpty(),
-                "药刀在空地右键没有产出毒薯片");
         context.succeed();
     }
 

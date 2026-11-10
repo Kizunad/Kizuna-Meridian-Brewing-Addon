@@ -31,6 +31,8 @@ kizunaWorkspace.includeSource('bs3d', [
         client: 'dev.kizuna.backpack3d:client',
         server: 'dev.kizuna.backpack3d:server'
 ])
+// 药刀开刃、切药经 PA 播放，药刀物品定义用 PA 的 item_state 数值属性；Human 也组合 PA，坐标相同。
+kizunaWorkspace.includeSource('players-animation', ['': 'dev.kizuna:kizuna-players-animation'])
 kizunaWorkspace.includeSource('human', [
         fabric: 'dev.kizuna.meridian.human:fabric',
         server: 'dev.kizuna.meridian.human:server',

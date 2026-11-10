@@ -1,11 +1,14 @@
 package dev.kizuna.meridian.brewing.clienttest;
 
 import java.util.Locale;
+import java.util.function.Consumer;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.fabricmc.fabric.api.client.gametest.v1.screenshot.TestScreenshotOptions;
 import net.minecraft.client.CameraType;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 
@@ -117,8 +120,45 @@ final class Stage {
     }
 
     void selectHotbar(int slot) {
-        context.getInput().pressKey(options -> options.keyHotbarSlots[slot]);
+        pressHotbar(slot);
         settle();
+    }
+
+    void pressHotbar(int slot) {
+        // 只按键不等，动作场景自己按 tick 拍。
+        context.getInput().pressKey(options -> options.keyHotbarSlots[slot]);
+    }
+
+    void holdUse() {
+        context.getInput().holdKey(options -> options.keyUse);
+    }
+
+    void releaseUse() {
+        context.getInput().releaseKey(options -> options.keyUse);
+    }
+
+    void turn(float yaw, float pitch) {
+        // 服务端命令的 ~ 相对命令源，要先 at 到玩家自己，才是原地转头。
+        command(String.format(Locale.ROOT, "execute as @a at @s run tp @s ~ ~ ~ %.2f %.2f", yaw, pitch));
+        settle();
+    }
+
+    void face(float bodyYaw, float headYaw) {
+        // 拍前直接定身体和头的朝向，连同插值用的上一帧值；不推进 tick，镜头和身体都不会再被原版改动。
+        // 第三人称正面镜头跟着头转，头比身体多转一点就能拍到身体斜前方。
+        context.runOnClient(client -> {
+            LocalPlayer player = client.player;
+            player.setYRot(headYaw);
+            player.yRotO = headYaw;
+            player.setYHeadRot(headYaw);
+            player.yHeadRotO = headYaw;
+            player.setYBodyRot(bodyYaw);
+            player.yBodyRotO = bodyYaw;
+        });
+    }
+
+    void onServer(Consumer<MinecraftServer> action) {
+        world.getServer().runOnServer(action::accept);
     }
 
     void camera(CameraType type) {

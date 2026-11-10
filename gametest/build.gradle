@@ -20,6 +20,8 @@ dependencies {
     implementation 'dev.kizuna.meridian.technique:shared'
     // 功法 Fabric 模组硬依赖 Framework；只取功法模块本身时，运行时单独装入 Framework。
     implementation 'dev.kizuna.meridian:fabric'
+    // 切药、开刃测试解析真实发出的 PA 播放包。
+    implementation 'dev.kizuna:kizuna-players-animation'
 }
 
 apply from: new File(kizunaWorkspace.directory('framework'), 'scripts/full-assembly.gradle')

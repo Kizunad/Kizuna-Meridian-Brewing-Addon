@@ -9,6 +9,9 @@ import dev.kizuna.meridian.fabric.ProtobufChannel;
 import dev.kizuna.meridian.human.fabric.HumanChannels;
 import dev.kizuna.meridian.human.protocol.pb.ControlMessages.ControlIntent;
 import com.google.protobuf.InvalidProtocolBufferException;
+import dev.kizuna.playeranimation.network.AnimationPackets;
+import dev.kizuna.playeranimation.protocol.pb.PlayerAnimationProtocol.PlayRequest;
+import dev.kizuna.playeranimation.protocol.pb.PlayerAnimationProtocol.StopRequest;
 import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 import java.util.ArrayList;
 import net.minecraft.core.BlockPos;
@@ -37,6 +40,7 @@ public final class BrewingTestPlayers {
     private static boolean ticking;
     private static final Map<UUID, List<ControlIntent>> CONTROL = new HashMap<>();
     private static final Map<UUID, List<SoundPlayed>> SOUNDS = new HashMap<>();
+    private static final Map<UUID, List<AnimationSent>> ANIMATIONS = new HashMap<>();
     private static final List<Identifier> CHANNELS = List.of(
             Identifier.parse("meridian:body_view"),
             Identifier.parse("meridian:gathering_response"),
@@ -71,6 +75,7 @@ public final class BrewingTestPlayers {
         CONNECTIONS.put(profile.id(), connection);
         CONTROL.put(profile.id(), new ArrayList<>());
         SOUNDS.put(profile.id(), new ArrayList<>());
+        ANIMATIONS.put(profile.id(), new ArrayList<>());
         TestPlayers.logIn(player, connection);
         BlockPos position = context.absolutePos(new BlockPos(1, HEIGHT, 1));
         player.setPos(position.getX(), position.getY(), position.getZ());
@@ -107,6 +112,10 @@ public final class BrewingTestPlayers {
                     && payload.type().equals(HumanChannels.CONTROL.type())) {
                 recordControl(listener.player, payload.bytes());
             }
+            if (packet instanceof ClientboundCustomPayloadPacket custom
+                    && custom.payload() instanceof AnimationPackets.Payload payload) {
+                recordAnimation(listener.player, payload);
+            }
             if (packet instanceof ClientboundKeepAlivePacket keepAlive) {
                 listener.handleKeepAlive(new ServerboundKeepAlivePacket(keepAlive.getId()));
             }
@@ -129,6 +138,45 @@ public final class BrewingTestPlayers {
     public static List<SoundPlayed> sounds(ServerPlayer player) {
         // 捕获真正发给客户端的声音包，以服务器 tick 核对到达时刻和播声位置。
         return List.copyOf(SOUNDS.getOrDefault(player.getUUID(), List.of()));
+    }
+
+    /**
+     * 发给该玩家客户端、动的是该玩家自己的 PA 播放或停止包；{@code startTick} 只对播放有意义。
+     * PA 在有人开始追踪时补发进行中的播放，沿用原请求 ID，这里只记第一次。
+     */
+    public record AnimationSent(boolean play, String animationId, long startTick, String playerUuid,
+                                String requestId) { }
+
+    public static List<AnimationSent> animations(ServerPlayer player) {
+        // 解析真正发出的 PA 载荷，不只断言调用了播放函数。
+        return List.copyOf(ANIMATIONS.getOrDefault(player.getUUID(), List.of()));
+    }
+
+    private static void recordAnimation(ServerPlayer player, AnimationPackets.Payload payload) {
+        // 同一场测试里其他假玩家的动作也会广播过来，只留动该玩家自己的包。
+        AnimationSent sent = decodeAnimation(payload);
+        List<AnimationSent> record = ANIMATIONS.get(player.getUUID());
+        if (sent != null && sent.playerUuid().equals(player.getStringUUID())
+                && record.stream().noneMatch(old -> old.requestId().equals(sent.requestId()))) {
+            record.add(sent);
+        }
+    }
+
+    private static AnimationSent decodeAnimation(AnimationPackets.Payload payload) {
+        try {
+            if (payload.type().equals(AnimationPackets.PLAY)) {
+                PlayRequest play = AnimationPackets.read(payload, PlayRequest.parser());
+                return new AnimationSent(true, play.getAnimationId(), play.getStartTick(), play.getPlayerUuid(),
+                        play.getRequestId());
+            }
+            if (payload.type().equals(AnimationPackets.STOP)) {
+                StopRequest stop = AnimationPackets.read(payload, StopRequest.parser());
+                return new AnimationSent(false, stop.getAnimationId(), -1, stop.getPlayerUuid(), stop.getRequestId());
+            }
+            return null;
+        } catch (InvalidProtocolBufferException invalid) {
+            throw new IllegalStateException("测试收到损坏的 PA 载荷", invalid);
+        }
     }
 
     public static String disconnectReason(ServerPlayer player) {
@@ -157,5 +205,6 @@ public final class BrewingTestPlayers {
         }
         CONTROL.remove(player.getUUID());
         SOUNDS.remove(player.getUUID());
+        ANIMATIONS.remove(player.getUUID());
     }
 }

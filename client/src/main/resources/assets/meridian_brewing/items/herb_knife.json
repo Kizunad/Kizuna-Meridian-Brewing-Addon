@@ -5,6 +5,20 @@
     "cases": [
       {
         "when": [
+          "gui"
+        ],
+        "model": {
+          "type": "minecraft:special",
+          "base": "meridian_brewing:item/herb_knife",
+          "model": {
+            "type": "bs3d:placed",
+            "model": "meridian_brewing:herb_knife",
+            "progress": 1.0
+          }
+        }
+      },
+      {
+        "when": [
           "ground"
         ],
         "model": {
@@ -12,17 +26,123 @@
           "base": "meridian_brewing:item/herb_knife",
           "model": {
             "type": "bs3d:placed",
-            "model": "meridian_brewing:herb_knife_folded"
+            "model": "meridian_brewing:herb_knife",
+            "progress": 0.0
           }
         }
       }
     ],
     "fallback": {
-      "type": "minecraft:special",
-      "base": "meridian_brewing:item/herb_knife",
-      "model": {
-        "type": "bs3d:placed",
-        "model": "meridian_brewing:herb_knife"
+      "type": "minecraft:range_dispatch",
+      "property": "kizuna_players_animation:item_state",
+      "channel": "open",
+      "idle": 1.0,
+      "entries": [
+        {
+          "threshold": 0.125,
+          "model": {
+            "type": "minecraft:special",
+            "base": "meridian_brewing:item/herb_knife",
+            "model": {
+              "type": "bs3d:placed",
+              "model": "meridian_brewing:herb_knife",
+              "progress": 0.125
+            }
+          }
+        },
+        {
+          "threshold": 0.25,
+          "model": {
+            "type": "minecraft:special",
+            "base": "meridian_brewing:item/herb_knife",
+            "model": {
+              "type": "bs3d:placed",
+              "model": "meridian_brewing:herb_knife",
+              "progress": 0.25
+            }
+          }
+        },
+        {
+          "threshold": 0.375,
+          "model": {
+            "type": "minecraft:special",
+            "base": "meridian_brewing:item/herb_knife",
+            "model": {
+              "type": "bs3d:placed",
+              "model": "meridian_brewing:herb_knife",
+              "progress": 0.375
+            }
+          }
+        },
+        {
+          "threshold": 0.5,
+          "model": {
+            "type": "minecraft:special",
+            "base": "meridian_brewing:item/herb_knife",
+            "model": {
+              "type": "bs3d:placed",
+              "model": "meridian_brewing:herb_knife",
+              "progress": 0.5
+            }
+          }
+        },
+        {
+          "threshold": 0.625,
+          "model": {
+            "type": "minecraft:special",
+            "base": "meridian_brewing:item/herb_knife",
+            "model": {
+              "type": "bs3d:placed",
+              "model": "meridian_brewing:herb_knife",
+              "progress": 0.625
+            }
+          }
+        },
+        {
+          "threshold": 0.75,
+          "model": {
+            "type": "minecraft:special",
+            "base": "meridian_brewing:item/herb_knife",
+            "model": {
+              "type": "bs3d:placed",
+              "model": "meridian_brewing:herb_knife",
+              "progress": 0.75
+            }
+          }
+        },
+        {
+          "threshold": 0.875,
+          "model": {
+            "type": "minecraft:special",
+            "base": "meridian_brewing:item/herb_knife",
+            "model": {
+              "type": "bs3d:placed",
+              "model": "meridian_brewing:herb_knife",
+              "progress": 0.875
+            }
+          }
+        },
+        {
+          "threshold": 1.0,
+          "model": {
+            "type": "minecraft:special",
+            "base": "meridian_brewing:item/herb_knife",
+            "model": {
+              "type": "bs3d:placed",
+              "model": "meridian_brewing:herb_knife",
+              "progress": 1.0
+            }
+          }
+        }
+      ],
+      "fallback": {
+        "type": "minecraft:special",
+        "base": "meridian_brewing:item/herb_knife",
+        "model": {
+          "type": "bs3d:placed",
+          "model": "meridian_brewing:herb_knife",
+          "progress": 0.0
+        }
       }
     }
   }
