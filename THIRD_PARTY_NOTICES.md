@@ -8,6 +8,8 @@ PolyForm Noncommercial 1.0.0 仅适用于本项目有权许可的原创部分。
 | Meridian Framework、Technique Framework、Human Addon | 相邻工作区 | PolyForm Noncommercial 1.0.0；仅验证工具通过 composite build 引用，组合方式与版本由 Framework 的 `scripts/workspace.gradle`、`scripts/libs.versions.toml` 提供 |
 | Protocol Buffers | 4.36.2 | BSD 3-Clause；仅验证工具使用 |
 | JUnit / Hamcrest Core | 4.13.2 / 1.3 | EPL 1.0 / BSD 3-Clause；仅测试使用 |
-| Fabric Loom、Fabric API、Fabric Loader | 1.19.3 / 0.161.0+26.2 / 0.20.1 | Apache License 2.0；仅构建与 GameTest 使用 |
+| Fabric Loom、Fabric API、Fabric Loader | 1.19.3 / 0.161.0+26.2 / 0.20.1 | Apache License 2.0；仅构建与 GameTest 使用，客户端截图验收用其中的客户端 GameTest |
+| 铁火盆、铁炉座、药材箱、药刀 Blockbench 模型 | Bong 仓提交 `c01576513e451490bd73df12513227bb8637222b` | 与本仓同一版权人 Kizunad 的原创模型；该提交没有许可文件，随本仓按 PolyForm Noncommercial 1.0.0 分发，来源与转换记在 `client/src/main/resources/bs3d/meridian_brewing/sources.json` |
+| BS3D 客户端 | 相邻工作区 `backpack-and-storage-3D` | 客户端模块经 composite build 编译引用其放置模型入口，不内嵌 |
 
 正式 Fabric JAR 只包含本仓数据，不内嵌 Minecraft、Fabric、上游类或测试工具。

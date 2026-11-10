@@ -1,6 +1,15 @@
 {
   "variants": {
-    "": {
+    "facing=north": {
+      "model": "meridian_brewing:block/iron_stove"
+    },
+    "facing=east": {
+      "model": "meridian_brewing:block/iron_stove"
+    },
+    "facing=south": {
+      "model": "meridian_brewing:block/iron_stove"
+    },
+    "facing=west": {
       "model": "meridian_brewing:block/iron_stove"
     }
   }

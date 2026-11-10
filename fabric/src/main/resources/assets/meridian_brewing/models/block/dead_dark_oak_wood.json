@@ -1,6 +1,6 @@
 {
-  "parent": "minecraft:block/cube_all",
+  "parent": "meridian_brewing:block/dead_wood",
   "textures": {
-    "all": "minecraft:block/dark_oak_log"
+    "side": "minecraft:block/dark_oak_log"
   }
 }

@@ -1,11 +1,11 @@
 package dev.kizuna.meridian.brewing.fabric;
 
+import dev.kizuna.meridian.brewing.server.BrewFireSource;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityTicker;
@@ -14,14 +14,14 @@ import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 /** 铁火盆和铁炉座的可调火源方块。 */
-final class BrewFireBlock extends Block implements EntityBlock {
-    private final dev.kizuna.meridian.brewing.server.BrewFireSource source;
+final class BrewFireBlock extends FacingApparatusBlock implements EntityBlock {
+    private final BrewFireSource source;
 
-    BrewFireBlock(dev.kizuna.meridian.brewing.server.BrewFireSource source,
-                  BlockBehaviour.Properties properties) {
-        super(properties);
+    BrewFireBlock(BrewFireSource source, VoxelShape shape, BlockBehaviour.Properties properties) {
+        super(shape, properties);
         this.source = source;
     }
 

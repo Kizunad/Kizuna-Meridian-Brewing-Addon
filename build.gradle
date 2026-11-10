@@ -27,20 +27,21 @@ subprojects {
 }
 
 tasks.named('assemble') {
-    dependsOn ':server:assemble', ':fabric:assemble'
+    dependsOn ':server:assemble', ':fabric:assemble', ':client:assemble'
 }
 
 tasks.named('check') {
-    dependsOn ':server:check', ':fabric:check', ':verification:test', 'checkDocs', 'checkData'
+    dependsOn ':server:check', ':fabric:check', ':client:check', ':verification:test', 'checkDocs', 'checkData',
+            'checkModels'
 }
 
 tasks.named('clean') {
-    dependsOn ':server:clean', ':fabric:clean', ':verification:clean'
+    dependsOn ':server:clean', ':fabric:clean', ':client:clean', ':verification:clean'
 }
 
 tasks.register('test') {
     group = 'verification'
-    dependsOn ':server:test', ':fabric:test', ':verification:test'
+    dependsOn ':server:test', ':fabric:test', ':client:test', ':verification:test'
 }
 
 tasks.register('checkDocs', Exec) {
@@ -51,4 +52,10 @@ tasks.register('checkDocs', Exec) {
 tasks.register('checkData', Exec) {
     group = 'verification'
     commandLine 'python3', 'scripts/check_data.py'
+}
+
+tasks.register('checkModels', Exec) {
+    group = 'verification'
+    // 随客户端 JAR 分发的 Bong 模型必须与 sources.json 记的导入结果逐字节一致。
+    commandLine 'python3', 'scripts/import_bong_models.py', '--check'
 }

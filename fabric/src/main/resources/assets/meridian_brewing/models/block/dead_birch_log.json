@@ -1,5 +1,5 @@
 {
-  "parent": "minecraft:block/cube_column",
+  "parent": "meridian_brewing:block/dead_log",
   "textures": {
     "side": "minecraft:block/birch_log",
     "end": "minecraft:block/birch_log_top"

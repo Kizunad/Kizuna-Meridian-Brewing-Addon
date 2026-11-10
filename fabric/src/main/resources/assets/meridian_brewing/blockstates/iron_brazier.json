@@ -1,6 +1,15 @@
 {
   "variants": {
-    "": {
+    "facing=north": {
+      "model": "meridian_brewing:block/iron_brazier"
+    },
+    "facing=east": {
+      "model": "meridian_brewing:block/iron_brazier"
+    },
+    "facing=south": {
+      "model": "meridian_brewing:block/iron_brazier"
+    },
+    "facing=west": {
       "model": "meridian_brewing:block/iron_brazier"
     }
   }

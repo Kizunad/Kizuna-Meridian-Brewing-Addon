@@ -19,6 +19,7 @@ import dev.kizuna.meridian.brewing.server.BrewStructure;
 import dev.kizuna.meridian.brewing.server.BrewUse;
 import dev.kizuna.meridian.brewing.server.BrewFireSource;
 import dev.kizuna.meridian.brewing.server.CopperExposure;
+import dev.kizuna.meridian.brewing.server.CopperOxidation;
 import dev.kizuna.meridian.brewing.server.FireKind;
 import dev.kizuna.meridian.brewing.server.HeatSourceKind;
 import dev.kizuna.meridian.brewing.server.HerbState;
@@ -57,6 +58,8 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CampfireBlock;
 import net.minecraft.world.level.block.entity.BrewingStandBlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.BlockHitResult;
@@ -89,6 +92,7 @@ public final class BrewingGameTest {
     private static final List<String> ITEM_IDS = List.of(
             "withered_bush_ash", "dry_moss", "dry_poppy", "dried_pufferfish",
             "poison_potato_slice", "berry_mash", "brew_residue", "brew_recipe", "herb_knife");
+    private static final String OXIDATION = "oxidation";
     private static final int STRUCTURE_Y = 2;
     private static final int STRUCTURE_X = 2;
     private static final int STRUCTURE_Z = 2;
@@ -117,6 +121,7 @@ public final class BrewingGameTest {
         assertRegistered(context, BuiltInRegistries.ITEM, ITEM_IDS, "炮制物品");
         for (String path : BLOCK_IDS) {
             assertItemRegistered(context, path, "方块物品");
+            assertBlockItemName(context, path);
         }
         assertStrippedBlock(context, "dead_oak_log", "stripped_oak_log");
         assertStrippedBlock(context, "dead_pale_oak_wood", "stripped_pale_oak_wood");
@@ -269,6 +274,30 @@ public final class BrewingGameTest {
         context.assertTrue(remainingAxe.is(Items.IRON_AXE), "刮锈吞掉了斧子");
         context.assertTrue(remainingAxe.getDamageValue() == 1, "刮锈没有只扣一级耐久");
         context.succeed();
+    }
+
+    @GameTest(maxTicks = DEFAULT_TIMEOUT)
+    public void copperOxidationShowsOnBlockStateAndPlacedLookSeedsRules(GameTestHelper context) {
+        // 规则层老化后下一 tick 同步到方块外观且不重建方块实体；带外观放下的铜釜按外观氧化级起算。
+        ServerLevel level = context.getLevel();
+        BlockPos pos = context.absolutePos(new BlockPos(STRUCTURE_X, STRUCTURE_Y, STRUCTURE_Z));
+        BlockState copper = BuiltInRegistries.BLOCK.getValue(id("copper_cauldron")).defaultBlockState();
+        level.setBlockAndUpdate(pos, copper);
+        BrewCauldronBlockEntity cauldron = (BrewCauldronBlockEntity) level.getBlockEntity(pos);
+        cauldron.cauldron().ageCopper(CopperExposure.EXPOSED);
+        BlockPos placedPos = pos.east();
+        level.setBlockAndUpdate(placedPos, withValue(copper, OXIDATION, "weathered"));
+        BrewCauldronBlockEntity placed = (BrewCauldronBlockEntity) level.getBlockEntity(placedPos);
+        context.assertTrue(placed.cauldron().copperState().oxidation() == CopperOxidation.WEATHERED,
+                "带外观放下的铜釜没有按外观氧化级起算");
+        context.runAfterDelay(OBSERVE_TICKS, () -> {
+            context.assertTrue(valueName(level.getBlockState(pos), OXIDATION).equals("exposed"),
+                    "铜釜老化没有同步到方块外观");
+            context.assertTrue(level.getBlockEntity(pos) == cauldron, "同步外观重建了铜釜方块实体");
+            context.assertTrue(valueName(level.getBlockState(placedPos), OXIDATION).equals("weathered"),
+                    "规则状态把放下时的外观改回了未氧化");
+            context.succeed();
+        });
     }
 
     @GameTest(maxTicks = DEFAULT_TIMEOUT)
@@ -673,6 +702,14 @@ public final class BrewingGameTest {
         context.assertTrue(BuiltInRegistries.ITEM.containsKey(id), kind + "未注册：" + id);
     }
 
+    private static void assertBlockItemName(GameTestHelper context, String path) {
+        // 方块物品显示方块的名字，语言文件只写 block.<命名空间>.<路径> 一份。
+        Identifier id = Identifier.fromNamespaceAndPath(MOD_ID, path);
+        String blockKey = BuiltInRegistries.BLOCK.getValue(id).getDescriptionId();
+        String itemKey = BuiltInRegistries.ITEM.getValue(id).getDescriptionId();
+        context.assertTrue(itemKey.equals(blockKey), "方块物品的翻译键应与方块相同：" + itemKey + " ≠ " + blockKey);
+    }
+
     private static void assertStrippedBlock(GameTestHelper context, String sourcePath,
                                             String targetPath) {
         Identifier sourceId = Identifier.fromNamespaceAndPath(MOD_ID, sourcePath);
@@ -681,6 +718,23 @@ public final class BrewingGameTest {
         var stripped = StrippableBlockRegistry.getStrippedBlockState(source.defaultBlockState());
         context.assertTrue(stripped.is(BuiltInRegistries.BLOCK.getValue(targetId)),
                 "枯木去皮目标错误：" + sourceId);
+    }
+
+    private static BlockState withValue(BlockState state, String property, String value) {
+        return withParsedValue(state, state.getBlock().getStateDefinition().getProperty(property), value);
+    }
+
+    private static <T extends Comparable<T>> BlockState withParsedValue(
+            BlockState state, Property<T> property, String value) {
+        return state.setValue(property, property.getValue(value).orElseThrow());
+    }
+
+    private static String valueName(BlockState state, String property) {
+        return propertyValueName(state, state.getBlock().getStateDefinition().getProperty(property));
+    }
+
+    private static <T extends Comparable<T>> String propertyValueName(BlockState state, Property<T> property) {
+        return property.getName(state.getValue(property));
     }
 
     private static Identifier id(String path) {

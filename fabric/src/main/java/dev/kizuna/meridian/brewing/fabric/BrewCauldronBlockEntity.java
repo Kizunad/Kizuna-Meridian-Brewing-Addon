@@ -73,6 +73,10 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
         this.vessel = vessel;
         this.cauldron = new BrewCauldron(vessel, BrewForm.DRINK);
         this.structure = emptyStructure();
+        if (vessel == VesselKind.COPPER_CAULDRON) {
+            // 用 /setblock 或结构放下的铜釜带着外观氧化级，规则状态从它起算。
+            cauldron.restoreCopperOxidation(CopperCauldronBlock.oxidation(state));
+        }
     }
 
     static <T extends BlockEntity> BlockEntityTicker<T> ticker(BlockEntityType<T> type) {
@@ -202,6 +206,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
         }
         if (vessel == VesselKind.COPPER_CAULDRON) {
             tickCopperOxidation();
+            showCopperOxidation();
         }
         setChanged();
     }
@@ -419,6 +424,15 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
         cauldron.ageCopper(exposure);
     }
 
+    private void showCopperOxidation() {
+        // 上蜡、刮锈和老化只改规则状态，外观在下一次 tick 同步到方块状态；同一方块换状态不会重建方块实体。
+        BlockState shown = getBlockState();
+        CopperOxidation oxidation = cauldron.copperState().oxidation();
+        if (CopperCauldronBlock.oxidation(shown) != oxidation) {
+            level.setBlock(worldPosition, CopperCauldronBlock.showOxidation(shown, oxidation), Block.UPDATE_CLIENTS);
+        }
+    }
+
     private long currentGameDay() {
         return Math.floorDiv(level.getOverworldClockTime(), DAY_TICKS);
     }
@@ -452,7 +466,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
     @Override
     protected void loadAdditional(ValueInput input) {
         super.loadAdditional(input);
-        cauldron.restore(readCauldronSnapshot(input));
+        cauldron.restore(readCauldronSnapshot(input, cauldron.copperState()));
         copperOxidationTicks = input.getLongOr("copper_oxidation_ticks", 0L);
     }
 
@@ -480,15 +494,15 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
         output.putLong("copper_oxidation_ticks", copperOxidationTicks);
     }
 
-    private static BrewCauldron.Snapshot readCauldronSnapshot(ValueInput input) {
+    private static BrewCauldron.Snapshot readCauldronSnapshot(ValueInput input, CopperCauldronState placed) {
         BrewCauldronState state = enumValue(input.getStringOr("state", "EMPTY"),
                 BrewCauldronState.EMPTY);
         BrewForm form = enumValue(input.getStringOr("form", "DRINK"), BrewForm.DRINK);
         BrewKind recipeKind = enumValueOrNull(input.getStringOr("recipe_kind", ""), BrewKind.class);
+        // 没写铜釜字段的数据（如手写 NBT）沿用放置时按方块外观得到的氧化级。
         CopperCauldronState copperState = new CopperCauldronState(
-                enumValue(input.getStringOr("copper_oxidation", "UNAFFECTED"),
-                        CopperOxidation.UNAFFECTED),
-                input.getBooleanOr("copper_waxed", false));
+                enumValue(input.getStringOr("copper_oxidation", ""), placed.oxidation()),
+                input.getBooleanOr("copper_waxed", placed.waxed()));
         Map<IngredientSlot, IngredientBatch> ingredients = readIngredients(input);
         Map<IngredientSlot, Double> ingredientTimes = readIngredientTimes(input);
         return new BrewCauldron.Snapshot(state, form, recipeKind, ingredients, ingredientTimes,

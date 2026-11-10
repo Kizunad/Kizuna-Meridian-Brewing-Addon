@@ -1,0 +1,10 @@
+{
+  "parent": "meridian_brewing:block/copper_cauldron",
+  "textures": {
+    "side": "meridian_brewing:block/oxidized_copper_cauldron_side",
+    "top": "meridian_brewing:block/oxidized_copper_cauldron_top",
+    "bottom": "meridian_brewing:block/oxidized_copper_cauldron_bottom",
+    "inside": "meridian_brewing:block/oxidized_copper_cauldron_inside",
+    "particle": "meridian_brewing:block/oxidized_copper_cauldron_side"
+  }
+}

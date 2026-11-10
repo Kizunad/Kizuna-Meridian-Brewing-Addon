@@ -1,0 +1,10 @@
+{
+  "model": {
+    "type": "minecraft:special",
+    "base": "meridian_brewing:item/herb_knife",
+    "model": {
+      "type": "bs3d:placed",
+      "model": "meridian_brewing:herb_knife"
+    }
+  }
+}

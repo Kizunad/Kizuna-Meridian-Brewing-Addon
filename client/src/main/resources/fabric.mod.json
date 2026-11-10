@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "meridian_brewing_client",
+  "version": "${version}",
+  "name": "Kizuna's Meridian Brewing Addon - Client",
+  "description": "炼药器具放置模型与枯木染色",
+  "authors": ["Kizunad"],
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "environment": "client",
+  "entrypoints": {"client": ["dev.kizuna.meridian.brewing.client.BrewingClient"]},
+  "depends": {
+    "java": ">=25", "minecraft": "26.2", "fabricloader": ">=0.20.1", "fabric-api": "*",
+    "meridian_brewing": "*", "backpack_storage_3d_client": "*"
+  }
+}

@@ -1,1 +1,12 @@
-{"model": {"type": "minecraft:model", "model": "meridian_brewing:item/dead_oak_wood"}}
+{
+  "model": {
+    "type": "minecraft:model",
+    "model": "meridian_brewing:item/dead_oak_wood",
+    "tints": [
+      {
+        "type": "minecraft:constant",
+        "value": -5915393
+      }
+    ]
+  }
+}

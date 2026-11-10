@@ -1,0 +1,34 @@
+plugins { id 'net.fabricmc.fabric-loom' }
+
+description = '炼药的客户端表现：器具放置模型与枯木染色；不进服务端路径。'
+
+repositories {
+    maven { url = 'https://maven.fabricmc.net/' }
+    // BS3D 客户端带来 owo；Loom 配置时就解析编译依赖，owo 依赖的 kdl4j 只发布在 JitPack，只从那里取这一组。
+    maven { url = 'https://maven.wispforest.io/releases' }
+    maven {
+        url = 'https://jitpack.io'
+        content { includeGroup 'com.github.kdl-org' }
+    }
+}
+dependencies {
+    // 26.x 不混淆：直接用官方名编译，没有映射，模组依赖也不经重映射。
+    minecraft libs.minecraft
+    implementation libs.fabric.loader
+    implementation libs.fabric.api
+    // 放置模型入口在 BS3D 客户端；settings 按坐标组合其源码工程，编译直接取普通 JAR，运行时由完整装配装入。
+    compileOnly 'dev.kizuna.backpack3d:client'
+    testImplementation libs.junit4
+}
+test {
+    useJUnit()
+    // 枯木物品定义在 fabric 模块的资源里，测试核对它们与客户端方块染色是同一组值。
+    def fabricResources = project(':fabric').file('src/main/resources')
+    inputs.dir(fabricResources)
+    systemProperty 'brewing.fabricResources', fabricResources.absolutePath
+}
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') { expand version: project.version }
+}
+loom { mods { meridian_brewing_client { sourceSet sourceSets.main } } }

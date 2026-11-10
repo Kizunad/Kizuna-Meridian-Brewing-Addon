@@ -1,6 +1,7 @@
 package dev.kizuna.meridian.brewing.server;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.util.EnumSet;
@@ -198,6 +199,17 @@ public final class BrewingRulesTest {
         state = state.wax();
         assertTrue(state.age(CopperExposure.EXPOSED).waxed());
         assertEquals(CopperOxidation.UNAFFECTED, state.scrape().oxidation());
+    }
+
+    @Test
+    public void placedCopperStartsAtShownOxidationUnwaxed() {
+        BrewCauldron copper = new BrewCauldron(VesselKind.COPPER_CAULDRON, BrewForm.DRINK);
+        copper.waxCopper();
+        copper.restoreCopperOxidation(CopperOxidation.WEATHERED);
+        assertEquals(new CopperCauldronState(CopperOxidation.WEATHERED, false), copper.copperState());
+        BrewCauldron witch = new BrewCauldron(VesselKind.WITCH_CAULDRON, BrewForm.DRINK);
+        assertThrows(IllegalArgumentException.class,
+                () -> witch.restoreCopperOxidation(CopperOxidation.EXPOSED));
     }
 
     @Test

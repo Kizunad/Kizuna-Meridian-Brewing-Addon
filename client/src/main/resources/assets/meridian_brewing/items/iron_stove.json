@@ -1,0 +1,10 @@
+{
+  "model": {
+    "type": "minecraft:special",
+    "base": "meridian_brewing:item/iron_stove",
+    "model": {
+      "type": "bs3d:placed",
+      "model": "meridian_brewing:iron_stove"
+    }
+  }
+}

@@ -9,7 +9,7 @@ pluginManagement {
 apply from: new File(rootDir.parentFile, 'Kizuna-Meridian-Mod-Framework/scripts/workspace.gradle')
 
 rootProject.name = 'kizuna-meridian-brewing-addon'
-include 'shared', 'server', 'fabric', 'verification', 'gametest'
+include 'shared', 'server', 'fabric', 'client', 'verification', 'gametest', 'clienttest'
 
 // 目录验证只使用功法库的有界解析器；正式运行时由功法库按 Fabric 清单发现本仓目录。
 kizunaWorkspace.includeSource('framework', [
@@ -24,6 +24,12 @@ kizunaWorkspace.includeSource('technique', [
 kizunaWorkspace.includeSource('vanilla-damage', [
         fabric: 'dev.kizuna.meridian.vanilla:fabric',
         server: 'dev.kizuna.meridian.vanilla:server'
+])
+// 客户端的放置模型按真实坐标依赖 bs3d client，而经 Human 嵌套的 Progression 只登记 bs3d server；
+// 同一仓库只按最先登记的规则替换，嵌套构建在 includeBuild 时即登记，所以 bs3d 要在 Human 之前组合并列出两个模块。
+kizunaWorkspace.includeSource('bs3d', [
+        client: 'dev.kizuna.backpack3d:client',
+        server: 'dev.kizuna.backpack3d:server'
 ])
 kizunaWorkspace.includeSource('human', [
         fabric: 'dev.kizuna.meridian.human:fabric',

@@ -1,7 +1,16 @@
 {
   "variants": {
-    "": {
+    "oxidation=unaffected": {
       "model": "meridian_brewing:block/copper_cauldron"
+    },
+    "oxidation=exposed": {
+      "model": "meridian_brewing:block/exposed_copper_cauldron"
+    },
+    "oxidation=weathered": {
+      "model": "meridian_brewing:block/weathered_copper_cauldron"
+    },
+    "oxidation=oxidized": {
+      "model": "meridian_brewing:block/oxidized_copper_cauldron"
     }
   }
 }

@@ -1,0 +1,39 @@
+plugins { alias(libs.plugins.fabric.loom) }
+
+description = '炼药器具模型、铜釜氧化外观与枯木染色的真实客户端截图验收。'
+
+dependencies {
+    minecraft libs.minecraft
+    implementation libs.fabric.loader
+    implementation libs.fabric.api
+    implementation project(':server')
+    implementation project(':fabric')
+    implementation project(':client')
+}
+
+apply from: new File(kizunaWorkspace.directory('framework'), 'scripts/full-assembly.gradle')
+
+loom {
+    mods {
+        meridian_brewing_clienttest { sourceSet sourceSets.main }
+    }
+    runs {
+        clientGametest {
+            client()
+            name '炼药客户端截图'
+            runDir providers.gradleProperty('clienttestRunDir').getOrElse('build/clienttest')
+            vmArg '-Dfabric.client.gametest'
+            vmArg '-Dfabric.client.gametest.modid=meridian_brewing_clienttest'
+            programArgs '--width', '1280', '--height', '960'
+        }
+    }
+}
+
+tasks.named('runClientGametest') {
+    doFirst {
+        // 跳过首启无障碍引导，界面用中文，与用户实例一致。
+        def runDirectory = file(providers.gradleProperty('clienttestRunDir').getOrElse('build/clienttest'))
+        runDirectory.mkdirs()
+        new File(runDirectory, 'options.txt').text = 'onboardAccessibility:false\nlang:zh_cn\n'
+    }
+}

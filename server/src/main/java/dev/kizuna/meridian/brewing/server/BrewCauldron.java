@@ -102,6 +102,14 @@ public final class BrewCauldron {
         return BrewActionResult.accepted("铜釜已刮掉一级锈");
     }
 
+    public void restoreCopperOxidation(CopperOxidation oxidation) {
+        // 新放下的铜釜按方块外观带来的氧化级起算，未上蜡；读档时随后由 restore 覆盖。
+        if (vessel != VesselKind.COPPER_CAULDRON || oxidation == null) {
+            throw new IllegalArgumentException("只有铜釜能按外观恢复氧化级");
+        }
+        copperState = new CopperCauldronState(oxidation, false);
+    }
+
     public void ageCopper(CopperExposure exposure) {
         if (vessel == VesselKind.COPPER_CAULDRON && exposure != null) {
             copperState = copperState.age(exposure);

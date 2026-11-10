@@ -16,6 +16,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.RotatedPillarBlock;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 /** 巫釜、火源、药材箱和 26.2 九种枯木的方块身份。 */
 final class BrewingBlocks {
@@ -24,6 +25,15 @@ final class BrewingBlocks {
     private static final float METALWARE_STRENGTH = 2.0F;
     private static final float HERB_CRATE_STRENGTH = 1.5F;
     private static final float DEAD_WOOD_STRENGTH = 1.0F;
+    // 器具外框按方块内像素给出，水平方向居中；数值取自各自模型的外沿。
+    private static final double BLOCK_PIXELS = 16;
+    private static final double WITCH_CAULDRON_INSET = 2;
+    private static final double WITCH_CAULDRON_HEIGHT = 13;
+    private static final double COPPER_CAULDRON_HEIGHT = 11;
+    private static final double BRAZIER_HEIGHT = 8;
+    private static final double STOVE_HEIGHT = 12;
+    private static final double HERB_CRATE_INSET = 0.5;
+    private static final double HERB_CRATE_HEIGHT = 13;
     private static final Map<DeadWood, Block> DEAD_LOGS = new EnumMap<>(DeadWood.class);
     private static final Map<DeadWood, Block> DEAD_WOODS = new EnumMap<>(DeadWood.class);
     static Block WITCH_CAULDRON;
@@ -42,18 +52,20 @@ final class BrewingBlocks {
     static void register() {
         WITCH_CAULDRON = registerBlock("witch_cauldron",
                 new BrewCauldronBlock(VesselKind.WITCH_CAULDRON,
-                        blockProperties("witch_cauldron", WITCH_CAULDRON_STRENGTH)));
+                        centeredShape(WITCH_CAULDRON_INSET, WITCH_CAULDRON_HEIGHT),
+                        apparatusProperties("witch_cauldron", WITCH_CAULDRON_STRENGTH)));
         COPPER_CAULDRON = registerBlock("copper_cauldron",
-                new BrewCauldronBlock(VesselKind.COPPER_CAULDRON,
-                        blockProperties("copper_cauldron", COPPER_CAULDRON_STRENGTH)));
+                new CopperCauldronBlock(centeredShape(0, COPPER_CAULDRON_HEIGHT),
+                        apparatusProperties("copper_cauldron", COPPER_CAULDRON_STRENGTH)));
         IRON_BRAZIER = registerBlock("iron_brazier",
-                new BrewFireBlock(BrewFireSource.BRAZIER,
-                        blockProperties("iron_brazier", METALWARE_STRENGTH)));
+                new BrewFireBlock(BrewFireSource.BRAZIER, centeredShape(0, BRAZIER_HEIGHT),
+                        apparatusProperties("iron_brazier", METALWARE_STRENGTH)));
         IRON_STOVE = registerBlock("iron_stove",
-                new BrewFireBlock(BrewFireSource.STOVE,
-                        blockProperties("iron_stove", METALWARE_STRENGTH)));
+                new BrewFireBlock(BrewFireSource.STOVE, centeredShape(0, STOVE_HEIGHT),
+                        apparatusProperties("iron_stove", METALWARE_STRENGTH)));
         HERB_CRATE = registerBlock("herb_crate",
-                new HerbCrateBlock(blockProperties("herb_crate", HERB_CRATE_STRENGTH)));
+                new HerbCrateBlock(centeredShape(HERB_CRATE_INSET, HERB_CRATE_HEIGHT),
+                        apparatusProperties("herb_crate", HERB_CRATE_STRENGTH)));
         registerDeadWood();
         BREW_CAULDRON_ENTITY = registerCauldronEntity();
         BREW_FIRE_ENTITY = registerFireEntity();
@@ -109,9 +121,21 @@ final class BrewingBlocks {
         Identifier id = Identifier.fromNamespaceAndPath(BrewingFabric.MOD_ID, path);
         Registry.register(BuiltInRegistries.BLOCK, id, block);
         ResourceKey<Item> itemKey = ResourceKey.create(Registries.ITEM, id);
-        Item.Properties properties = new Item.Properties().setId(itemKey);
+        // 方块物品与原版一样取方块的翻译键 block.<命名空间>.<路径>，语言文件只写这一份。
+        Item.Properties properties = new Item.Properties()
+                .setId(itemKey)
+                .useBlockDescriptionPrefix();
         Registry.register(BuiltInRegistries.ITEM, id, new BlockItem(block, properties));
         return block;
+    }
+
+    private static BlockBehaviour.Properties apparatusProperties(String path, float strength) {
+        // 器具不是整格方块，不能遮挡相邻方块的面。
+        return blockProperties(path, strength).noOcclusion();
+    }
+
+    private static VoxelShape centeredShape(double inset, double height) {
+        return Block.box(inset, 0, inset, BLOCK_PIXELS - inset, height, BLOCK_PIXELS - inset);
     }
 
     private static BlockBehaviour.Properties blockProperties(String path, float strength) {
