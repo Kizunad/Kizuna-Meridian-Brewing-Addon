@@ -4,8 +4,10 @@ import dev.kizuna.meridian.brewing.fabric.BrewItemStacks;
 import dev.kizuna.meridian.brewing.fabric.BrewCauldronBlockEntity;
 import dev.kizuna.meridian.brewing.fabric.BrewFireBlockEntity;
 import dev.kizuna.meridian.brewing.fabric.HerbCrateBlockEntity;
+import dev.kizuna.meridian.brewing.fabric.BrewingCreativeTab;
 import dev.kizuna.meridian.brewing.fabric.BrewingRuntime;
 import dev.kizuna.meridian.brewing.fabric.RecipeKnowledgeStore;
+import dev.kizuna.meridian.technique.fabric.TechniqueScrollItem;
 import dev.kizuna.meridian.brewing.server.BrewActionResult;
 import dev.kizuna.meridian.brewing.server.BrewCauldron;
 import dev.kizuna.meridian.brewing.server.BrewCauldronState;
@@ -27,6 +29,7 @@ import dev.kizuna.meridian.brewing.server.SmokeVentState;
 import dev.kizuna.meridian.brewing.server.VesselKind;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.registry.StrippableBlockRegistry;
@@ -38,6 +41,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProblemReporter;
@@ -116,6 +120,27 @@ public final class BrewingGameTest {
         }
         assertStrippedBlock(context, "dead_oak_log", "stripped_oak_log");
         assertStrippedBlock(context, "dead_pale_oak_wood", "stripped_pale_oak_wood");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = DEFAULT_TIMEOUT)
+    public void creativeTabListsEveryBrewingItem(GameTestHelper context) {
+        // 本模组注册的每个物品都要能从炼药页取到，搭巫釜结构不必用命令给物品。
+        CreativeModeTab tab = BuiltInRegistries.CREATIVE_MODE_TAB.getValue(BrewingCreativeTab.ID);
+        context.assertTrue(tab != null, "炼药创造栏未注册");
+        var world = context.getLevel();
+        tab.buildContents(new CreativeModeTab.ItemDisplayParameters(world.enabledFeatures(),
+                false /* hasPermissions */, world.registryAccess()));
+        var displayed = tab.getDisplayItems().stream()
+                .map(stack -> BuiltInRegistries.ITEM.getKey(stack.getItem()))
+                .collect(Collectors.toSet());
+        for (Identifier id : BuiltInRegistries.ITEM.keySet()) {
+            // 功法卷由功法库按目录生成，列在功法页，不归炼药页。
+            boolean scroll = BuiltInRegistries.ITEM.getValue(id) instanceof TechniqueScrollItem;
+            if (id.getNamespace().equals(MOD_ID) && !scroll) {
+                context.assertTrue(displayed.contains(id), "炼药创造栏缺物品：" + id);
+            }
+        }
         context.succeed();
     }
 
