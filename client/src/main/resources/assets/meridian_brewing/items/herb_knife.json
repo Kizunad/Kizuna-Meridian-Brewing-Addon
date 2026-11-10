@@ -1,10 +1,29 @@
 {
   "model": {
-    "type": "minecraft:special",
-    "base": "meridian_brewing:item/herb_knife",
-    "model": {
-      "type": "bs3d:placed",
-      "model": "meridian_brewing:herb_knife"
+    "type": "minecraft:select",
+    "property": "minecraft:display_context",
+    "cases": [
+      {
+        "when": [
+          "ground"
+        ],
+        "model": {
+          "type": "minecraft:special",
+          "base": "meridian_brewing:item/herb_knife",
+          "model": {
+            "type": "bs3d:placed",
+            "model": "meridian_brewing:herb_knife_folded"
+          }
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:special",
+      "base": "meridian_brewing:item/herb_knife",
+      "model": {
+        "type": "bs3d:placed",
+        "model": "meridian_brewing:herb_knife"
+      }
     }
   }
 }

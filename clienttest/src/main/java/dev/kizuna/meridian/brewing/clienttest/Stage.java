@@ -10,7 +10,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 截图场地：世界原点地表上的一片空地。摆方块、放掉落物和移动镜头都走服务端命令，与玩家在游戏里输入的相同；
+ * 截图场地：世界原点地表上的一片空地。摆方块、召唤实体和移动镜头都走服务端命令，与玩家在游戏里输入的相同；
  * 镜头视角、界面隐藏和快捷栏选择走客户端选项与按键。
  */
 final class Stage {
@@ -69,22 +69,29 @@ final class Stage {
     }
 
     void clear() {
-        // 场景都摆在原点附近，换场前清掉上一场的方块和掉落物；被整格方块压过的草会变成泥土，地面一并铺回草。
+        // 场景都摆在原点附近，换场前清掉上一场的方块和玩家以外的实体；被整格方块压过的草会变成泥土，地面一并铺回草。
         BlockPos from = origin.offset(-CLEAR_RADIUS, 0, -CLEAR_RADIUS);
         BlockPos to = origin.offset(CLEAR_RADIUS, CLEAR_HEIGHT, CLEAR_RADIUS);
         command("fill " + coordinates(from) + " " + coordinates(to) + " air");
         command("fill " + coordinates(from.below()) + " " + coordinates(to.atY(origin.getY() - 1)) + " grass_block");
-        command("kill @e[type=item]");
+        command("kill @e[type=!player]");
     }
 
     void place(BlockPos offset, String state) {
         command("setblock " + coordinates(origin.offset(offset)) + " " + state);
     }
 
+    void fill(BlockPos from, BlockPos to, String state) {
+        command("fill " + coordinates(origin.offset(from)) + " " + coordinates(origin.offset(to)) + " " + state);
+    }
+
     void drop(Vec3 offset, String item) {
-        Vec3 at = at(offset);
-        command(String.format(Locale.ROOT, "summon item %.3f %.3f %.3f {Item:{id:\"%s\",count:1},PickupDelay:32767}",
-                at.x, at.y, at.z, item));
+        summon("item", at(offset), "{Item:{id:\"" + item + "\",count:1},PickupDelay:32767}");
+    }
+
+    void summon(String entity, Vec3 position, String data) {
+        command(String.format(Locale.ROOT, "summon %s %.3f %.3f %.3f %s",
+                entity, position.x, position.y, position.z, data));
     }
 
     Vec3 at(Vec3 offset) {
@@ -137,9 +144,16 @@ final class Stage {
         world.getConnection().waitForChunksRender();
     }
 
+    void pause(int ticks) {
+        context.waitTicks(ticks);
+    }
+
     void shoot(String name) {
-        // 命令回显会留在聊天栏里盖住快捷栏，拍之前清掉显示的消息；玩家发过的消息历史不清。
-        context.runOnClient(client -> client.gui.hud.getChat().clearMessages(CLEAR_SENT_HISTORY));
+        // 命令回显会留在聊天栏里盖住快捷栏，配方解锁提示会盖住右上角，拍之前都清掉；玩家发过的消息历史不清。
+        context.runOnClient(client -> {
+            client.gui.hud.getChat().clearMessages(CLEAR_SENT_HISTORY);
+            client.gui.toastManager().clear();
+        });
         context.takeScreenshot(TestScreenshotOptions.of(name).disableCounterPrefix());
     }
 

@@ -32,7 +32,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 
-/** 药材箱的九格晒料容器，晴天白天且露天时才推进。 */
+/** 晒药匾的九格晒料容器，晴天白天且露天时才推进。 */
 public final class HerbCrateBlockEntity extends BaseContainerBlockEntity {
     private static final double SECONDS_PER_TICK = 0.05;
     private static final long DAY_TICKS = 24_000L;

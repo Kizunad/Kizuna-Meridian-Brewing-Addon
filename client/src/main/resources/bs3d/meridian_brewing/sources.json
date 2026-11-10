@@ -1,12 +1,12 @@
 {
-  "repository": "Kizunad/Bong",
+  "repository": "https://github.com/Kizunad/Bong",
   "commit": "c01576513e451490bd73df12513227bb8637222b",
-  "author": "Kizunad",
-  "license": "与本仓同一版权人 Kizunad 的原创模型；Bong 该提交没有许可文件，随本仓按 PolyForm Noncommercial 1.0.0 分发",
   "models": [
     {
       "file": "iron_brazier.bbmodel",
       "path": "modelScript/metalware/tie_huo_pen/TieHuoPen_tex.bbmodel",
+      "source_blob_sha1": "467ea568eb12212ce13545c4fa564a856bcfc523",
+      "pull_request": "https://github.com/Kizunad/Bong/pull/2422",
       "sha256": "38f3de649a8b7c435e087de61d8aca45a9c49535bab94279ab3e62067c82325e",
       "conversion": "none",
       "shipped_sha256": "38f3de649a8b7c435e087de61d8aca45a9c49535bab94279ab3e62067c82325e"
@@ -14,6 +14,8 @@
     {
       "file": "iron_stove.bbmodel",
       "path": "modelScript/metalware/tie_lu_zuo/TieLuZuo_tex.bbmodel",
+      "source_blob_sha1": "632d4f12e6c6f3b8f4cfdca51b9ebc5b124c4ba8",
+      "pull_request": "https://github.com/Kizunad/Bong/pull/2422",
       "sha256": "533716a9b5db2d7a5f5b0c70d1ef0742281591c52150690655940939d311da04",
       "conversion": "none",
       "shipped_sha256": "533716a9b5db2d7a5f5b0c70d1ef0742281591c52150690655940939d311da04"
@@ -21,16 +23,36 @@
     {
       "file": "herb_knife.bbmodel",
       "path": "modelScript/models/HerbKnifeIron.bbmodel",
+      "source_blob_sha1": "b04aa76ac1beb6310fe9a03a2c090fe147d429c5",
+      "pull_request": "https://github.com/Kizunad/Bong/pull/2148",
       "sha256": "2383c8b0da38bf1d7d30d1a84a0c1f55aee38ab3b3e8ac5677a9b76ad3990ad0",
       "conversion": "group-uuids",
       "shipped_sha256": "1496742a520a24c44e85ba308b75b04383d6e43d62e8819ee7a129cd7493b53d"
     },
     {
-      "file": "herb_crate.bbmodel",
-      "path": "modelScript/models/HerbCrate.bbmodel",
-      "sha256": "2f6e4e7ab3d434fd2c184d4e92bba32839e810d3efbbe2bfa7f059833f7dad90",
-      "conversion": "blockbench-5.0-to-4.10",
-      "shipped_sha256": "0bcf6619af06d69d2df21cab62c9a83400c7ae4271cf23872bb210fb21098a44"
+      "file": "herb_knife_folded.bbmodel",
+      "path": "modelScript/models/HerbKnifeIron.bbmodel",
+      "source_blob_sha1": "b04aa76ac1beb6310fe9a03a2c090fe147d429c5",
+      "pull_request": "https://github.com/Kizunad/Bong/pull/2148",
+      "sha256": "2383c8b0da38bf1d7d30d1a84a0c1f55aee38ab3b3e8ac5677a9b76ad3990ad0",
+      "conversion": "group-uuids+fold",
+      "shipped_sha256": "cee67b52d58b0d9d859d1878928d0e47c45549798d5d468cf608e70a35e1b706",
+      "fold": {
+        "groups": [
+          "blade_spine",
+          "blade_edge"
+        ],
+        "pivot": [
+          8,
+          12,
+          8
+        ],
+        "rotation": [
+          -32,
+          0,
+          0
+        ]
+      }
     }
   ]
 }

@@ -18,7 +18,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
-/** 巫釜、火源、药材箱和 26.2 九种枯木的方块身份。 */
+/** 巫釜、火源、晒药匾和 26.2 九种枯木的方块身份。 */
 final class BrewingBlocks {
     private static final float WITCH_CAULDRON_STRENGTH = 1.0F;
     private static final float COPPER_CAULDRON_STRENGTH = 2.0F;
@@ -32,8 +32,8 @@ final class BrewingBlocks {
     private static final double COPPER_CAULDRON_HEIGHT = 11;
     private static final double BRAZIER_HEIGHT = 8;
     private static final double STOVE_HEIGHT = 12;
-    private static final double HERB_CRATE_INSET = 0.5;
-    private static final double HERB_CRATE_HEIGHT = 13;
+    private static final double HERB_CRATE_INSET = 1;
+    private static final double HERB_CRATE_HEIGHT = 5;
     private static final Map<DeadWood, Block> DEAD_LOGS = new EnumMap<>(DeadWood.class);
     private static final Map<DeadWood, Block> DEAD_WOODS = new EnumMap<>(DeadWood.class);
     static Block WITCH_CAULDRON;

@@ -13,9 +13,10 @@ import org.joml.Vector3f;
 import org.joml.Vector3fc;
 
 /**
- * 炼药客户端入口：铁火盆、铁炉座、药材箱和药刀用 Bong 的 .bbmodel 经 BS3D 放置模型绘制，枯木按方块颜色压暗。
+ * 炼药客户端入口：铁火盆、铁炉座和药刀用 Bong 的 .bbmodel 经 BS3D 放置模型绘制，枯木按方块颜色压暗。
  *
- * <p>放置模型与方块、物品同 ID。方块和方块实体类型都在 fabric 模块注册，这里只按注册 ID 查找。
+ * <p>放置模型与方块、物品同 ID；收刃药刀是导入脚本由药刀生成的另一份模型。方块和方块实体类型都在 fabric 模块注册，
+ * 这里只按注册 ID 查找。
  */
 public final class BrewingClient implements ClientModInitializer {
     static final String MOD_ID = "meridian_brewing";
@@ -29,8 +30,8 @@ public final class BrewingClient implements ClientModInitializer {
     private static final Map<String, Vector3fc> MODELS = Map.of(
             "iron_brazier", CENTERED,
             "iron_stove", CENTERED,
-            "herb_crate", CENTERED,
-            "herb_knife", BLOCK_FRAME);
+            "herb_knife", BLOCK_FRAME,
+            "herb_knife_folded", BLOCK_FRAME);
 
     @Override
     public void onInitializeClient() {
@@ -39,7 +40,6 @@ public final class BrewingClient implements ClientModInitializer {
                 origin));
         // 火盆和炉座共用一种方块实体，按方块 ID 选模型。
         PlacedModels.renderBlockEntity(blockEntityType("brew_fire"), BrewingClient::modelOf);
-        PlacedModels.renderBlockEntity(blockEntityType("herb_crate"), BrewingClient::modelOf);
         DeadWoodTint.register();
     }
 

@@ -1,15 +1,6 @@
 {
   "variants": {
-    "facing=north": {
-      "model": "meridian_brewing:block/herb_crate"
-    },
-    "facing=east": {
-      "model": "meridian_brewing:block/herb_crate"
-    },
-    "facing=south": {
-      "model": "meridian_brewing:block/herb_crate"
-    },
-    "facing=west": {
+    "": {
       "model": "meridian_brewing:block/herb_crate"
     }
   }

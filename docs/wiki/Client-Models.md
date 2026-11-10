@@ -4,43 +4,73 @@
 放置模型与枯木染色只在 `client/`（模组 ID `meridian_brewing_client`，`environment: client`），不进服务端路径。
 客户端模块硬依赖 `meridian_brewing` 和 BS3D 客户端 `backpack_storage_3d_client`。
 
-## 四件 Bong 模型
+## 三件 Bong 模型
 
-铁火盆、铁炉座、药材箱和药刀用 Bong 仓提交 `c01576513e451490bd73df12513227bb8637222b` 里的 Blockbench 模型，
-随客户端 JAR 放在 `client/src/main/resources/bs3d/meridian_brewing/`，来源、原始 SHA-256、转换方式和分发后的
-SHA-256 记在同目录 `sources.json`。
+铁火盆、铁炉座和药刀用 Bong 仓固定提交里的 Blockbench 模型，随客户端 JAR 放在
+`client/src/main/resources/bs3d/meridian_brewing/`。仓库地址、提交、源路径、Git blob SHA-1、对应 PR、
+原始与分发后的 SHA-256 和转换方式记在同目录 `sources.json`；提交号以该文件为准。
 
 - 重新导入：`python3 scripts/import_bong_models.py --bong ~/Code/Bong`。只按 `sources.json` 记的提交 `git show`
-  读文件并核对 SHA-256，不读 Bong 工作副本，也不改 Bong 仓。
+  读文件，核对 blob SHA-1 和 SHA-256，不读 Bong 工作副本，也不改 Bong 仓。
 - 校验：`python3 scripts/import_bong_models.py --check`，`check` 任务经 `checkModels` 一并执行。检查未登记文件、
-  SHA-256、Blockbench 4.x、内嵌 PNG、只有逐面 UV 的 cube、outliner 与元素一一对应、outliner 里每个组都有 UUID。
-- 药材箱原文件是 Blockbench 5.0：组属性移到了顶层 `groups`。BS3D 只读 4.x，导入时把组属性并回 outliner、
-  版本写成 4.10，几何和贴图不变（`conversion: blockbench-5.0-to-4.10`）。
-- 药刀原文件由脚本生成，outliner 里的组没有 `uuid`，BS3D 按组 UUID 建骨骼，缺了会整件导入失败。导入时按来源路径
-  和组在 outliner 里的位置补固定的 UUID（`uuid5`），几何和贴图不变（`conversion: group-uuids`）。
+  SHA-256、Blockbench 4.x、内嵌 PNG、只有逐面 UV 的 cube、outliner 与元素一一对应、outliner 里每个组都有 UUID，
+  以及收刃参数与分发文件一致。
 - 铁火盆和铁炉座逐字节原样分发（`conversion: none`）。
+- 药刀原文件由脚本生成，outliner 里的组没有 `uuid`，BS3D 按组 UUID 建骨骼，缺了会整件导入失败。导入时按来源地址
+  和组在 outliner 里的位置补固定的 UUID（`uuid5`），几何和贴图不变（`conversion: group-uuids`）。
+- 收刃药刀 `herb_knife_folded` 由导入脚本从同一源文件生成（`conversion: group-uuids+fold`）：补 UUID 后，把
+  `fold.groups` 列的刀背、刀刃两组绕转轴 `fold.pivot` 按 `fold.rotation` 转进刀柄槽，立方体和贴图不变。
+  参数只在 `sources.json` 里改，不手改分发文件。
 
 ## 放置模型接线
 
-`BrewingClient` 按 BS3D 的放置模型入口（见 BS3D `docs/wiki/Model-Resources.md`「放置模型」）登记四件模型，
-登记 ID 与方块 ID 相同：
+`BrewingClient` 按 BS3D 的放置模型入口（见 BS3D `docs/wiki/Model-Resources.md`「放置模型」）登记四份模型，
+登记 ID 与方块、物品 ID 相同：
 
 | 模型 | 原点（模型像素） | 绘制 |
 |---|---|---|
 | `iron_brazier`、`iron_stove` | (0, 0, 0)：模型以中轴为原点 | `brew_fire` 方块实体，按方块 ID 取模型 |
-| `herb_crate` | (0, 0, 0) | `herb_crate` 方块实体 |
-| `herb_knife` | (8, 0, 8)：模型按方块格画 | 只作物品 |
+| `herb_knife`、`herb_knife_folded` | (8, 0, 8)：模型按方块格画 | 只作物品 |
 
-- 方块侧：三件器具的方块状态按 `facing` 列四个变体，都指向只有粒子贴图的方块模型，几何全由方块实体绘制；
+- 方块侧：火盆和炉座的方块状态按 `facing` 列四个变体，都指向只有粒子贴图的方块模型，几何全由方块实体绘制；
   碰撞和轮廓用 `BrewingBlocks` 里按模型外框量出的形状。`FacingApparatusBlock` 让正面朝向放置的玩家，
   结构旋转和镜像时朝向一起转。
-- 物品侧：客户端 `assets/meridian_brewing/items/<id>.json` 用 `minecraft:special` 引用 `bs3d:placed`，
-  手持、物品栏和掉落物都画同一模型；`base` 模型给各视角的显示变换，药刀沿用模型自带的 `display`。
-  服务端 JAR 不带这四个物品定义。
-- 药材箱四面贴图相同，模型的装饰正面在 +Z，与 BS3D 约定的 -Z 正面相反，外观上看不出区别，未改模型。
+- 物品侧：客户端 `assets/meridian_brewing/items/<id>.json` 用 `minecraft:special` 引用 `bs3d:placed`；
+  `base` 模型给各视角的显示变换。服务端 JAR 不带这三个物品定义。
+- 药刀物品按 `minecraft:display_context` 选模型：只有掉落物（`ground`）画收刃，其余视角
+  （物品栏、手持、展示框、头上）画展开。
 - 所有方块物品取方块的翻译键（`useBlockDescriptionPrefix`），物品名与方块名相同。
-- 第一人称由 Players Animation 画全身，手持物在身体两侧：火盆、炉座和药材箱低头时看得到，药刀小，第一人称
-  看不到，第三人称在手上。
+- 第一人称由 Players Animation 画全身，手持物在身体两侧，第一人称也用第三人称视角的显示变换：
+  火盆、炉座、晒药匾和药刀低头时都在右手边看得到，第三人称在手上。
+
+### 药刀的显示变换
+
+`client/.../models/item/herb_knife.json` 的 `display` 由本仓按模型外框算出，目标是各视角都露出刀刃侧面：
+
+- `gui`：刀柄斜放，转轴在左上、尾绳在右下，展开的刀刃垂在刀柄左侧，和 Bong 的药刀图标同一方向；
+- `fixed`（展示框）：同一侧面朝外；
+- `thirdperson_*`：刀柄握在掌中，刀刃平面朝身体两侧，刃口朝前；
+- `ground`（掉落物）：和 `gui` 同样斜放、缩到 0.6，像原版工具的掉落物一样竖着绕竖轴自转，
+  转到正对时看得到收起的刀身；
+- `head` 沿用 Bong 原值；
+- `firstperson_*` 沿用 Bong 原值；装了 Players Animation 后不用。
+
+## 晒药匾
+
+晒药匾由 `scripts/draw_herb_crate.py` 生成原版方块模型和两张 16 像素贴图，生成结果随仓提交：
+
+- 外形是矮木框敞口浅底：四角 2 像素短足，匾底下两根横撑，竹编匾底四周围一圈 3 像素高的木框，
+  总高 5 像素、外沿 14 × 14 像素；前后左右对称，没有朝向。
+- 木框贴图用原版橡木木板的色板画顺纹木条，匾底用原版白桦木板的色板画压一挑一的竹篾编纹，均按固定种子生成。
+- 碰撞和轮廓是木框外框 `Block.box(1, 0, 1, 15, 5, 15)`。
+- 物品用方块模型。匾里的药材不显示。
+- 旧存档的晒药匾方块状态带 `facing`，读入时丢掉该属性，按无朝向的默认状态显示；方块实体里的库存不受影响。
+
+## 物品图标
+
+药方、枯草灰、干苔、干虞美人、河豚干、毒薯片、浆果泥、药渣各有本仓 16 像素图标
+（`fabric/.../textures/item/<id>.png`），物品模型 `item/generated` 单层。图标逐像素手画，PNG 就是源文件，
+直接改 PNG；风格贴近原版物品：本色加深勾边、左上受光、透明底。
 
 ## 巫釜与铜釜
 
@@ -82,5 +112,7 @@ flock /tmp/kizuna-gradle.lock env ALSOFT_DRIVERS=null LIBGL_ALWAYS_SOFTWARE=1 \
 
 ## 许可
 
-四件模型与本仓同一版权人（Kizunad），Bong 该提交没有许可文件，随本仓按 PolyForm Noncommercial 1.0.0 分发。
-巫釜、铜釜贴图和枯木染色是本仓原创；枯木引用的是原版贴图路径，JAR 不带原版贴图。
+铁火盆、铁炉座和药刀模型来自 [Bong](https://github.com/Kizunad/Bong)：铁火盆、铁炉座对应
+[PR #2422](https://github.com/Kizunad/Bong/pull/2422)，药刀对应 [PR #2148](https://github.com/Kizunad/Bong/pull/2148)。
+照 BS3D 引入 Bong 装备的做法，只记来源（`sources.json`），不另写许可。
+巫釜、铜釜、晒药匾的模型和贴图，8 个物品图标和枯木染色是本仓原创；枯木引用的是原版贴图路径，JAR 不带原版贴图。

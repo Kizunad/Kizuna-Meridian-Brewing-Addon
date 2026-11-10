@@ -3,7 +3,7 @@ package dev.kizuna.meridian.brewing.server;
 import java.util.ArrayList;
 import java.util.List;
 
-/** 九格药材箱的服务端晒料状态。 */
+/** 九格晒药匾的服务端晒料状态。 */
 public final class HerbCrateState {
     public static final int SLOT_COUNT = 9;
     private final List<IngredientBatch> slots = new ArrayList<>();
@@ -19,18 +19,18 @@ public final class HerbCrateState {
 
     public BrewActionResult insert(IngredientBatch batch) {
         if (batch == null) {
-            return BrewActionResult.returned("药材箱不能放入空投料");
+            return BrewActionResult.returned("晒药匾不能放入空投料");
         }
         if (slots.size() >= SLOT_COUNT) {
-            return BrewActionResult.returned("药材箱已满", batch);
+            return BrewActionResult.returned("晒药匾已满", batch);
         }
         PreparationRecipe recipe = PreparationRecipes.all().get(batch.itemId());
         if (batch.preparation() != PreparationKind.RAW || recipe == null
                 || recipe.method() != PreparationMethod.SUN_DRY) {
-            return BrewActionResult.returned("药材箱只接受需要晒制的生料", batch);
+            return BrewActionResult.returned("晒药匾只接受需要晒制的生料", batch);
         }
         slots.add(batch);
-        return BrewActionResult.accepted("药材已放入药材箱");
+        return BrewActionResult.accepted("药材已放入晒药匾");
     }
 
     public void tick(double seconds, DryingConditions conditions) {
@@ -70,7 +70,7 @@ public final class HerbCrateState {
     public void restore(Snapshot snapshot) {
         if (snapshot == null || !Double.isFinite(snapshot.dryingSeconds())
                 || snapshot.dryingSeconds() < 0.0 || snapshot.slots().size() > SLOT_COUNT) {
-            throw new IllegalArgumentException("药材箱快照不完整");
+            throw new IllegalArgumentException("晒药匾快照不完整");
         }
         slots.clear();
         slots.addAll(snapshot.slots());
@@ -80,7 +80,7 @@ public final class HerbCrateState {
     public record Snapshot(List<IngredientBatch> slots, double dryingSeconds) {
         public Snapshot {
             if (slots == null) {
-                throw new IllegalArgumentException("药材箱槽位不能为空");
+                throw new IllegalArgumentException("晒药匾槽位不能为空");
             }
             slots = List.copyOf(slots);
         }

@@ -5,9 +5,10 @@
   python3 scripts/import_bong_models.py --bong ~/Code/Bong   按 sources.json 记的提交重新导入
   python3 scripts/import_bong_models.py --check              只校验已分发的模型，不需要 Bong 仓
 
-来源只用 sources.json 记的提交（git show 读取），不读 Bong 工作副本，也不改 Bong 仓。
-BS3D 只读 Blockbench 4.x；5.0 文件把 groups 里的组属性并回 outliner 后按 4.10 分发，几何与贴图不变。
+来源只用 sources.json 记的提交（git show 读取），不读 Bong 工作副本，也不改 Bong 仓；导入前核对源文件的
+Git blob SHA-1 和 SHA-256。
 BS3D 按组 UUID 建骨骼；脚本生成、组没有 UUID 的文件按来源路径和组在 outliner 里的位置补上固定 UUID。
+收刃药刀由同一源文件生成：补 UUID 后把 sources.json 的 fold 记的组绕给定枢轴转给定角度，立方体不动。
 """
 
 import argparse
@@ -22,30 +23,15 @@ ROOT = Path(__file__).resolve().parent.parent
 MODELS = ROOT / 'client/src/main/resources/bs3d/meridian_brewing'
 SOURCES = MODELS / 'sources.json'
 EMBEDDED_PNG = 'data:image/png;base64,'
-CONVERSIONS = ('none', 'blockbench-5.0-to-4.10', 'group-uuids')
+CONVERSIONS = ('none', 'group-uuids', 'group-uuids+fold')
 
 
 def sha256(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def bong_file(bong, commit, path):
-    result = subprocess.run(['git', '-C', str(bong), 'show', f'{commit}:{path}'], capture_output=True, check=True)
-    return result.stdout
-
-
-def outliner_4x(nodes, groups):
-    # 5.0 的 outliner 只剩 uuid 和子节点，组名、枢轴、旋转和可见性都在 groups 里；4.x 把它们写在节点上。
-    converted = []
-    for node in nodes:
-        if isinstance(node, str):
-            converted.append(node)
-            continue
-        group = {key: value for key, value in groups[node['uuid']].items() if not key.startswith('_')}
-        group['isOpen'] = node.get('isOpen', False)
-        group['children'] = outliner_4x(node['children'], groups)
-        converted.append(group)
-    return converted
+def git(bong, *arguments):
+    return subprocess.run(['git', '-C', str(bong), *arguments], capture_output=True, check=True).stdout
 
 
 def add_group_uuids(nodes, seed, position):
@@ -58,16 +44,21 @@ def add_group_uuids(nodes, seed, position):
         add_group_uuids(node['children'], seed, node_position)
 
 
-def convert(source, conversion, origin):
-    if conversion == 'none':
+def fold(document, spec):
+    # 收刃：刀背、刀刃两组的枢轴移到转轴上并转过固定角度，BS3D 按组枢轴和旋转画骨骼。
+    groups = {group['name']: group for group in outliner_groups(document['outliner'])}
+    for name in spec['groups']:
+        groups[name]['origin'] = spec['pivot']
+        groups[name]['rotation'] = spec['rotation']
+
+
+def convert(source, model, origin):
+    if model['conversion'] == 'none':
         return source
     document = json.loads(source)
-    if conversion == 'group-uuids':
-        add_group_uuids(document['outliner'], origin, '')
-    else:
-        groups = {group['uuid']: group for group in document.pop('groups')}
-        document['outliner'] = outliner_4x(document['outliner'], groups)
-        document['meta']['format_version'] = '4.10'
+    add_group_uuids(document['outliner'], origin, '')
+    if model['conversion'] == 'group-uuids+fold':
+        fold(document, model['fold'])
     return json.dumps(document, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
 
 
@@ -84,6 +75,19 @@ def outliner_groups(nodes):
         if not isinstance(node, str):
             yield node
             yield from outliner_groups(node['children'])
+
+
+def check_fold(model, document):
+    spec = model.get('fold')
+    if (model['conversion'] == 'group-uuids+fold') != (spec is not None):
+        return [f'{model["file"]}：fold 只随 group-uuids+fold 一起登记']
+    if spec is None:
+        return []
+    groups = {group['name']: group for group in outliner_groups(document['outliner'])}
+    if any(groups.get(name, {}).get('origin') != spec['pivot'] or groups[name].get('rotation') != spec['rotation']
+           for name in spec['groups']):
+        return [f'{model["file"]}：收刃的组枢轴或旋转与 sources.json 不符']
+    return []
 
 
 def check_document(name, data):
@@ -124,16 +128,19 @@ def check(sources):
         if model['conversion'] not in CONVERSIONS:
             errors.append(f'{model["file"]}：未知转换 {model["conversion"]}')
         errors.extend(check_document(model['file'], data))
+        errors.extend(check_fold(model, json.loads(data)))
     return errors
 
 
 def import_models(sources, bong):
     for model in sources['models']:
-        source = bong_file(bong, sources['commit'], model['path'])
-        if sha256(source) != model['sha256']:
-            raise SystemExit(f'{model["path"]}：提交 {sources["commit"]} 里的文件与登记的 SHA-256 不符')
-        origin = f'https://github.com/{sources["repository"]}/blob/{sources["commit"]}/{model["path"]}#outliner'
-        shipped = convert(source, model['conversion'], origin)
+        revision = f'{sources["commit"]}:{model["path"]}'
+        blob = git(bong, 'rev-parse', revision).decode().strip()
+        source = git(bong, 'show', revision)
+        if blob != model['source_blob_sha1'] or sha256(source) != model['sha256']:
+            raise SystemExit(f'{model["path"]}：提交 {sources["commit"]} 里的文件与登记的 blob SHA-1 或 SHA-256 不符')
+        origin = f'{sources["repository"]}/blob/{sources["commit"]}/{model["path"]}#outliner'
+        shipped = convert(source, model, origin)
         (MODELS / model['file']).write_bytes(shipped)
         model['shipped_sha256'] = sha256(shipped)
     SOURCES.write_text(json.dumps(sources, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')

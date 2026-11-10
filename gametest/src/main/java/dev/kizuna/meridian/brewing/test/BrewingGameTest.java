@@ -302,7 +302,7 @@ public final class BrewingGameTest {
 
     @GameTest(maxTicks = DEFAULT_TIMEOUT)
     public void blockEntitiesRoundTripAndCrateRejectsNonSunDryItem(GameTestHelper context) {
-        // 原版方块实体读写保留药材、火种和釜状态，药材箱拒收不适用的材料。
+        // 原版方块实体读写保留药材、火种和釜状态，晒药匾拒收不适用的材料。
         ServerLevel level = context.getLevel();
         ServerPlayer player = BrewingTestPlayers.create(context);
         BlockPos base = context.absolutePos(new BlockPos(STRUCTURE_X, STRUCTURE_Y, STRUCTURE_Z));
@@ -324,7 +324,7 @@ public final class BrewingGameTest {
         HerbCrateBlockEntity crate = (HerbCrateBlockEntity) level.getBlockEntity(cratePos);
         crate.setItem(0, new ItemStack(Items.MOSS_BLOCK, 2));
         context.assertTrue(!crate.canPlaceItem(1, new ItemStack(Items.PUFFERFISH)),
-                "非晒制药材仍能进入药材箱");
+                "非晒制药材仍能进入晒药匾");
 
         BrewCauldronBlockEntity restoredCauldron = new BrewCauldronBlockEntity(
                 cauldronPos, level.getBlockState(cauldronPos), VesselKind.WITCH_CAULDRON);
@@ -339,7 +339,7 @@ public final class BrewingGameTest {
                 cratePos, level.getBlockState(cratePos));
         restoredCrate.loadCustomOnly(input(level, save(level, crate)));
         context.assertTrue(restoredCrate.getItem(0).getCount() == 2,
-                "药材箱库存没有经过存档往返");
+                "晒药匾库存没有经过存档往返");
         level.destroyBlock(cratePos, true, player);
         context.runAfterDelay(2, () -> {
             context.assertItemEntityPresent(Items.MOSS_BLOCK);

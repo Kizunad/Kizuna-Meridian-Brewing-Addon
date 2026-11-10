@@ -5,7 +5,9 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.Containers;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityTicker;
@@ -14,12 +16,21 @@ import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
-/** 九格药材箱的右键入口。 */
-final class HerbCrateBlock extends FacingApparatusBlock implements EntityBlock {
+/** 九格晒药匾的右键入口。外形前后左右对称，没有朝向；碰撞与轮廓取木框外沿。 */
+final class HerbCrateBlock extends Block implements EntityBlock {
+    private final VoxelShape shape;
+
     HerbCrateBlock(VoxelShape shape, BlockBehaviour.Properties properties) {
-        super(shape, properties);
+        super(properties);
+        this.shape = shape;
+    }
+
+    @Override
+    protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+        return shape;
     }
 
     @Override
