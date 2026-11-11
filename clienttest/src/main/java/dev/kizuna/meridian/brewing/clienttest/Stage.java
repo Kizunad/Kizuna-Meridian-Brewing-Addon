@@ -25,6 +25,8 @@ final class Stage {
     private static final int CLEAR_RADIUS = 16;
     private static final int CLEAR_HEIGHT = 4;
     private static final boolean CLEAR_SENT_HISTORY = false;
+    private static final String ONLY_PROPERTY = "meridian.brewing.clienttest.only";
+    private static final String ALL_SCENES = "all";
     private final ClientGameTestContext context;
     private final TestSingleplayerContext world;
     private final BlockPos origin;
@@ -33,6 +35,13 @@ final class Stage {
         this.context = context;
         this.world = world;
         this.origin = origin;
+    }
+
+    /** 这一场要不要跑：构建参数 {@code -PclienttestOnly=<场景>} 只跑那一场，缺省全部都跑。 */
+    static boolean selected(String scene) {
+        // 每一场各自建世界；单看一场时不用等别的场景拍完。
+        String only = System.getProperty(ONLY_PROPERTY, ALL_SCENES);
+        return only.equals(ALL_SCENES) || only.equals(scene);
     }
 
     static Stage prepare(ClientGameTestContext context, TestSingleplayerContext world) {

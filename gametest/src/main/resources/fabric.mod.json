@@ -20,7 +20,8 @@
       "dev.kizuna.meridian.brewing.fabric.BrewingPlayFixGameTest",
       "dev.kizuna.meridian.brewing.fabric.BrewingRecipeGameTest",
       "dev.kizuna.meridian.brewing.fabric.BrewingAutomationGameTest",
-      "dev.kizuna.meridian.brewing.fabric.BrewingQiGameTest"
+      "dev.kizuna.meridian.brewing.fabric.BrewingQiGameTest",
+      "dev.kizuna.meridian.brewing.fabric.BrewingWitchHutGameTest"
     ]
   },
   "depends": {

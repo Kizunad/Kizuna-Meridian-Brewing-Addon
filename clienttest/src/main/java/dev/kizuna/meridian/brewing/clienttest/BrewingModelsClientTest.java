@@ -28,6 +28,8 @@ import net.minecraft.world.phys.Vec3;
 public final class BrewingModelsClientTest implements FabricClientGameTest {
     private static final String BREWING = "meridian_brewing:";
     private static final Identifier CREATIVE_TAB = Identifier.fromNamespaceAndPath("meridian_brewing", "brewing");
+    /** 器具、模型、药刀、玩法和自动化这些场景共用一个平坦世界，按一场选。 */
+    private static final String SCENE = "models";
     private static final int WINDOW_WIDTH = 1280;
     private static final int WINDOW_HEIGHT = 960;
     private static final List<String> APPARATUS =
@@ -94,6 +96,9 @@ public final class BrewingModelsClientTest implements FabricClientGameTest {
 
     @Override
     public void runTest(ClientGameTestContext context) {
+        if (!Stage.selected(SCENE)) {
+            return;
+        }
         context.getInput().resizeWindow(WINDOW_WIDTH, WINDOW_HEIGHT);
         try (TestSingleplayerContext world = context.worldBuilder().create()) {
             var stage = Stage.prepare(context, world);

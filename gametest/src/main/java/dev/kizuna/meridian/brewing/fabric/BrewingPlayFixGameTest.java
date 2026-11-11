@@ -23,6 +23,7 @@ import dev.kizuna.meridian.protocol.pb.BodyMessages.Realm;
 import dev.kizuna.meridian.technique.fabric.TechniqueScrollItem;
 import dev.kizuna.meridian.vanilla.fabric.VanillaDamageFabric;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -42,6 +43,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
@@ -359,6 +361,35 @@ public final class BrewingPlayFixGameTest {
         CreativeModeTab brewing = BuiltInRegistries.CREATIVE_MODE_TAB.getValue(BrewingCreativeTab.ID);
         long brews = brewing.getDisplayItems().stream().filter(BrewItemStacks::isBrew).count();
         context.assertTrue(brews == QUALITY_BREWS, "炼药页的成药数不对：" + brews);
+        Item recipe = BrewingItems.item("brew_recipe");
+        List<String> recipeKinds = brewing.getDisplayItems().stream()
+                .filter(stack -> stack.is(recipe))
+                .map(stack -> String.valueOf(stack.get(BrewingComponents.RECIPE_KIND)))
+                .toList();
+        List<String> everyKind = Arrays.stream(BrewKind.values()).map(BrewKind::path).toList();
+        context.assertTrue(recipeKinds.equals(everyKind), "炼药页没有按药方各列一张：" + recipeKinds);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void recipeTooltipNamesItsBrew(GameTestHelper context) {
+        // 每张药方的提示框写它记的是哪一味药，语言键指向这味药的药名；认不出的药方写字迹模糊。
+        for (BrewKind kind : BrewKind.values()) {
+            List<Component> lines = BrewTooltipLines.lines(RecipeScrollItem.stack(kind));
+            context.assertTrue(lines.size() == 1, "药方提示应只有一行：" + kind + " " + lines);
+            var keys = BrewingTestPlayers.translationKeys(lines.get(0));
+            context.assertTrue(keys.contains("tooltip.meridian_brewing.recipe")
+                            && keys.contains("potion.meridian_brewing_" + kind.path()),
+                    "药方提示没写药名：" + kind + " " + keys);
+            String chinese = BrewTexts.chinese(BrewCauldron.recipeName(kind));
+            context.assertFalse(chinese.contains("potion."), "药名没有中文：" + chinese);
+        }
+        ItemStack faded = RecipeScrollItem.stack(BrewKind.QI_GATHER);
+        faded.set(BrewingComponents.RECIPE_KIND, "unknown_brew");
+        var fadedKeys = BrewingTestPlayers.translationKeys(BrewTooltipLines.lines(faded).get(0));
+        context.assertTrue(fadedKeys.contains("tooltip.meridian_brewing.recipe.illegible"),
+                "认不出的药方没写字迹模糊：" + fadedKeys);
+        context.assertTrue(BrewTooltipLines.lines(new ItemStack(Items.GLASS_BOTTLE)).isEmpty(), "玻璃瓶也加了提示行");
         context.succeed();
     }
 

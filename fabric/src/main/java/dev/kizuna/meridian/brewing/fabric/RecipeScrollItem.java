@@ -55,7 +55,15 @@ final class RecipeScrollItem extends Item {
         return BrewText.message("recipe.learned", name);
     }
 
-    private static Optional<BrewKind> kind(ItemStack stack) {
+    /** 记着某个药方的一张羊皮纸，和女巫掉落、小屋箱子里的是同一份物品数据。 */
+    static ItemStack stack(BrewKind kind) {
+        // 物品默认组件是枯竭药方，这里按药方覆盖。
+        ItemStack stack = new ItemStack(BrewingItems.item("brew_recipe"));
+        stack.set(BrewingComponents.RECIPE_KIND, kind.path());
+        return stack;
+    }
+
+    static Optional<BrewKind> kind(ItemStack stack) {
         // 没有药方组件或组件认不出的羊皮纸算字迹模糊，不再默认当成枯竭药方。
         String path = stack.get(BrewingComponents.RECIPE_KIND);
         if (path == null) {

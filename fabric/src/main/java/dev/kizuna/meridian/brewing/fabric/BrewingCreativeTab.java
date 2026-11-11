@@ -19,7 +19,7 @@ import net.minecraft.world.item.alchemy.PotionContents;
 import net.minecraft.world.level.ItemLike;
 
 /**
- * 炼药独占一页创造栏：器具、工具和药材在前，枯木其次，最后是每种巫药每种形态的四档品质。
+ * 炼药独占一页创造栏：器具、药刀、六张药方和药材在前，枯木其次，最后是每种巫药每种形态的四档品质。
  *
  * <p>原版会按药水登记在食物与饮品、战斗页和搜索页里列出巫药的普通、喷溅、滞留药水和药箭。
  * 这些没有品质组件，喝了不起作用，所以从所有页里拿掉。</p>
@@ -28,9 +28,7 @@ public final class BrewingCreativeTab {
     public static final Identifier ID = Identifier.fromNamespaceAndPath(BrewingFabric.MOD_ID, "brewing");
     // 瓶装的只有内服和喷溅两种；涂、掷、扇、雾是功法对同一瓶药的用法。
     private static final List<BrewUse> BOTTLED_USES = List.of(BrewUse.DRINK, BrewUse.SPLASH);
-    private static final List<String> ITEM_ORDER = List.of(
-            "herb_knife",
-            "brew_recipe",
+    private static final List<String> MATERIAL_ORDER = List.of(
             "withered_bush_ash",
             "dry_moss",
             "dry_poppy",
@@ -49,7 +47,10 @@ public final class BrewingCreativeTab {
                 .title(Component.translatable("itemGroup.meridian_brewing.brewing"))
                 .icon(() -> new ItemStack(BrewingBlocks.WITCH_CAULDRON))
                 .displayItems((context, output) -> {
-                    entries().forEach(output::accept);
+                    apparatus().forEach(output::accept);
+                    output.accept(BrewingItems.item("herb_knife"));
+                    recipes().forEach(output::accept);
+                    materials().forEach(output::accept);
                     qualityBrews().forEach(output::accept);
                 })
                 .build();
@@ -66,6 +67,15 @@ public final class BrewingCreativeTab {
                     addQualities(stacks, kind, use);
                 }
             }
+        }
+        return List.copyOf(stacks);
+    }
+
+    /** 每个药方一张，和女巫掉落、小屋箱子里的同一份物品数据。 */
+    static List<ItemStack> recipes() {
+        List<ItemStack> stacks = new ArrayList<>();
+        for (BrewKind kind : BrewKind.values()) {
+            stacks.add(RecipeScrollItem.stack(kind));
         }
         return List.copyOf(stacks);
     }
@@ -90,15 +100,16 @@ public final class BrewingCreativeTab {
         output.getSearchTabStacks().removeIf(BrewingCreativeTab::qualitylessBrew);
     }
 
-    private static List<ItemLike> entries() {
+    private static List<ItemLike> apparatus() {
         // 搭巫釜结构要用的器具排最前，便于直接取用。
+        return List.of(BrewingBlocks.WITCH_CAULDRON, BrewingBlocks.COPPER_CAULDRON, BrewingBlocks.IRON_BRAZIER,
+                BrewingBlocks.IRON_STOVE, BrewingBlocks.HERB_CRATE);
+    }
+
+    private static List<ItemLike> materials() {
+        // 药材、药渣，后面接枯木原木和木头。
         var result = new ArrayList<ItemLike>();
-        result.add(BrewingBlocks.WITCH_CAULDRON);
-        result.add(BrewingBlocks.COPPER_CAULDRON);
-        result.add(BrewingBlocks.IRON_BRAZIER);
-        result.add(BrewingBlocks.IRON_STOVE);
-        result.add(BrewingBlocks.HERB_CRATE);
-        ITEM_ORDER.forEach(path -> result.add(BrewingItems.item(path)));
+        MATERIAL_ORDER.forEach(path -> result.add(BrewingItems.item(path)));
         var logs = BrewingBlocks.deadLogs();
         var woods = BrewingBlocks.deadWoods();
         for (BrewingBlocks.DeadWood wood : BrewingBlocks.DeadWood.values()) {

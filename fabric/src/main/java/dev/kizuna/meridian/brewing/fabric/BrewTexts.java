@@ -67,13 +67,20 @@ final class BrewTexts {
                 BrewQiPayment.amount(qi.ambient()), BrewQiPayment.amount(qi.self()));
     }
 
-    /** 进度行加上耗元，例如「… · 耗元 2.4/6.0（环境 1.8 · 自身 0.6）」；关掉耗元时不写这一段。 */
+    /**
+     * 进度行加上耗元，例如「… · 耗元 2.4/6.0（环境 1.8 · 自身 0.6）」；欠着真元时再红字写「真元不济，欠 0.3/0.8」。
+     * 关掉耗元时不写这一段。
+     */
     static MutableComponent progress(BrewProgress progress, BrewQiTally qi) {
         MutableComponent line = progress(progress);
         if (qi.total() > 0) {
             appendPart(line, component(BrewText.message("progress.qi", BrewQiPayment.amount(qi.paid()),
                     BrewQiPayment.amount(qi.total()), BrewQiPayment.amount(qi.ambient()),
                     BrewQiPayment.amount(qi.self()))));
+        }
+        if (qi.owing()) {
+            appendPart(line, component(BrewText.message("progress.qi_owed", BrewQiPayment.amount(qi.arrears()),
+                    BrewQiPayment.amount(qi.graceQi()))).withStyle(ChatFormatting.RED));
         }
         return line;
     }

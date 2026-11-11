@@ -5,7 +5,10 @@
   "name": "炼药客户端截图验收",
   "environment": "client",
   "entrypoints": {
-    "fabric-client-gametest": ["dev.kizuna.meridian.brewing.clienttest.BrewingModelsClientTest"]
+    "fabric-client-gametest": [
+      "dev.kizuna.meridian.brewing.clienttest.BrewingModelsClientTest",
+      "dev.kizuna.meridian.brewing.clienttest.WitchHutClientTest"
+    ]
   },
   "depends": {"fabric-api": "*", "meridian_brewing": "*", "meridian_brewing_client": "*"}
 }

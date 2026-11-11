@@ -13,6 +13,7 @@ import dev.kizuna.meridian.protocol.BodyProtobuf;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -26,7 +27,7 @@ import net.minecraft.world.level.GameType;
 
 /**
  * 熬药耗真元：每推进一秒付一锅的 1/30，先取釜所在区域的环境真元，不够的从施法者已开经脉里扣；
- * 起熬前估不够就不起熬，中途付不起就中断。
+ * 起熬前估不够就不起熬；中途付不满记欠付，下一秒连欠的一起要，欠付超过 3 秒的份才中断。
  *
  * <p>环境速率是同一区块里所有吐纳身体和装置共用的，所以分两批跑：「环境够」单独一批，
  * 其余放进「占满」批，每个测试每 tick 先用一个大额取用把本区块这一秒的速率占满，再推进熬药。
@@ -43,7 +44,12 @@ public final class BrewingQiGameTest {
     private static final int CLEAN_AMBIENT_STEPS = 4;
     private static final int SELF_STEPS = 5;
     private static final int EXHAUST_BEFORE = 2;
-    private static final int OVERLAY_TICKS = 1;
+    /** 占位宽限 3 秒：身上剩 0.1 元时欠 0.16、0.42、0.68 都不超过 0.78，第四秒欠到 0.94 才断锅。 */
+    private static final int OWING_STEPS = 3;
+    private static final int OWED_SECONDS = 2;
+    private static final String OWED_KEY = BrewText.MESSAGE_PREFIX + "progress.qi_owed";
+    /** 清空以后吐纳每秒往经脉里回的一点（实测 0.0135）；欠付只断言到这个余量以内。 */
+    private static final double BREATH_SLACK = 0.05;
     private static final double HOG_AMOUNT = 1.0e6;
     private static final double QI_DELTA = 1e-6;
     private static final double LOW_SELF = 1.0;
@@ -57,7 +63,7 @@ public final class BrewingQiGameTest {
         // 窗尾不满一秒的那一次 Human 只按剩下的时长给，差额由自身补，所以只要求大多数秒是纯环境付。
         Brew brew = start(context, BrewingTestPlayers::stockQi);
         RegionView first = region(brew);
-        double share = brew.cauldron().qiTally().orElseThrow().nextShare();
+        double share = brew.cauldron().qiTally().orElseThrow().share();
         context.assertTrue(first.getSpareAbsorptionPerSecond() >= share,
                 "测试区域的剩余速率不够一秒的份额，场地前提不成立：" + first.getSpareAbsorptionPerSecond());
         var samples = new ArrayList<Sample>();
@@ -149,12 +155,12 @@ public final class BrewingQiGameTest {
     }
 
     @GameTest(environment = SATURATED_BATCH, maxTicks = TIMEOUT)
-    public void runningOutMidBrewInterruptsWithoutScoring(GameTestHelper context) {
-        // 起熬时身上灌满、够一锅，熬了两秒后身上只剩 0.1 元：下一秒付不起，熬制中断，生药留在釜里，
-        // 本次累计清空，动作栏提示真元不济。
+    public void owingWithinGraceKeepsBrewingButBeyondItInterrupts(GameTestHelper context) {
+        // 起熬时身上灌满，熬了两秒后身上只剩 0.1 元、环境速率占满：下一秒扣光 0.1，欠 0.16，
+        // 之后每秒再欠约一份（吐纳会往经脉里回一点，也是有多少扣多少）。欠付不超过 3 秒的份（0.78）时照熬，
+        // 动作栏红字写真元不济；第四次付不上欠到 0.9 以上，熬制中断，生药留在釜里，本次累计清空。
         Hog hog = new Hog(context);
         var brew = new Brew[1];
-        var interrupted = new BrewActionResult[1];
         int[] step = {0};
         context.onEachTick(() -> {
             hog.take();
@@ -164,34 +170,109 @@ public final class BrewingQiGameTest {
             // 断言失败时停在 -1，后面的步骤不再跑：同一 tick 里到期的事件 GameTest 会全跑完，最后一个错误才被报出来。
             int tick = step[0];
             step[0] = -1;
+            int owing = tick - EXHAUST_BEFORE;
             if (tick == 0) {
                 brew[0] = start(context, BrewingTestPlayers::stockQi);
             } else if (tick <= EXHAUST_BEFORE) {
+                advance(context, brew[0]);
+                context.assertFalse(brew[0].cauldron().qiTally().orElseThrow().owing(), "身上够时也记了欠付");
+            } else if (owing <= OWING_STEPS) {
+                if (owing == 1) {
+                    context.assertFalse(overlayKeys(brew[0]).contains(OWED_KEY), "还没欠付动作栏就写了真元不济");
+                    BrewingTestPlayers.setQi(brew[0].player(), DRAINED_SELF);
+                }
                 Sample sample = advance(context, brew[0]);
-                context.assertTrue(sample.accepted(), "身上够时也中断了：" + sample);
-            } else if (tick == 1 + EXHAUST_BEFORE) {
-                BrewingTestPlayers.setQi(brew[0].player(), DRAINED_SELF);
-                interrupted[0] = brew[0].cauldron().advanceTechniqueBrew(brew[0].player(), drawId());
-                context.assertFalse(interrupted[0].accepted(), "身上只剩 0.1 元还在熬");
-                context.assertTrue(interrupted[0].message().equals(BrewText.message("technique.qi_short")),
-                        "中断原因不对：" + interrupted[0].message());
+                context.assertTrue(self(brew[0].player()) < QI_DELTA, "身上有多少就该扣多少，扣完还剩：" + sample);
+                context.assertTrue(Math.abs(sample.selfDrop() - sample.self()) < QI_DELTA,
+                        "施法者身上少的和自身付的不一样：" + sample);
+                if (owing == 1) {
+                    context.assertTrue(Math.abs(sample.self() - DRAINED_SELF) < QI_DELTA, "没把剩下的 0.1 扣走：" + sample);
+                }
+                BrewQiTally tally = brew[0].cauldron().qiTally().orElseThrow();
+                double owedAtMost = owing * tally.share() - DRAINED_SELF;
+                context.assertTrue(tally.arrears() <= owedAtMost + QI_DELTA
+                                && tally.arrears() > owedAtMost - BREATH_SLACK,
+                        "欠付不对：" + tally.arrears() + "，应略少于 " + owedAtMost);
+                context.assertFalse(tally.beyondGrace(), "欠付没超过 3 秒的份就判超了：" + tally.arrears());
+            } else if (owing == OWING_STEPS + 1) {
+                context.assertTrue(overlayKeys(brew[0]).contains(OWED_KEY), "欠付时动作栏没写真元不济");
+                BrewActionResult interrupted = brew[0].cauldron().advanceTechniqueBrew(brew[0].player(), drawId());
+                context.assertFalse(interrupted.accepted(), "欠付超过宽限还在熬");
+                context.assertTrue(interrupted.message().equals(BrewText.message("technique.qi_short")),
+                        "中断原因不对：" + interrupted.message());
                 BrewCauldron state = brew[0].cauldron().cauldron();
                 context.assertTrue(state.state() == BrewCauldronState.RAW, "中断后釜没回到生药：" + state.state());
                 context.assertTrue(state.brewElapsedSeconds() == 0, "中断后熬制累计没清空");
                 context.assertTrue(brew[0].cauldron().qiTally().isEmpty(), "中断后耗元账还在");
-                context.assertTrue(Math.abs(self(brew[0].player()) - DRAINED_SELF) < QI_DELTA,
-                        "付不起的那一秒不该扣身上的零头：" + self(brew[0].player()));
-            } else if (tick == 1 + EXHAUST_BEFORE + OVERLAY_TICKS) {
-                List<String> keys = new ArrayList<>();
-                BrewingTestPlayers.overlays(brew[0].player())
-                        .forEach(line -> keys.addAll(BrewingTestPlayers.translationKeys(line.text())));
-                context.assertTrue(keys.contains(BrewText.MESSAGE_PREFIX + "technique.qi_short"),
-                        "动作栏没有提示真元不济：" + keys);
+                context.assertTrue(self(brew[0].player()) < QI_DELTA, "身上的零头应在欠付那一秒扣光：" + self(brew[0].player()));
+            } else {
+                context.assertTrue(overlayKeys(brew[0]).contains(BrewText.MESSAGE_PREFIX + "technique.qi_short"),
+                        "动作栏没有提示真元不济、熬药中断");
                 BrewingTestPlayers.close(brew[0].player());
                 context.succeed();
             }
             step[0] = tick + 1;
         });
+    }
+
+    @GameTest(environment = SATURATED_BATCH, maxTicks = TIMEOUT)
+    public void arrearsArePaidBackOnceQiReturns(GameTestHelper context) {
+        // 环境速率占满、身上清零：两秒各欠约一份。第三秒身上灌满，这一秒连本带欠一起付，欠付清零，
+        // 动作栏不再写真元不济，账上已付等于推进三秒应付的。
+        Hog hog = new Hog(context);
+        var brew = new Brew[1];
+        int[] step = {0};
+        context.onEachTick(() -> {
+            hog.take();
+            if (step[0] < 0) {
+                return;
+            }
+            // 断言失败时停在 -1，后面的步骤不再跑。
+            int tick = step[0];
+            step[0] = -1;
+            if (tick == 0) {
+                brew[0] = start(context, BrewingTestPlayers::stockQi);
+                BrewingTestPlayers.setQi(brew[0].player(), 0);
+            } else if (tick <= OWED_SECONDS) {
+                advance(context, brew[0]);
+                BrewQiTally tally = brew[0].cauldron().qiTally().orElseThrow();
+                context.assertTrue(tally.arrears() > tick * tally.share() - BREATH_SLACK,
+                        "身上清零、环境占满时每秒该欠约一份：" + tally.arrears());
+            } else if (tick == OWED_SECONDS + 1) {
+                context.assertTrue(lastOverlayKeys(brew[0]).contains(OWED_KEY), "欠付时动作栏没写真元不济");
+                BrewingTestPlayers.stockQi(brew[0].player());
+                double owed = brew[0].cauldron().qiTally().orElseThrow().nextPayment();
+                Sample sample = advance(context, brew[0]);
+                BrewQiTally tally = brew[0].cauldron().qiTally().orElseThrow();
+                context.assertTrue(owed > tick * tally.share() - BREATH_SLACK, "这一秒要的没有带上前面欠的：" + owed);
+                context.assertTrue(Math.abs(sample.self() - owed) < QI_DELTA,
+                        "真元回来的这一秒没有连欠的一起付：" + sample);
+                context.assertFalse(tally.owing(), "补付以后还欠着：" + tally.arrears());
+                context.assertTrue(Math.abs(tally.paid() - tally.due()) < QI_DELTA, "已付和应付对不上：" + tally);
+            } else {
+                context.assertFalse(lastOverlayKeys(brew[0]).contains(OWED_KEY), "付清以后动作栏还写真元不济");
+                System.out.println("[熬药耗元] 欠两秒后补付：" + brew[0].cauldron().qiTally().orElseThrow());
+                finish(context, brew[0]);
+            }
+            step[0] = tick + 1;
+        });
+    }
+
+    private static List<String> overlayKeys(Brew brew) {
+        // 到目前为止发给施法者的全部动作栏里用到的语言键。
+        List<String> keys = new ArrayList<>();
+        BrewingTestPlayers.overlays(brew.player())
+                .forEach(line -> keys.addAll(BrewingTestPlayers.translationKeys(line.text())));
+        return keys;
+    }
+
+    private static Set<String> lastOverlayKeys(Brew brew) {
+        // 最近一行动作栏用到的语言键；还没发过就是空的。
+        List<BrewingTestPlayers.OverlaySent> sent = BrewingTestPlayers.overlays(brew.player());
+        if (sent.isEmpty()) {
+            return Set.of();
+        }
+        return BrewingTestPlayers.translationKeys(sent.get(sent.size() - 1).text());
     }
 
     /** 每 tick 用一个大额取用把本测试所在区块这一秒的速率占满；测试结束随 onEachTick 一起停。 */

@@ -26,7 +26,7 @@ import java.util.Optional;
 
 /**
  * 熬药耗真元：起熬前估一次够不够，熬制时每推进一秒付总数的 1/30，先取釜所在区域的环境真元，
- * 不够的部分从施法者已开经脉里扣。取用和扣下的真元都散回环境（取用的由 Human 放回原区域，
+ * 不够的部分从施法者已开经脉里扣；两边都付不满就记欠付，欠付超过宽限才断锅。取用和扣下的真元都散回环境（取用的由 Human 放回原区域，
  * 自身扣的作为活动释放进环境账）。以后的密度、来源门槛都接在这里。
  */
 final class BrewQiPayment {
@@ -39,14 +39,14 @@ final class BrewQiPayment {
     }
 
     static void initialize(Path configPath) {
-        // 配置文件已由档位配置装好；旧文件缺这两个键时用默认值并提示。
+        // 配置文件已由档位配置装好；旧文件缺耗元的键时用默认值并提示。
         settings = BrewQiSettings.load(configPath);
         BrewEnvironment.initialize();
     }
 
     static BrewQiTally tally(VesselKind vessel) {
-        // 起熬时开一本新账；关掉耗元时总数为零，每秒什么都不取。
-        return BrewQiTally.start(settings.brewCost(vessel));
+        // 起熬时开一本新账，带上宽限；关掉耗元时总数为零，每秒什么都不取。
+        return BrewQiTally.start(settings.brewCost(vessel), settings.graceSeconds());
     }
 
     static Optional<BrewText> startProblem(ServerPlayer caster, Level level, BlockPos pos, VesselKind vessel) {
@@ -65,36 +65,41 @@ final class BrewQiPayment {
                 amount(total - ambient - self)));
     }
 
-    static Optional<BrewQiTally> paySecond(ServerPlayer caster, Level level, BlockPos pos, String drawId,
-                                           BrewQiTally tally) {
-        // 先向环境取这一秒的份额，差额再从施法者身上扣；身上也不够时返回空，调用方中断这锅。
-        double share = tally.nextShare();
-        if (share <= TOLERANCE) {
-            return Optional.of(tally);
+    static BrewQiTally paySecond(ServerPlayer caster, Level level, BlockPos pos, String drawId, BrewQiTally tally) {
+        // 先向环境取这一秒该付的（含前面欠的），差额再从施法者身上扣，身上有多少扣多少；
+        // 还差的记成欠付，是否断锅由调用方看宽限。
+        double payment = tally.nextPayment();
+        if (payment <= TOLERANCE) {
+            return tally.pay(0, 0);
         }
-        double ambient = BrewEnvironment.draw(drawId, level, pos, share).totalQi();
-        double need = share - ambient;
+        double ambient = BrewEnvironment.draw(drawId, level, pos, payment).totalQi();
+        double need = payment - ambient;
         if (need <= TOLERANCE) {
-            return Optional.of(tally.pay(ambient, 0));
+            return tally.pay(ambient, 0);
         }
-        BrewBodyHost.Observation observed = BrewBodyHost.observe(caster);
-        if (observed.presence() != BrewBodyHost.Presence.BOUND) {
-            return Optional.empty();
-        }
-        BrewBodyHost.Binding binding = observed.found().orElseThrow();
-        Map<String, QiInventory> lumens = BrewSelfQi.openedLumens(binding.body());
-        if (BrewSelfQi.balance(lumens) + TOLERANCE < need) {
-            return Optional.empty();
-        }
-        Map<String, QiInventory> debits = BrewSelfQi.debits(lumens, Math.min(need, BrewSelfQi.balance(lumens)));
-        BrewBodyHost.activity(binding, activity(lumens, debits));
-        double self = QiInventory.combine(List.copyOf(debits.values())).totalQi();
-        return Optional.of(tally.pay(ambient, self));
+        return tally.pay(ambient, paySelf(caster, need));
     }
 
     static BigDecimal amount(double qi) {
         // 动作栏和提示里统一保留一位小数；提示参数只收数字，用定点小数免得印出浮点尾巴。
         return BigDecimal.valueOf(qi).setScale(1, RoundingMode.HALF_UP);
+    }
+
+    private static double paySelf(ServerPlayer caster, double need) {
+        // 没身体或暂停的身体付不了；余额不足一份时把已开经脉里的扣光，扣下的作为一次活动释放进环境。
+        BrewBodyHost.Observation observed = BrewBodyHost.observe(caster);
+        if (observed.presence() != BrewBodyHost.Presence.BOUND) {
+            return 0;
+        }
+        BrewBodyHost.Binding binding = observed.found().orElseThrow();
+        Map<String, QiInventory> lumens = BrewSelfQi.openedLumens(binding.body());
+        double amount = Math.min(need, BrewSelfQi.balance(lumens));
+        if (amount <= TOLERANCE) {
+            return 0;
+        }
+        Map<String, QiInventory> debits = BrewSelfQi.debits(lumens, amount);
+        BrewBodyHost.activity(binding, activity(lumens, debits));
+        return QiInventory.combine(List.copyOf(debits.values())).totalQi();
     }
 
     private static double ambientEstimate(Level level, BlockPos pos) {

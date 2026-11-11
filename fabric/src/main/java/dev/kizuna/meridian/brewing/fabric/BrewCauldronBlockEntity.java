@@ -185,7 +185,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
 
     public BrewActionResult advanceTechniqueBrew(ServerPlayer caster, String drawId) {
         // 每个周期只推进一次规则时间，结构或权限失效时先恢复普通 ticker；推进前先付这一秒的真元，
-        // 付不起就中断，不降分。
+        // 付不满记欠付，欠付超过宽限才中断，不降分。
         if (!techniqueControlled()) {
             return BrewActionResult.returned(BrewText.message("technique.not_controlled"));
         }
@@ -203,12 +203,12 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
         if (structureProblem.isPresent()) {
             return interruptTechnique(BrewText.message("technique.interrupted", structureProblem.orElseThrow()));
         }
-        Optional<BrewQiTally> paid = BrewQiPayment.paySecond(caster, level, worldPosition, drawId, qiTally);
-        if (paid.isEmpty()) {
+        BrewQiTally paid = BrewQiPayment.paySecond(caster, level, worldPosition, drawId, qiTally);
+        if (paid.beyondGrace()) {
             BrewTexts.sendOverlay(caster, BrewText.message("technique.qi_short"));
             return interruptTechnique(BrewText.message("technique.qi_short"));
         }
-        qiTally = paid.orElseThrow();
+        qiTally = paid;
         tickCauldron(TECHNIQUE_SECONDS_PER_STEP);
         setChanged();
         if (cauldron.state() == BrewCauldronState.SCORCHED) {

@@ -2,6 +2,7 @@ package dev.kizuna.meridian.brewing.fabric;
 
 import dev.kizuna.meridian.brewing.server.ArmorRotProfile;
 import dev.kizuna.meridian.brewing.server.BitterYellowProfile;
+import dev.kizuna.meridian.brewing.server.BrewCauldron;
 import dev.kizuna.meridian.brewing.server.BrewEffectProfiles;
 import dev.kizuna.meridian.brewing.server.BrewKind;
 import dev.kizuna.meridian.brewing.server.BrewModifiers;
@@ -23,6 +24,7 @@ import net.minecraft.world.item.Items;
 
 /**
  * 巫药物品提示：品质一行，再写这一档的药效。数字都从 {@link BrewEffectProfiles} 取，语言文件里只有句式。
+ * 药方羊皮纸写它记的是哪一味药。
  *
  * <p>原版那行「(0:01)」是登记用的显示效果，巫药物品已经用 {@code tooltip_display} 藏掉。</p>
  */
@@ -34,8 +36,12 @@ public final class BrewTooltipLines {
     private BrewTooltipLines() {
     }
 
-    /** 不是巫药时返回空表。 */
+    /** 不是巫药也不是药方时返回空表。 */
     public static List<Component> lines(ItemStack stack) {
+        // 药方和巫药各写各的；别的物品不加行。
+        if (stack.getItem() instanceof RecipeScrollItem) {
+            return List.of(recipeLine(stack).withStyle(ChatFormatting.GRAY));
+        }
         if (!BrewItemStacks.isBrew(stack)) {
             return List.of();
         }
@@ -52,6 +58,13 @@ public final class BrewTooltipLines {
             lines.add(line.withStyle(ChatFormatting.GRAY));
         }
         return List.copyOf(lines);
+    }
+
+    private static MutableComponent recipeLine(ItemStack stack) {
+        // 认不出的药方照读的时候那样写字迹模糊。
+        return RecipeScrollItem.kind(stack)
+                .map(kind -> line("recipe", BrewTexts.component(BrewCauldron.recipeName(kind))))
+                .orElseGet(() -> line("recipe.illegible"));
     }
 
     private static List<MutableComponent> effectLines(BrewKind kind, BrewQuality quality, BrewUse use) {

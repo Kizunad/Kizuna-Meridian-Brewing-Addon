@@ -31,6 +31,8 @@ loom {
             runDir providers.gradleProperty('clienttestRunDir').getOrElse('build/clienttest')
             vmArg '-Dfabric.client.gametest'
             vmArg '-Dfabric.client.gametest.modid=meridian_brewing_clienttest'
+            // 只跑某一场：-PclienttestOnly=witch_hut；缺省 all 是全部场景。
+            vmArg "-Dmeridian.brewing.clienttest.only=${providers.gradleProperty('clienttestOnly').getOrElse('all')}"
             programArgs '--width', '1280', '--height', '960'
             // 离线玩家名决定原版默认皮肤：缺省 Player991 是 classic 宽臂，Player507 是 slim 的 Alex。
             programArgs '--username', providers.gradleProperty('clienttestUsername').getOrElse('Player991')
