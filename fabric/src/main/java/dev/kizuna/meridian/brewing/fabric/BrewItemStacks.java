@@ -11,6 +11,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.alchemy.Potion;
 import net.minecraft.world.item.alchemy.PotionContents;
+import net.minecraft.world.item.component.TooltipDisplay;
 
 /** 品质药水的创建和服务端解析 API。 */
 public final class BrewItemStacks {
@@ -28,6 +29,9 @@ public final class BrewItemStacks {
         }
         ItemStack stack = PotionContents.createItemStack(item, BrewingPotions.potion(kind));
         stack.set(BrewingComponents.QUALITY, quality.componentValue());
+        // 登记用的显示效果只有一秒，原版那行会写成「(0:01)」；藏掉它，药效由本仓的提示写。
+        TooltipDisplay tooltip = TooltipDisplay.DEFAULT.withHidden(DataComponents.POTION_CONTENTS, true);
+        stack.set(DataComponents.TOOLTIP_DISPLAY, tooltip);
         return stack;
     }
 

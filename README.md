@@ -5,6 +5,10 @@
 `verification/` 与 `gametest/`。器具的放置模型与枯木染色位于只在客户端加载的 `client/`，真实客户端截图验收位于
 `clienttest/`，见 [器具外观与客户端模块](docs/wiki/Client-Models.md)。
 
+玩家怎么做器具、搭灶、熬药和看品质，见 [怎么熬药](docs/wiki/How-To-Brew.md)。
+
+图标的出图和后处理，见 [美术素材](docs/wiki/Art.md)。
+
 本仓依赖相邻工作区的 Framework 与 Technique 协议；Human、Threatening、Damage 和 BS3D 的跨仓入口
 只在接口边界处声明，由对应仓库实现。`shared/src/main/resources/data/meridian_brewing/`
 保存唯一的功法目录源文件。

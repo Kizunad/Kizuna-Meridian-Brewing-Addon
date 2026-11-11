@@ -2,12 +2,12 @@
   "type": "minecraft:crafting_shaped",
   "category": "misc",
   "pattern": [
+    "S S",
     "PPP",
-    "PSP",
-    "PPP"
+    "P P"
   ],
   "key": {
-    "P": "minecraft:oak_planks",
+    "P": "#minecraft:planks",
     "S": "minecraft:stick"
   },
   "result": {

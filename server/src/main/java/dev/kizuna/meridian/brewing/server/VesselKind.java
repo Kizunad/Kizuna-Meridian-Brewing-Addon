@@ -1,9 +1,9 @@
 package dev.kizuna.meridian.brewing.server;
 
-/** 一阶巫釜和二阶铜釜的容量、导热及添水参数。 */
+/** 一阶铜釜和二阶巫釜的容量、导热及添水参数；铜釜的导热另随氧化变化。 */
 public enum VesselKind {
-    WITCH_CAULDRON(3, 0.12, 15.0, 1.0),
-    COPPER_CAULDRON(4, 0.20, 10.0, 1.3);
+    COPPER_CAULDRON(3, 0.12, 15.0, 1.0),
+    WITCH_CAULDRON(4, 0.20, 10.0, 1.3);
 
     private final int waterCapacity;
     private final double convergencePerSecond;

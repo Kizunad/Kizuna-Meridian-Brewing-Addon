@@ -2,6 +2,7 @@ package dev.kizuna.meridian.brewing.server;
 
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -81,25 +82,25 @@ public final class BrewCauldron {
 
     public BrewActionResult waxCopper() {
         if (vessel != VesselKind.COPPER_CAULDRON) {
-            return BrewActionResult.returned("巫釜不能上蜡");
+            return BrewActionResult.returned(BrewText.message("cauldron.wax.not_copper"));
         }
         if (copperState.waxed()) {
-            return BrewActionResult.returned("铜釜已经上蜡");
+            return BrewActionResult.returned(BrewText.message("cauldron.wax.already"));
         }
         copperState = copperState.wax();
-        return BrewActionResult.accepted("铜釜已上蜡");
+        return BrewActionResult.accepted(BrewText.message("cauldron.wax.done"));
     }
 
     public BrewActionResult scrapeCopper() {
         if (vessel != VesselKind.COPPER_CAULDRON) {
-            return BrewActionResult.returned("巫釜不能刮锈");
+            return BrewActionResult.returned(BrewText.message("cauldron.scrape.not_copper"));
         }
         CopperCauldronState scrapedState = copperState.scrape();
         if (scrapedState.equals(copperState)) {
-            return BrewActionResult.returned("铜釜没有可刮的锈");
+            return BrewActionResult.returned(BrewText.message("cauldron.scrape.nothing"));
         }
         copperState = scrapedState;
-        return BrewActionResult.accepted("铜釜已刮掉一级锈");
+        return BrewActionResult.accepted(BrewText.message("cauldron.scrape.done"));
     }
 
     public void restoreCopperOxidation(CopperOxidation oxidation) {
@@ -147,43 +148,50 @@ public final class BrewCauldron {
     }
 
     public BrewActionResult addWater(int units) {
-        if (units <= 0 || state == BrewCauldronState.SCORCHED || state == BrewCauldronState.BREWED) {
-            return BrewActionResult.returned("当前巫釜不能添水");
+        if (units <= 0) {
+            throw new IllegalArgumentException("添水份数必须为正数");
         }
-        if (waterUnits + units > vessel.waterCapacity()) {
-            return BrewActionResult.returned("添水超过巫釜容量");
+        if (state == BrewCauldronState.SCORCHED || state == BrewCauldronState.BREWED) {
+            return BrewActionResult.returned(stateBlocksIngredients());
         }
-        waterUnits += units;
-        temperature = Math.max(0.0, temperature - vessel.waterCoolingDegrees() * units);
+        if (waterUnits >= vessel.waterCapacity()) {
+            return BrewActionResult.returned(BrewText.message("cauldron.water.full", vessel.waterCapacity()));
+        }
+        // 一桶水比剩下的空位多时只倒到满，多出来的不算。
+        int poured = Math.min(units, vessel.waterCapacity() - waterUnits);
+        waterUnits += poured;
+        temperature = Math.max(0.0, temperature - vessel.waterCoolingDegrees() * poured);
         if (state == BrewCauldronState.EMPTY) {
             state = BrewCauldronState.WATER;
         }
-        return BrewActionResult.accepted("已添水");
+        return BrewActionResult.accepted(BrewText.message("cauldron.water.added",
+                poured, waterUnits, vessel.waterCapacity()));
     }
 
     public BrewActionResult scrubWithWater() {
         if (state != BrewCauldronState.SCORCHED) {
-            return BrewActionResult.returned("巫釜没有糊锅");
+            return BrewActionResult.returned(BrewText.message("cauldron.scrub.not_scorched"));
         }
         resetBrewState();
-        return BrewActionResult.accepted("巫釜已刷净");
+        return BrewActionResult.accepted(BrewText.message("cauldron.scrub.done"));
     }
 
     public BrewActionResult addIngredient(IngredientSlot slot, IngredientBatch batch) {
-        BrewActionResult stageResult = validateIngredientStage(slot, batch);
-        if (!stageResult.accepted()) {
-            return stageResult;
+        Optional<BrewActionResult> stageRejection = ingredientStageRejection(slot, batch);
+        if (stageRejection.isPresent()) {
+            return stageRejection.orElseThrow();
         }
         if (slot == IngredientSlot.PRIMARY && recipe == null) {
             Optional<BrewRecipe> resolvedRecipe = BrewRecipes.forPreparedPrimary(batch.itemId());
             if (resolvedRecipe.isEmpty()) {
-                return BrewActionResult.returned("主料不对应任何药方", batch);
+                BrewText unknown = BrewText.message("cauldron.primary.unknown", new BrewText.ItemName(batch.itemId()));
+                return BrewActionResult.returned(unknown, batch);
             }
             recipe = resolvedRecipe.orElseThrow();
         }
-        String ingredientError = ingredientError(slot, batch.itemId());
-        if (ingredientError != null) {
-            return BrewActionResult.returned(ingredientError, batch);
+        Optional<BrewText> ingredientError = ingredientError(slot, batch.itemId());
+        if (ingredientError.isPresent()) {
+            return BrewActionResult.returned(ingredientError.orElseThrow(), batch);
         }
         if (slot == IngredientSlot.PROPELLANT) {
             form = BrewForm.SPLASH;
@@ -195,22 +203,30 @@ public final class BrewCauldron {
         if (state == BrewCauldronState.BREWING) {
             ingredientTimes.put(slot, brewElapsedSeconds);
         }
-        return BrewActionResult.accepted("已下料：" + slot);
+        return BrewActionResult.accepted(BrewText.message("cauldron.ingredient.added",
+                slotName(slot), new BrewText.ItemName(batch.itemId())));
     }
 
     public BrewActionResult startBrew(BrewStructure structure) {
-        if (structure == null || state != BrewCauldronState.RAW) {
-            return BrewActionResult.returned("巫釜还没有可熬的生药");
+        if (structure == null) {
+            throw new IllegalArgumentException("起熬结构不能为空");
+        }
+        if (state == BrewCauldronState.BREWING) {
+            return BrewActionResult.returned(BrewText.message("cauldron.start.already"));
+        }
+        if (state != BrewCauldronState.RAW) {
+            return BrewActionResult.returned(stateBlocksStart());
         }
         if (recipe == null) {
-            return BrewActionResult.returned("尚未由主料确定药方");
+            return BrewActionResult.returned(BrewText.message("cauldron.start.no_recipe"));
         }
-        String missingIngredients = missingIngredientsReason();
-        if (missingIngredients != null) {
-            return BrewActionResult.returned(missingIngredients);
+        Optional<BrewText> missingIngredients = missingIngredients();
+        if (missingIngredients.isPresent()) {
+            return BrewActionResult.returned(missingIngredients.orElseThrow());
         }
-        if (!structure.accepts(recipe.fireKind())) {
-            return BrewActionResult.returned("结构或火种不满足药方");
+        Optional<BrewText> structureProblem = structure.problemFor(recipe.kind(), recipe.fireKind());
+        if (structureProblem.isPresent()) {
+            return BrewActionResult.returned(structureProblem.orElseThrow());
         }
         state = BrewCauldronState.BREWING;
         brewElapsedSeconds = 0.0;
@@ -219,13 +235,13 @@ public final class BrewCauldron {
         evaporationSeconds = 0.0;
         scorchCount = 0;
         remainingBottles = vessel.waterCapacity();
-        return BrewActionResult.accepted("开始熬制");
+        return BrewActionResult.accepted(BrewText.message("cauldron.start.done", recipeName(recipe.kind())));
     }
 
     public BrewActionResult interruptBrew() {
         // 已投材料与浸泡累计保留，重新起熬时必须重新计算火候和投料时窗。
         if (state != BrewCauldronState.BREWING) {
-            return BrewActionResult.returned("巫釜当前没有正在进行的熬制");
+            return BrewActionResult.returned(BrewText.message("cauldron.interrupt.not_brewing"));
         }
         state = BrewCauldronState.RAW;
         brewElapsedSeconds = 0.0;
@@ -236,7 +252,7 @@ public final class BrewCauldron {
         scorchCount = 0;
         remainingBottles = 0;
         ingredientTimes.clear();
-        return BrewActionResult.accepted("熬制已中断，投料和浸泡分保留");
+        return BrewActionResult.accepted(BrewText.message("cauldron.interrupt.done"));
     }
 
     public BrewTickResult tick(double seconds, BrewStructure structure) {
@@ -255,49 +271,59 @@ public final class BrewCauldron {
 
     public BrewCollectionResult collectBottle(long currentGameDay) {
         if (state == BrewCauldronState.SCORCHED) {
-            return new BrewCollectionResult(
-                    BrewCollectionKind.NOTHING, Optional.empty(), 0, "水已熬干，必须刷锅");
+            return new BrewCollectionResult(BrewCollectionKind.NOTHING, Optional.empty(), 0,
+                    BrewText.message("cauldron.state_blocks.scorched"));
         }
         if (state != BrewCauldronState.BREWED || remainingBottles <= 0) {
             return new BrewCollectionResult(BrewCollectionKind.NOTHING, Optional.empty(),
-                    remainingBottles, "巫釜还没有熬成可收的药");
+                    remainingBottles, BrewText.message("cauldron.collect.not_ready"));
         }
-        BrewScoreInput input = toInput(currentGameDay);
-        BrewScore score = BrewScoring.calculate(input);
+        BrewKind kind = recipe.kind();
+        BrewForm collectedForm = form;
+        BrewScore score = BrewScoring.calculate(toInput(currentGameDay));
         remainingBottles--;
-        BrewCollectionKind collectionKind = collectionKind(input);
+        int remaining = remainingBottles;
         if (remainingBottles == 0) {
-            clearAfterCollection();
+            resetBrewState();
         }
-        String reason = collectionKind == BrewCollectionKind.SCRAP ? "总分低于药渣阈值" : "成品药水";
-        return new BrewCollectionResult(collectionKind, Optional.of(score), remainingBottles, reason);
+        if (score.quality().isEmpty()) {
+            return new BrewCollectionResult(BrewCollectionKind.SCRAP, Optional.of(score), remaining,
+                    BrewText.message("cauldron.collect.scrap", score.totalScore(),
+                            BrewScoring.SCRAP_THRESHOLD, remaining));
+        }
+        return new BrewCollectionResult(BrewCollectionKind.POTION, Optional.of(score), remaining,
+                BrewText.message("cauldron.collect.potion", brewName(kind, collectedForm),
+                        score.quality().orElseThrow(), remaining));
     }
 
-    private BrewActionResult validateIngredientStage(IngredientSlot slot, IngredientBatch batch) {
+    private Optional<BrewActionResult> ingredientStageRejection(IngredientSlot slot, IngredientBatch batch) {
         if (slot == null || batch == null) {
-            return BrewActionResult.returned("投料信息不完整");
+            throw new IllegalArgumentException("投料信息不完整");
         }
         if (state == BrewCauldronState.EMPTY || state == BrewCauldronState.BREWED
                 || state == BrewCauldronState.SCORCHED) {
-            return BrewActionResult.returned("当前巫釜不能下料", batch);
+            return Optional.of(BrewActionResult.returned(stateBlocksIngredients(), batch));
         }
         if (ingredients.containsKey(slot)) {
-            return BrewActionResult.returned("该槽位已经下过料：" + slot, batch);
+            return Optional.of(BrewActionResult.returned(
+                    BrewText.message("cauldron.ingredient.slot_taken", slotName(slot)), batch));
         }
         boolean startIngredient = slot == IngredientSlot.PRIMARY
                 || slot == IngredientSlot.BASE || slot == IngredientSlot.PROPELLANT;
         if (state == BrewCauldronState.BREWING && startIngredient) {
-            return BrewActionResult.returned("熬制中只能下辅料或引药", batch);
+            return Optional.of(BrewActionResult.returned(
+                    BrewText.message("cauldron.ingredient.brewing_only_late", slotName(slot)), batch));
         }
         if (state != BrewCauldronState.BREWING && !startIngredient) {
-            return BrewActionResult.returned("辅料和引药必须在熬制中下入", batch);
+            return Optional.of(BrewActionResult.returned(
+                    BrewText.message("cauldron.ingredient.late_needs_brewing", slotName(slot)), batch));
         }
-        return BrewActionResult.accepted("投料阶段允许");
+        return Optional.empty();
     }
 
-    private String ingredientError(IngredientSlot slot, String itemId) {
+    private Optional<BrewText> ingredientError(IngredientSlot slot, String itemId) {
         if (recipe == null && slot != IngredientSlot.PRIMARY) {
-            return "尚未由主料确定药方";
+            return Optional.of(BrewText.message("cauldron.start.no_recipe"));
         }
         IngredientPlan plan = recipe.ingredients();
         String expected = switch (slot) {
@@ -308,24 +334,63 @@ public final class BrewCauldron {
             case PROPELLANT -> PROPELLANT_INGREDIENT_ID;
         };
         if (!BrewRecipes.sameItemId(expected, itemId)) {
-            return "药方不接受该投料：" + itemId;
+            return Optional.of(BrewText.message("cauldron.ingredient.wrong",
+                    new BrewText.ItemName(itemId), recipeName(recipe.kind())));
         }
         if (slot == IngredientSlot.PROPELLANT && !recipe.kind().supports(BrewUse.SPLASH)) {
-            return "饮用药不能下火药";
+            return Optional.of(BrewText.message("cauldron.ingredient.drink_only",
+                    recipeName(recipe.kind())));
         }
-        return null;
+        return Optional.empty();
     }
 
-    private String missingIngredientsReason() {
+    private Optional<BrewText> missingIngredients() {
+        boolean splash = form == BrewForm.SPLASH || !recipe.kind().supports(BrewUse.DRINK);
         EnumSet<IngredientSlot> required = EnumSet.of(
                 IngredientSlot.PRIMARY, IngredientSlot.BASE);
-        if (form == BrewForm.SPLASH || !recipe.kind().supports(BrewUse.DRINK)) {
+        if (splash) {
             required.add(IngredientSlot.PROPELLANT);
         }
-        if (!ingredients.keySet().containsAll(required)) {
-            return "主料、底料或火药未齐";
+        if (ingredients.keySet().containsAll(required)) {
+            return Optional.empty();
         }
-        return null;
+        String missing = splash ? "cauldron.start.missing_splash" : "cauldron.start.missing_drink";
+        return Optional.of(BrewText.message(missing, recipeName(recipe.kind())));
+    }
+
+    private BrewText stateBlocksIngredients() {
+        return switch (state) {
+            case EMPTY -> BrewText.message("cauldron.state_blocks.empty");
+            case BREWED -> BrewText.message("cauldron.state_blocks.brewed");
+            case SCORCHED -> BrewText.message("cauldron.state_blocks.scorched");
+            case WATER, RAW, BREWING -> throw new IllegalStateException("这个阶段可以下料：" + state);
+        };
+    }
+
+    private BrewText stateBlocksStart() {
+        return switch (state) {
+            case EMPTY -> BrewText.message("cauldron.state_blocks.empty");
+            case WATER -> BrewText.message("cauldron.start.no_recipe");
+            case BREWED -> BrewText.message("cauldron.state_blocks.brewed");
+            case SCORCHED -> BrewText.message("cauldron.state_blocks.scorched");
+            case RAW, BREWING -> throw new IllegalStateException("这个阶段不该走到这里：" + state);
+        };
+    }
+
+    /** 槽位名，例如「辅料」。 */
+    public static BrewText slotName(IngredientSlot slot) {
+        return BrewText.message("slot." + slot.name().toLowerCase(Locale.ROOT));
+    }
+
+    /** 药方名，例如「聚气汤」。 */
+    public static BrewText recipeName(BrewKind kind) {
+        return BrewText.key("potion.meridian_brewing_" + kind.path());
+    }
+
+    /** 成药按形态的名字，例如「喷溅苦黄膏」，和原版药水物品名同一个键。 */
+    public static BrewText brewName(BrewKind kind, BrewForm form) {
+        String item = form == BrewForm.SPLASH ? "splash_potion" : "potion";
+        return BrewText.key("item.minecraft." + item + ".effect.meridian_brewing_" + kind.path());
     }
 
     private void updateTemperature(double seconds, BrewStructure structure) {
@@ -392,13 +457,6 @@ public final class BrewCauldron {
         }
     }
 
-    private BrewCollectionKind collectionKind(BrewScoreInput input) {
-        if (BrewScoring.isScrap(input)) {
-            return BrewCollectionKind.SCRAP;
-        }
-        return BrewCollectionKind.POTION;
-    }
-
     private BrewScoreInput toInput(long currentGameDay) {
         IngredientBatch primary = ingredients.get(IngredientSlot.PRIMARY);
         IngredientBatch accessory = ingredients.get(IngredientSlot.ACCESSORY);
@@ -428,10 +486,6 @@ public final class BrewCauldron {
             return CatalystRequirement.OMITTED;
         }
         return CatalystRequirement.INCLUDED;
-    }
-
-    private void clearAfterCollection() {
-        resetBrewState();
     }
 
     private void resetBrewState() {

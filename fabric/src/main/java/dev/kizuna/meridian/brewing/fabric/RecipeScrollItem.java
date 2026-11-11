@@ -1,7 +1,8 @@
 package dev.kizuna.meridian.brewing.fabric;
 
+import dev.kizuna.meridian.brewing.server.BrewCauldron;
 import dev.kizuna.meridian.brewing.server.BrewKind;
-import net.minecraft.network.chat.Component;
+import dev.kizuna.meridian.brewing.server.BrewText;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -21,7 +22,7 @@ final class RecipeScrollItem extends Item {
         if (!level.isClientSide()) {
             BrewKind kind = kind(stack);
             RecipeKnowledgeStore.learn(player, kind);
-            player.sendOverlayMessage(Component.literal("已读药方：" + kind.displayName()));
+            BrewTexts.sendOverlay(player, BrewText.message("recipe.learned", BrewCauldron.recipeName(kind)));
         }
         player.openItemGui(stack, hand);
         return InteractionResult.SUCCESS;

@@ -3,15 +3,21 @@ package dev.kizuna.meridian.brewing.fabric;
 import dev.kizuna.meridian.brewing.server.BrewActionResult;
 import dev.kizuna.meridian.brewing.server.BrewFireSource;
 import dev.kizuna.meridian.brewing.server.BrewFireState;
+import dev.kizuna.meridian.brewing.server.BrewText;
 import dev.kizuna.meridian.brewing.server.FireKind;
 import dev.kizuna.meridian.brewing.server.HeatSourceKind;
 import java.util.Optional;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.Component;
+import net.minecraft.core.Direction;
+import net.minecraft.core.NonNullList;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.Container;
+import net.minecraft.world.ContainerHelper;
+import net.minecraft.world.WorldlyContainer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -23,10 +29,17 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 
-/** 可调火源的档位、火种和每档续炭时间。 */
-public final class BrewFireBlockEntity extends BlockEntity {
+/**
+ * 可调火源的档位、火种和每档续炭时间。
+ *
+ * <p>漏斗、投掷器从任意一面往里送煤炭或木炭：先放进一格待烧，下一 tick 照手动加炭的规则升一档、加 60 秒。
+ * 已经四档或者这一格还没烧掉时不收，炭留在漏斗里；这一格不往外出东西。</p>
+ */
+public final class BrewFireBlockEntity extends BlockEntity implements WorldlyContainer {
     private static final double SECONDS_PER_TICK = 0.05;
+    private static final int[] FUEL_SLOT = {0};
     private final BrewFireState fire;
+    private final NonNullList<ItemStack> pendingFuel = NonNullList.withSize(1, ItemStack.EMPTY);
 
     public BrewFireBlockEntity(BlockPos pos, BlockState state, BrewFireSource source) {
         super(BrewingBlocks.BREW_FIRE_ENTITY, pos, state);
@@ -65,7 +78,7 @@ public final class BrewFireBlockEntity extends BlockEntity {
             if (techniqueResult.isPresent()) {
                 BrewActionResult result = techniqueResult.orElseThrow();
                 if (!result.accepted()) {
-                    sendOverlay(player, result.reason());
+                    BrewTexts.sendOverlay(player, result.message());
                 }
                 return InteractionResult.SUCCESS;
             }
@@ -73,11 +86,12 @@ public final class BrewFireBlockEntity extends BlockEntity {
         ItemStack stack = player.getItemInHand(hand);
         BrewActionResult result = useStack(stack);
         if (!result.accepted()) {
-            sendOverlay(player, result.reason());
+            BrewTexts.sendOverlay(player, result.message());
             return InteractionResult.SUCCESS;
         }
+        playAcceptedSound(stack);
         consumeAcceptedUse(player, hand, stack);
-        sendOverlay(player, result.reason());
+        BrewTexts.sendOverlay(player, result.message());
         setChanged();
         return InteractionResult.SUCCESS;
     }
@@ -85,37 +99,30 @@ public final class BrewFireBlockEntity extends BlockEntity {
     public BrewActionResult useTechnique(ServerPlayer player, InteractionHand hand) {
         // 熬药副手操作仍需通过世界权限，成功后才消费物品或损耗工具。
         if (level == null || level.isClientSide()) {
-            return BrewActionResult.returned("火源只能在服务端操作");
+            return BrewActionResult.returned(BrewText.message("fire.server_only"));
         }
         if (player == null || !level.mayInteract(player, worldPosition)) {
-            return BrewActionResult.returned("没有权限操作火源");
+            return BrewActionResult.returned(BrewText.message("no_permission"));
         }
         ItemStack stack = player.getItemInHand(hand);
-        if (!stack.is(Items.COAL) && !stack.is(Items.CHARCOAL)
-                && !stack.is(ItemTags.SHOVELS) && !stack.is(Items.WATER_BUCKET)) {
-            return BrewActionResult.returned("熬药中副手只能加炭、拨灰或扑灭火源");
+        if (!isFuel(stack) && !stack.is(ItemTags.SHOVELS) && !stack.is(Items.WATER_BUCKET)) {
+            return BrewActionResult.returned(BrewText.message("fire.technique_offhand"));
         }
         BrewActionResult result = useStack(stack);
         if (!result.accepted()) {
-            sendOverlay(player, result.reason());
+            BrewTexts.sendOverlay(player, result.message());
             return result;
         }
+        playAcceptedSound(stack);
         consumeAcceptedUse(player, hand, stack);
-        sendOverlay(player, result.reason());
+        BrewTexts.sendOverlay(player, result.message());
         setChanged();
         return result;
     }
 
-    private static void sendOverlay(Player player, String message) {
-        if (player instanceof ServerPlayer serverPlayer && serverPlayer.connection == null) {
-            return;
-        }
-        player.sendOverlayMessage(Component.literal(message));
-    }
-
     private BrewActionResult useStack(ItemStack stack) {
         // 持物决定调火操作，物品消耗和容器返还由调用方在成功后统一处理。
-        if (stack.is(Items.COAL) || stack.is(Items.CHARCOAL)) {
+        if (isFuel(stack)) {
             return fire.addFuel("minecraft:coal");
         }
         if (stack.is(ItemTags.SHOVELS)) {
@@ -130,7 +137,15 @@ public final class BrewFireBlockEntity extends BlockEntity {
         if (stack.is(Items.SAND)) {
             return fire.changeFireKind(FireKind.SUN_FIRE);
         }
-        return BrewActionResult.returned("铁火盆和铁炉座只接受煤炭、木炭、锹或火种材料");
+        return BrewActionResult.returned(BrewText.message("fire.wrong_item"));
+    }
+
+    private void playAcceptedSound(ItemStack stack) {
+        if (isFuel(stack)) {
+            BrewSounds.atBlock(level, worldPosition, BrewSounds.BRAZIER_STOKE);
+        } else if (stack.is(ItemTags.SHOVELS)) {
+            BrewSounds.atBlock(level, worldPosition, BrewSounds.BRAZIER_RAKE);
+        }
     }
 
     private void consumeAcceptedUse(Player player, InteractionHand hand, ItemStack stack) {
@@ -149,11 +164,96 @@ public final class BrewFireBlockEntity extends BlockEntity {
         stack.shrink(1);
     }
 
+    private static boolean isFuel(ItemStack stack) {
+        return stack.is(Items.COAL) || stack.is(Items.CHARCOAL);
+    }
+
     private void tick(Level currentLevel) {
         if (!currentLevel.isClientSide()) {
+            burnPendingFuel();
             fire.tick(SECONDS_PER_TICK);
             setChanged();
         }
+    }
+
+    private void burnPendingFuel() {
+        ItemStack fuel = pendingFuel.getFirst();
+        if (fuel.isEmpty()) {
+            return;
+        }
+        String itemId = BuiltInRegistries.ITEM.getKey(fuel.getItem()).toString();
+        if (fire.addFuel(itemId).accepted()) {
+            fuel.shrink(1);
+            BrewSounds.atBlock(level, worldPosition, BrewSounds.BRAZIER_STOKE);
+        }
+    }
+
+    @Override
+    public int[] getSlotsForFace(Direction side) {
+        return FUEL_SLOT;
+    }
+
+    @Override
+    public boolean canPlaceItem(int slot, ItemStack stack) {
+        return pendingFuel.getFirst().isEmpty() && isFuel(stack) && fire.level() < BrewFireState.MAX_LEVEL;
+    }
+
+    @Override
+    public boolean canPlaceItemThroughFace(int slot, ItemStack stack, Direction side) {
+        return canPlaceItem(slot, stack);
+    }
+
+    @Override
+    public boolean canTakeItemThroughFace(int slot, ItemStack stack, Direction side) {
+        return false;
+    }
+
+    @Override
+    public int getMaxStackSize() {
+        return 1;
+    }
+
+    @Override
+    public int getContainerSize() {
+        return pendingFuel.size();
+    }
+
+    @Override
+    public boolean isEmpty() {
+        return pendingFuel.getFirst().isEmpty();
+    }
+
+    @Override
+    public ItemStack getItem(int slot) {
+        return pendingFuel.get(slot);
+    }
+
+    @Override
+    public ItemStack removeItem(int slot, int count) {
+        ItemStack taken = ContainerHelper.removeItem(pendingFuel, slot, count);
+        setChanged();
+        return taken;
+    }
+
+    @Override
+    public ItemStack removeItemNoUpdate(int slot) {
+        return ContainerHelper.takeItem(pendingFuel, slot);
+    }
+
+    @Override
+    public void setItem(int slot, ItemStack stack) {
+        pendingFuel.set(slot, stack);
+        setChanged();
+    }
+
+    @Override
+    public boolean stillValid(Player player) {
+        return Container.stillValidBlockEntity(this, player);
+    }
+
+    @Override
+    public void clearContent() {
+        pendingFuel.clear();
     }
 
     @Override
@@ -166,6 +266,8 @@ public final class BrewFireBlockEntity extends BlockEntity {
                         fire.fireKind()),
                 input.getIntOr("level", fire.level()),
                 input.getDoubleOr("fuel_seconds", fire.fuelSeconds())));
+        pendingFuel.clear();
+        ContainerHelper.loadAllItems(input, pendingFuel);
     }
 
     @Override
@@ -176,6 +278,7 @@ public final class BrewFireBlockEntity extends BlockEntity {
         output.putString("fire_kind", snapshot.fireKind().name());
         output.putInt("level", snapshot.level());
         output.putDouble("fuel_seconds", snapshot.fuelSeconds());
+        ContainerHelper.saveAllItems(output, pendingFuel);
     }
 
     private static <T extends Enum<T>> T enumValue(String value, Class<T> type, T fallback) {

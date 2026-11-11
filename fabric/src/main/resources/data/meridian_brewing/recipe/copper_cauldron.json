@@ -2,13 +2,12 @@
   "type": "minecraft:crafting_shaped",
   "category": "misc",
   "pattern": [
-    "CCC",
-    "CWC",
-    " C "
+    "C C",
+    "C C",
+    "CCC"
   ],
   "key": {
-    "C": "minecraft:copper_ingot",
-    "W": "meridian_brewing:witch_cauldron"
+    "C": "minecraft:copper_ingot"
   },
   "result": {
     "count": 1,

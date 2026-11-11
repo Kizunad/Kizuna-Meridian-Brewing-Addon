@@ -1,7 +1,9 @@
 package dev.kizuna.meridian.brewing.fabric;
 
+import dev.kizuna.meridian.brewing.server.BrewCauldronState;
 import dev.kizuna.meridian.brewing.server.VesselKind;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.BlockGetter;
@@ -19,7 +21,10 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
-/** 巫釜和铜釜的方块入口，所有状态保存在对应方块实体；碰撞与轮廓贴着釜身外框。 */
+/**
+ * 巫釜和铜釜的方块入口，所有状态保存在对应方块实体；碰撞与轮廓贴着釜身外框。
+ * 比较器读这一锅的阶段：空 0、有水 1、生药 2、熬制中 3、熬成 4、糊锅 5。
+ */
 class BrewCauldronBlock extends Block implements EntityBlock {
     private final VesselKind vessel;
     private final VoxelShape shape;
@@ -47,8 +52,35 @@ class BrewCauldronBlock extends Block implements EntityBlock {
     }
 
     @Override
+    protected boolean hasAnalogOutputSignal(BlockState state) {
+        return true;
+    }
+
+    @Override
+    protected int getAnalogOutputSignal(BlockState state, Level level, BlockPos pos, Direction direction) {
+        if (level.getBlockEntity(pos) instanceof BrewCauldronBlockEntity cauldron) {
+            return comparatorSignal(cauldron.cauldron().state());
+        }
+        return 0;
+    }
+
+    static int comparatorSignal(BrewCauldronState state) {
+        return switch (state) {
+            case EMPTY -> 0;
+            case WATER -> 1;
+            case RAW -> 2;
+            case BREWING -> 3;
+            case BREWED -> 4;
+            case SCORCHED -> 5;
+        };
+    }
+
+    @Override
     protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
                                           Player player, InteractionHand hand, BlockHitResult hit) {
+        if (BrewingStirrers.yieldsToOffHand(stack, hand)) {
+            return InteractionResult.PASS;
+        }
         BlockEntity entity = level.getBlockEntity(pos);
         if (!(entity instanceof BrewCauldronBlockEntity cauldron)) {
             return InteractionResult.PASS;

@@ -20,8 +20,9 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * 在真实客户端里拍炼药器具、铜釜四档氧化、枯木与原木对照、掉落物、手持、展示框、人体模型手里的药刀、
- * 物品栏和创造页（含晒药匾的物品名提示框），以及药刀开刃、切药动作和掉落物贴地（见 {@link KnifeScenes}），
- * 供人工检查朝向、贴图错位、缺面、物品名和动作。
+ * 物品栏和创造页（含晒药匾的物品名提示框），药刀开刃、切药动作和掉落物贴地（见 {@link KnifeScenes}），
+ * 以及晒药匾界面、熬一锅药、舀药提示、药效说明和状态效果图标（见 {@link BrewPlayScenes}），
+ * 供人工检查朝向、贴图错位、缺面、物品名、动作和玩家看到的提示。
  * 截图写到运行目录的 {@code screenshots/}，文件名即场景名；这里只摆场景和拍照，不比对像素。
  */
 public final class BrewingModelsClientTest implements FabricClientGameTest {
@@ -115,6 +116,7 @@ public final class BrewingModelsClientTest implements FabricClientGameTest {
             inventory(context, stage);
             creativeTab(context, stage);
             KnifeScenes.run(context, stage);
+            BrewPlayScenes.run(context, stage);
         }
     }
 

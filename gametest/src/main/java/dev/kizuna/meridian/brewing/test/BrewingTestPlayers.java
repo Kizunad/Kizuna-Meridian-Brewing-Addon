@@ -24,11 +24,16 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.network.protocol.common.ClientboundKeepAlivePacket;
 import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
 import net.minecraft.network.protocol.game.ClientboundSoundPacket;
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.network.protocol.common.ServerboundKeepAlivePacket;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.UUID;
 
@@ -41,6 +46,7 @@ public final class BrewingTestPlayers {
     private static final Map<UUID, List<ControlIntent>> CONTROL = new HashMap<>();
     private static final Map<UUID, List<SoundPlayed>> SOUNDS = new HashMap<>();
     private static final Map<UUID, List<AnimationSent>> ANIMATIONS = new HashMap<>();
+    private static final Map<UUID, List<OverlaySent>> OVERLAYS = new HashMap<>();
     private static final List<Identifier> CHANNELS = List.of(
             Identifier.parse("meridian:body_view"),
             Identifier.parse("meridian:gathering_response"),
@@ -76,6 +82,7 @@ public final class BrewingTestPlayers {
         CONTROL.put(profile.id(), new ArrayList<>());
         SOUNDS.put(profile.id(), new ArrayList<>());
         ANIMATIONS.put(profile.id(), new ArrayList<>());
+        OVERLAYS.put(profile.id(), new ArrayList<>());
         TestPlayers.logIn(player, connection);
         BlockPos position = context.absolutePos(new BlockPos(1, HEIGHT, 1));
         player.setPos(position.getX(), position.getY(), position.getZ());
@@ -116,6 +123,10 @@ public final class BrewingTestPlayers {
                     && custom.payload() instanceof AnimationPackets.Payload payload) {
                 recordAnimation(listener.player, payload);
             }
+            if (packet instanceof ClientboundSystemChatPacket chat && chat.overlay()) {
+                OVERLAYS.get(listener.player.getUUID()).add(new OverlaySent(
+                        listener.player.level().getGameTime(), chat.content()));
+            }
             if (packet instanceof ClientboundKeepAlivePacket keepAlive) {
                 listener.handleKeepAlive(new ServerboundKeepAlivePacket(keepAlive.getId()));
             }
@@ -138,6 +149,35 @@ public final class BrewingTestPlayers {
     public static List<SoundPlayed> sounds(ServerPlayer player) {
         // 捕获真正发给客户端的声音包，以服务器 tick 核对到达时刻和播声位置。
         return List.copyOf(SOUNDS.getOrDefault(player.getUUID(), List.of()));
+    }
+
+    /** 发到动作栏的一行字，{@code tick} 是服务器发包时的游戏时间。 */
+    public record OverlaySent(long tick, Component text) { }
+
+    public static List<OverlaySent> overlays(ServerPlayer player) {
+        // 捕获真正发给客户端的动作栏包，核对发给谁、多久一次、用的哪些语言键。
+        return List.copyOf(OVERLAYS.getOrDefault(player.getUUID(), List.of()));
+    }
+
+    /** 一行字里用到的全部语言键，连同参数和后接的片段。 */
+    public static Set<String> translationKeys(Component text) {
+        Set<String> keys = new HashSet<>();
+        collectKeys(text, keys);
+        return keys;
+    }
+
+    private static void collectKeys(Component text, Set<String> keys) {
+        if (text.getContents() instanceof TranslatableContents translatable) {
+            keys.add(translatable.getKey());
+            for (Object arg : translatable.getArgs()) {
+                if (arg instanceof Component nested) {
+                    collectKeys(nested, keys);
+                }
+            }
+        }
+        for (Component sibling : text.getSiblings()) {
+            collectKeys(sibling, keys);
+        }
     }
 
     /**
@@ -210,5 +250,6 @@ public final class BrewingTestPlayers {
         CONTROL.remove(player.getUUID());
         SOUNDS.remove(player.getUUID());
         ANIMATIONS.remove(player.getUUID());
+        OVERLAYS.remove(player.getUUID());
     }
 }

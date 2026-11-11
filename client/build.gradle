@@ -20,6 +20,9 @@ dependencies {
     compileOnly 'dev.kizuna.backpack3d:client'
     // 本机开刃调用 PA 客户端播放入口；PA 是硬依赖，同样由完整装配装入。
     compileOnly 'dev.kizuna:kizuna-players-animation'
+    // 巫药提示的句子和数字由 fabric 模块按物品拼好，客户端只把它插进提示；两个模块装在同一份完整装配里。
+    compileOnly project(':fabric')
+    compileOnly project(':server')
     testImplementation libs.junit4
 }
 test {

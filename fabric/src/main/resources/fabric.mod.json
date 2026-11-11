@@ -29,6 +29,7 @@
     "meridian_framework": "*",
     "meridian_human_host": "*",
     "meridian_vanilla_damage": "*",
-    "kizuna_players_animation": "*"
+    "kizuna_players_animation": "*",
+    "backpack_storage_3d": "*"
   }
 }

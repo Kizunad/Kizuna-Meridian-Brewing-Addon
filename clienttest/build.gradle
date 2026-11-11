@@ -11,6 +11,11 @@ dependencies {
     implementation project(':client')
     // 药刀动作场景按 PA 剪辑的确切时刻定格，直接调用 PA 服务端接口。
     implementation 'dev.kizuna:kizuna-players-animation'
+    // 熬一锅药的场景经功法库公开入口起手，身体从原版伤害桥读，与 GameTest 相同。
+    implementation('dev.kizuna.meridian.technique:fabric') { transitive = false }
+    implementation 'dev.kizuna.meridian.technique:server'
+    implementation 'dev.kizuna.meridian.technique:shared'
+    implementation 'dev.kizuna.meridian.vanilla:fabric'
 }
 
 apply from: new File(kizunaWorkspace.directory('framework'), 'scripts/full-assembly.gradle')

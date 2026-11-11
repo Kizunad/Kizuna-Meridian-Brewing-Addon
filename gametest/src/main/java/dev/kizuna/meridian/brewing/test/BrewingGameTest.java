@@ -29,6 +29,7 @@ import dev.kizuna.meridian.brewing.server.IngredientSlot;
 import dev.kizuna.meridian.brewing.server.SmokeVentState;
 import dev.kizuna.meridian.brewing.server.VesselKind;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -106,6 +107,8 @@ public final class BrewingGameTest {
     private static final long CATALYST_TICK = 440L;
     private static final long COLLECTION_TICK = 660L;
     private static final double READY_DRYING_SECONDS = 1_200.0;
+    private static final int WATER_BUCKET_UNITS = 3;
+    private static final int FILLING_BUCKETS = 2;
 
     @GameTest(maxTicks = DEFAULT_TIMEOUT)
     public void registersEffectsAndPotions(GameTestHelper context) {
@@ -224,11 +227,15 @@ public final class BrewingGameTest {
             fire.use(player, InteractionHand.MAIN_HAND);
         }
         BrewCauldronBlockEntity cauldron = (BrewCauldronBlockEntity) level.getBlockEntity(cauldronPos);
-        ItemStack waterBuckets = new ItemStack(Items.WATER_BUCKET, 3);
+        // 一桶 3 份，巫釜盛 4 份：第一桶倒满 3 份，第二桶只倒得进 1 份，桶照样倒空。
+        ItemStack waterBuckets = new ItemStack(Items.WATER_BUCKET, FILLING_BUCKETS);
         player.setItemInHand(InteractionHand.MAIN_HAND, waterBuckets);
-        for (int bucket = 0; bucket < 3; bucket++) {
+        for (int bucket = 0; bucket < FILLING_BUCKETS; bucket++) {
             cauldron.use(player, InteractionHand.MAIN_HAND);
         }
+        int capacity = VesselKind.WITCH_CAULDRON.waterCapacity();
+        context.assertTrue(cauldron.cauldron().waterUnits() == capacity,
+                "两桶水没有倒满巫釜：" + cauldron.cauldron().waterUnits());
         // 最后一桶会原位变成空桶；模拟切换物品前先把容器收入背包。
         ItemStack returnedBucket = player.getMainHandItem();
         player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
@@ -246,7 +253,9 @@ public final class BrewingGameTest {
             ItemStack potion = findItem(player, Items.POTION);
             context.assertTrue(BrewItemStacks.isBrew(potion), "完整世界流程没有产出巫药");
             context.assertTrue(BrewItemStacks.quality(potion) != null, "产出药水缺少品质组件");
-            context.assertTrue(player.getInventory().countItem(Items.BUCKET) >= 3,
+            context.assertTrue(creativeTabHolds(level, potion),
+                    "炼药创造页里没有和熬出来一样的这瓶药：" + potion.getComponentsPatch());
+            context.assertTrue(player.getInventory().countItem(Items.BUCKET) == FILLING_BUCKETS,
                     "水桶没有换回空桶");
             context.succeed();
         });
@@ -329,7 +338,7 @@ public final class BrewingGameTest {
         BrewCauldronBlockEntity restoredCauldron = new BrewCauldronBlockEntity(
                 cauldronPos, level.getBlockState(cauldronPos), VesselKind.WITCH_CAULDRON);
         restoredCauldron.loadCustomOnly(input(level, save(level, cauldron)));
-        context.assertTrue(restoredCauldron.cauldron().waterUnits() == 1,
+        context.assertTrue(restoredCauldron.cauldron().waterUnits() == WATER_BUCKET_UNITS,
                 "巫釜水量没有经过存档往返");
         BrewFireBlockEntity restoredFire = new BrewFireBlockEntity(
                 firePos, level.getBlockState(firePos), BrewFireSource.STOVE);
@@ -356,8 +365,10 @@ public final class BrewingGameTest {
         HerbCrateBlockEntity crate = (HerbCrateBlockEntity) level.getBlockEntity(cratePos);
         ItemStack rawStack = new ItemStack(Items.MOSS_BLOCK, 2);
         crate.setItem(0, rawStack);
-        crate.crate().restore(new HerbCrateState.Snapshot(
-                List.of(IngredientBatch.raw("minecraft:moss_block", 2)), READY_DRYING_SECONDS));
+        List<HerbCrateState.SlotState> slots = new ArrayList<>(
+                Collections.nCopies(HerbCrateState.SLOT_COUNT, HerbCrateState.SlotState.EMPTY));
+        slots.set(0, new HerbCrateState.SlotState("minecraft:moss_block", 2, READY_DRYING_SECONDS));
+        crate.crate().restore(slots);
         context.runAfterDelay(OBSERVE_TICKS, () -> {
             ItemStack prepared = crate.getItem(0);
             Item expected = BuiltInRegistries.ITEM.getValue(id("dry_moss"));
@@ -508,7 +519,7 @@ public final class BrewingGameTest {
         var collection = cauldron.collectBottle(CURRENT_GAME_DAY);
         context.assertTrue(collection.kind() == BrewCollectionKind.POTION,
                 "高分熬制没有产出药水");
-        context.assertTrue(collection.score().orElseThrow().quality() == BrewQuality.SUPERIOR,
+        context.assertTrue(collection.score().orElseThrow().quality().orElseThrow() == BrewQuality.SUPERIOR,
                 "舀出的品质没有保留");
 
         BrewCauldron scorched = new BrewCauldron(VesselKind.WITCH_CAULDRON, BrewForm.SPLASH);
@@ -673,6 +684,14 @@ public final class BrewingGameTest {
             }
         }
         return ItemStack.EMPTY;
+    }
+
+    private static boolean creativeTabHolds(ServerLevel level, ItemStack brewed) {
+        // 创造页给的药和熬出来的药是同一份物品数据，放进背包能叠在一起。
+        CreativeModeTab tab = BuiltInRegistries.CREATIVE_MODE_TAB.getValue(BrewingCreativeTab.ID);
+        tab.buildContents(new CreativeModeTab.ItemDisplayParameters(level.enabledFeatures(),
+                false /* hasPermissions */, level.registryAccess()));
+        return tab.getDisplayItems().stream().anyMatch(stack -> ItemStack.isSameItemSameComponents(stack, brewed));
     }
 
     private static CompoundTag save(ServerLevel level, BlockEntity entity) {

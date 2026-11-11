@@ -2,10 +2,10 @@ package dev.kizuna.meridian.brewing.server;
 
 /** 铜釜的四级氧化状态。 */
 public enum CopperOxidation {
-    UNAFFECTED(0, 0.20),
-    EXPOSED(1, 0.15),
-    WEATHERED(2, 0.10),
-    OXIDIZED(3, 0.07);
+    UNAFFECTED(0, 0.12),
+    EXPOSED(1, 0.09),
+    WEATHERED(2, 0.06),
+    OXIDIZED(3, 0.042);
 
     private final int level;
     private final double convergencePerSecond;

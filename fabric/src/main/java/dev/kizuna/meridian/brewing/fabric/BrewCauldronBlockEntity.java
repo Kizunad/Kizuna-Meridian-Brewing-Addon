@@ -7,8 +7,10 @@ import dev.kizuna.meridian.brewing.server.BrewCollectionKind;
 import dev.kizuna.meridian.brewing.server.BrewDirection;
 import dev.kizuna.meridian.brewing.server.BrewForm;
 import dev.kizuna.meridian.brewing.server.BrewKind;
+import dev.kizuna.meridian.brewing.server.BrewProgress;
 import dev.kizuna.meridian.brewing.server.BrewRecipe;
 import dev.kizuna.meridian.brewing.server.BrewStructure;
+import dev.kizuna.meridian.brewing.server.BrewText;
 import dev.kizuna.meridian.brewing.server.BrewUse;
 import dev.kizuna.meridian.brewing.server.CopperExposure;
 import dev.kizuna.meridian.brewing.server.CopperCauldronState;
@@ -23,13 +25,14 @@ import dev.kizuna.meridian.brewing.server.SmokeVentState;
 import dev.kizuna.meridian.brewing.server.VesselKind;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.NonNullList;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.ItemTags;
@@ -39,7 +42,10 @@ import net.minecraft.world.Containers;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemStackTemplate;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.alchemy.PotionContents;
+import net.minecraft.world.item.alchemy.Potions;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -61,6 +67,8 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
     private static final double BLOCK_CENTER = 0.5;
     private static final long DAY_TICKS = 24_000L;
     private static final long COPPER_OXIDATION_INTERVAL_TICKS = 24_000L;
+    private static final int WATER_BUCKET_UNITS = 3;
+    private static final int WATER_BOTTLE_UNITS = 1;
 
     private final VesselKind vessel;
     private final BrewCauldron cauldron;
@@ -113,21 +121,21 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
             result = tryUseItem(player, stack);
         }
         if (!result.accepted()) {
-            sendOverlay(player, result.reason());
+            BrewTexts.sendOverlay(player, result.message());
             return InteractionResult.SUCCESS;
         }
         applyAcceptedUse(player, hand, stack);
-        sendOverlay(player, result.reason());
+        BrewTexts.sendOverlay(player, result.message());
         setChanged();
         return InteractionResult.SUCCESS;
     }
 
     public BrewActionResult startBrew(ServerPlayer caster) {
         if (level == null || level.isClientSide()) {
-            return BrewActionResult.returned("巫釜只能在服务端起熬");
+            return BrewActionResult.returned(BrewText.message("cauldron.server_only"));
         }
         if (caster == null || !level.mayInteract(caster, worldPosition)) {
-            return BrewActionResult.returned("没有权限操作巫釜");
+            return BrewActionResult.returned(BrewText.message("no_permission"));
         }
         structure = scanStructure();
         BrewActionResult result = cauldron.startBrew(structure);
@@ -148,40 +156,43 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
     public BrewActionResult advanceTechniqueBrew(ServerPlayer caster) {
         // 每个周期只推进一次规则时间，结构或权限失效时先恢复普通 ticker。
         if (!techniqueControlled()) {
-            return BrewActionResult.returned("巫釜没有由熬药式接管");
+            return BrewActionResult.returned(BrewText.message("technique.not_controlled"));
         }
-        BrewActionResult access = validateTechniqueAccess(caster);
-        if (!access.accepted()) {
-            return interruptTechnique(access.reason());
+        Optional<BrewText> accessProblem = techniqueAccessProblem(caster);
+        if (accessProblem.isPresent()) {
+            return interruptTechnique(accessProblem.orElseThrow());
         }
         if (cauldron.state() == BrewCauldronState.BREWED) {
             techniqueCaster = null;
-            return BrewActionResult.accepted("熬药完成");
+            return BrewActionResult.accepted(BrewText.message("cauldron.brewed"));
         }
         structure = scanStructure();
-        Optional<BrewRecipe> recipe = cauldron.recipe();
-        if (recipe.isEmpty() || !structure.accepts(recipe.orElseThrow().fireKind())) {
-            return interruptTechnique("熬制中断：结构或火种已不满足药方");
+        BrewRecipe recipe = cauldron.recipe().orElseThrow(() -> new IllegalStateException("熬制中的釜没有药方"));
+        Optional<BrewText> structureProblem = structure.problemFor(recipe.kind(), recipe.fireKind());
+        if (structureProblem.isPresent()) {
+            return interruptTechnique(BrewText.message("technique.interrupted", structureProblem.orElseThrow()));
         }
-        cauldron.tick(TECHNIQUE_SECONDS_PER_STEP, structure);
+        tickCauldron(TECHNIQUE_SECONDS_PER_STEP);
         setChanged();
         if (cauldron.state() == BrewCauldronState.SCORCHED) {
             techniqueCaster = null;
-            return BrewActionResult.returned("熬制中断：巫釜已经糊锅");
+            return BrewActionResult.returned(BrewText.message("technique.scorched"));
         }
         if (cauldron.state() == BrewCauldronState.BREWED) {
             techniqueCaster = null;
-            return BrewActionResult.accepted("熬药完成");
+            BrewTexts.sendOverlay(caster, BrewText.message("cauldron.brewed"));
+            return BrewActionResult.accepted(BrewText.message("cauldron.brewed"));
         }
-        return BrewActionResult.accepted("熬药推进一秒");
+        BrewTexts.sendProgress(caster, BrewProgress.of(cauldron));
+        return BrewActionResult.accepted(BrewText.message("technique.step"));
     }
 
     public BrewActionResult interruptTechniqueBrew() {
         // 已完成的釜保留成药；仍被接管的生药释放控制并清除本次熬制累计。
         if (!techniqueControlled()) {
-            return BrewActionResult.returned("巫釜没有由熬药式接管");
+            return BrewActionResult.returned(BrewText.message("technique.not_controlled"));
         }
-        return interruptTechnique("熬药式已中断");
+        return interruptTechnique(BrewText.message("technique.stopped"));
     }
 
     public void dropStoredIngredients() {
@@ -202,7 +213,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
         }
         structure = scanStructure();
         if (!techniqueControlled()) {
-            cauldron.tick(SECONDS_PER_TICK, structure);
+            tickCauldron(SECONDS_PER_TICK);
         }
         if (vessel == VesselKind.COPPER_CAULDRON) {
             tickCopperOxidation();
@@ -211,20 +222,36 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
         setChanged();
     }
 
-    private BrewActionResult validateTechniqueAccess(ServerPlayer caster) {
+    /** 推进一段时间；熬成和糊锅那一刻在釜上出声。 */
+    private void tickCauldron(double seconds) {
+        BrewCauldronState before = cauldron.state();
+        cauldron.tick(seconds, structure);
+        BrewCauldronState after = cauldron.state();
+        if (before == after) {
+            return;
+        }
+        if (after == BrewCauldronState.BREWED) {
+            BrewSounds.atBlock(level, worldPosition, BrewSounds.CAULDRON_DONE);
+        } else if (after == BrewCauldronState.SCORCHED) {
+            BrewSounds.atBlock(level, worldPosition, BrewSounds.CAULDRON_SCORCH);
+            BrewSounds.atBlock(level, worldPosition, BrewSounds.CAULDRON_SCORCH_FIRE);
+        }
+    }
+
+    private Optional<BrewText> techniqueAccessProblem(ServerPlayer caster) {
         // 施放期间继续验证原版权限和距离，不能沿用起手时的授权。
         if (caster == null || !level.mayInteract(caster, worldPosition)) {
-            return BrewActionResult.returned("没有权限操作巫釜");
+            return Optional.of(BrewText.message("no_permission"));
         }
         if (caster.distanceToSqr(worldPosition.getX() + BLOCK_CENTER,
                 worldPosition.getY() + BLOCK_CENTER, worldPosition.getZ() + BLOCK_CENTER)
                 > TECHNIQUE_MAX_DISTANCE_SQUARED) {
-            return BrewActionResult.returned("离巫釜太远");
+            return Optional.of(BrewText.message("technique.too_far"));
         }
-        return BrewActionResult.accepted("可继续熬制");
+        return Optional.empty();
     }
 
-    private BrewActionResult interruptTechnique(String reason) {
+    private BrewActionResult interruptTechnique(BrewText reason) {
         // 无论规则中断是否接受都释放接管，避免方块 ticker 永久暂停。
         BrewActionResult interruption = cauldron.interruptBrew();
         techniqueCaster = null;
@@ -232,7 +259,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
         if (interruption.accepted()) {
             return BrewActionResult.returned(reason);
         }
-        return BrewActionResult.returned(reason + "；" + interruption.reason());
+        return BrewActionResult.returned(BrewText.message("joined", reason, interruption.message()));
     }
 
     private BrewActionResult tryUseItem(Player player, ItemStack stack) {
@@ -242,10 +269,15 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
         if (stack.is(Items.WATER_BUCKET)) {
             return useWaterBucket();
         }
+        if (isWaterBottle(stack)) {
+            return cauldron.addWater(WATER_BOTTLE_UNITS);
+        }
         if (stack.is(Items.GLASS_BOTTLE)) {
             return collectBottle(player);
         }
-        if (vessel == VesselKind.COPPER_CAULDRON && stack.is(Items.HONEYCOMB)) {
+        // 蜜脾是招虫水的引药：铜釜正熬着时按下料处理，不熬的时候才是上蜡。
+        if (vessel == VesselKind.COPPER_CAULDRON && stack.is(Items.HONEYCOMB)
+                && cauldron.state() != BrewCauldronState.BREWING) {
             return cauldron.waxCopper();
         }
         if (vessel == VesselKind.COPPER_CAULDRON && stack.is(ItemTags.AXES)) {
@@ -258,6 +290,9 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
         // 熬药式期间副手只允许添水或按药方下料，舀药、上蜡和刮锈不属于协作入口。
         if (stack.is(Items.WATER_BUCKET)) {
             return useWaterBucket();
+        }
+        if (isWaterBottle(stack)) {
+            return cauldron.addWater(WATER_BOTTLE_UNITS);
         }
         return addIngredient(stack);
     }
@@ -272,11 +307,20 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
         return techniqueCaster != null && techniqueCaster.equals(player.getUUID());
     }
 
+    static boolean isWaterBottle(ItemStack stack) {
+        PotionContents contents = stack.get(DataComponents.POTION_CONTENTS);
+        return stack.is(Items.POTION) && contents != null && contents.is(Potions.WATER);
+    }
+
     private BrewActionResult useWaterBucket() {
-        if (cauldron.state() == BrewCauldronState.SCORCHED) {
-            return cauldron.scrubWithWater();
+        if (cauldron.state() != BrewCauldronState.SCORCHED) {
+            return cauldron.addWater(WATER_BUCKET_UNITS);
         }
-        return cauldron.addWater(1);
+        BrewActionResult scrubbed = cauldron.scrubWithWater();
+        if (scrubbed.accepted()) {
+            BrewSounds.atBlock(level, worldPosition, BrewSounds.CAULDRON_SCRUB);
+        }
+        return scrubbed;
     }
 
     private void applyAcceptedUse(Player player, InteractionHand hand, ItemStack stack) {
@@ -292,46 +336,116 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
             BrewingItemReturns.consumeWaterBucket(player, hand, stack);
             return;
         }
+        // 水瓶、蜂蜜瓶、龙息用完还一个玻璃瓶；水瓶在原版没有合成剩余物，单独还。
+        ItemStack remainder = ItemStack.EMPTY;
+        ItemStackTemplate craftingRemainder = stack.getItem().getCraftingRemainder();
+        if (isWaterBottle(stack)) {
+            remainder = new ItemStack(Items.GLASS_BOTTLE);
+        } else if (craftingRemainder != null) {
+            remainder = craftingRemainder.create();
+        }
         stack.shrink(1);
+        if (!remainder.isEmpty()) {
+            BrewingItemReturns.giveOrDrop(player, remainder);
+        }
+    }
+
+    /**
+     * 发射器对着釜用这一件：水桶、水瓶注水，玻璃瓶舀药。返回发射器里换回的东西（空桶、玻璃瓶、成药或药渣），
+     * 釜不收时为空，发射器里的东西不动。
+     */
+    Optional<ItemStack> dispense(ItemStack stack) {
+        if (level == null || level.isClientSide()) {
+            return Optional.empty();
+        }
+        BrewActionResult result;
+        ItemStack remainder;
+        if (stack.is(Items.WATER_BUCKET)) {
+            result = useWaterBucket();
+            remainder = new ItemStack(Items.BUCKET);
+        } else if (isWaterBottle(stack)) {
+            result = cauldron.addWater(WATER_BOTTLE_UNITS);
+            remainder = new ItemStack(Items.GLASS_BOTTLE);
+        } else if (stack.is(Items.GLASS_BOTTLE)) {
+            Collected collected = collect();
+            result = collected.result();
+            remainder = collected.output();
+        } else {
+            return Optional.empty();
+        }
+        if (!result.accepted()) {
+            return Optional.empty();
+        }
+        setChanged();
+        return Optional.of(remainder);
     }
 
     private BrewActionResult collectBottle(Player player) {
-        // 收药可能清空釜内配方，先保留产物信息，再通过统一返还入口交付药水或残药。
+        Collected collected = collect();
+        if (collected.result().accepted()) {
+            BrewingItemReturns.giveOrDrop(player, collected.output());
+        }
+        return collected.result();
+    }
+
+    /** 舀一瓶。收药可能清空釜内配方，先留下药方和剂型再舀；没舀到时产物为空。 */
+    private Collected collect() {
         long currentGameDay = currentGameDay();
         Optional<BrewRecipe> recipe = cauldron.recipe();
         BrewForm form = cauldron.form();
         var result = cauldron.collectBottle(currentGameDay);
         if (result.kind() == BrewCollectionKind.NOTHING) {
-            return BrewActionResult.returned(result.reason());
+            return new Collected(BrewActionResult.returned(result.message()), ItemStack.EMPTY);
         }
+        var score = result.score().orElseThrow();
         ItemStack output = residueStack();
-        if (result.kind() == BrewCollectionKind.POTION && result.score().isPresent()) {
-            var score = result.score().orElseThrow();
+        if (result.kind() == BrewCollectionKind.POTION) {
             BrewKind kind = recipe.orElseThrow().kind();
             BrewUse use = form == BrewForm.SPLASH ? BrewUse.SPLASH : BrewUse.DRINK;
-            output = BrewItemStacks.create(kind, score.quality(), use);
+            output = BrewItemStacks.create(kind, score.quality().orElseThrow(), use);
+            BrewSounds.quality(level, worldPosition, score.quality().orElseThrow());
+        } else {
+            BrewSounds.atBlock(level, worldPosition, BrewSounds.CAULDRON_DUMP);
         }
-        BrewingItemReturns.giveOrDrop(player, output);
-        return BrewActionResult.accepted("已舀出一瓶，余量 " + result.remainingBottles());
+        return new Collected(BrewActionResult.accepted(result.message()), output);
+    }
+
+    private record Collected(BrewActionResult result, ItemStack output) {
     }
 
     private BrewActionResult describeState() {
-        String recipeName = cauldron.recipe().map(value -> value.kind().displayName()).orElse("未定药方");
-        String message = recipeName + " · " + cauldron.state()
-                + " · 水 " + cauldron.waterUnits() + " 份 · 温度 "
-                + Math.round(cauldron.temperature()) + "°";
-        return BrewActionResult.accepted(message);
+        BrewText recipeName = BrewText.message("cauldron.no_recipe");
+        if (cauldron.recipe().isPresent()) {
+            recipeName = BrewCauldron.recipeName(cauldron.recipe().orElseThrow().kind());
+        }
+        BrewText stateName = BrewText.message("state." + cauldron.state().name().toLowerCase(Locale.ROOT));
+        int temperature = (int) Math.round(cauldron.temperature());
+        return BrewActionResult.accepted(BrewText.message("cauldron.describe", recipeName, stateName,
+                cauldron.waterUnits(), vessel.waterCapacity(), temperature));
     }
 
     private BrewActionResult addIngredient(ItemStack stack) {
         String itemId = itemId(stack.getItem());
         Optional<IngredientSlot> slot = ingredientSlot(itemId);
         if (slot.isEmpty()) {
-            return BrewActionResult.returned("这件物品不是当前药方的投料");
+            return BrewActionResult.returned(notAnIngredient(itemId));
         }
         IngredientSlot selectedSlot = slot.orElseThrow();
         IngredientBatch batch = ingredientBatch(stack, selectedSlot, itemId);
-        return cauldron.addIngredient(selectedSlot, batch);
+        BrewActionResult added = cauldron.addIngredient(selectedSlot, batch);
+        if (added.accepted()) {
+            BrewSounds.atBlock(level, worldPosition, BrewSounds.CAULDRON_ADD);
+        }
+        return added;
+    }
+
+    private BrewText notAnIngredient(String itemId) {
+        BrewText.ItemName item = new BrewText.ItemName(itemId);
+        if (cauldron.recipe().isEmpty()) {
+            return BrewText.message("cauldron.primary.unknown", item);
+        }
+        return BrewText.message("cauldron.ingredient.wrong", item,
+                BrewCauldron.recipeName(cauldron.recipe().orElseThrow().kind()));
     }
 
     private IngredientBatch ingredientBatch(ItemStack stack, IngredientSlot slot, String itemId) {
@@ -435,13 +549,6 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
 
     private long currentGameDay() {
         return Math.floorDiv(level.getOverworldClockTime(), DAY_TICKS);
-    }
-
-    private static void sendOverlay(Player player, String message) {
-        if (player instanceof ServerPlayer serverPlayer && serverPlayer.connection == null) {
-            return;
-        }
-        player.sendOverlayMessage(Component.literal(message));
     }
 
     private ItemStack itemStack(IngredientBatch batch) {

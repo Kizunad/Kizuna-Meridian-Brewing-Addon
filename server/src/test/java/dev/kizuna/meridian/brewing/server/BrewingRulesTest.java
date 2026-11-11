@@ -6,11 +6,15 @@ import static org.junit.Assert.assertTrue;
 
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.Test;
 
 public final class BrewingRulesTest {
     private static final double COLLECTION_COOLING_SECONDS = 1.25;
+    private static final DryingConditions SUNNY = new DryingConditions(
+            DaylightPhase.DAY, DryWeather.CLEAR, true);
+    private static final double CRATE_SUN_SECONDS = 1_200.0;
     private static final BrewStructure STABLE_HEAT = new BrewStructure(
             HeatSourceKind.SUN_BRAZIER_2,
             BrewStructure.REQUIRED_HEARTH_STONES,
@@ -31,8 +35,28 @@ public final class BrewingRulesTest {
                 CatalystRequirement.OMITTED);
         BrewScoreInput withCatalyst = new BrewScoreInput(25, 10, 30, 20, 15, 0,
                 CatalystRequirement.INCLUDED);
-        assertEquals(BrewQuality.FINE, BrewScoring.calculate(withoutCatalyst).quality());
-        assertEquals(BrewQuality.SUPERIOR, BrewScoring.calculate(withCatalyst).quality());
+        assertEquals(Optional.of(BrewQuality.FINE), BrewScoring.calculate(withoutCatalyst).quality());
+        assertEquals(Optional.of(BrewQuality.SUPERIOR), BrewScoring.calculate(withCatalyst).quality());
+    }
+
+    @Test
+    public void scoreBelowScrapLineHasNoQuality() {
+        BrewScoreInput nineteen = new BrewScoreInput(19, 0, 0, 0, 0, 0, CatalystRequirement.OMITTED);
+        BrewScoreInput twenty = new BrewScoreInput(20, 0, 0, 0, 0, 0, CatalystRequirement.OMITTED);
+        assertTrue(BrewScoring.calculate(nineteen).quality().isEmpty());
+        assertTrue(BrewScoring.isScrap(nineteen));
+        assertEquals(Optional.of(BrewQuality.POOR), BrewScoring.calculate(twenty).quality());
+        assertTrue(!BrewScoring.isScrap(twenty));
+    }
+
+    @Test
+    public void missingAccessoryCountsZeroWithSameDenominator() {
+        IngredientBatch primary = IngredientBatch.prepared("meridian_brewing:dry_moss", 0);
+        IngredientBatch accessory = IngredientBatch.raw("minecraft:honey_bottle");
+        IngredientBatch catalyst = IngredientBatch.raw("minecraft:cobweb");
+        assertEquals(25, BrewScoring.ingredientScore(primary, accessory, null, 0));
+        assertEquals(13, BrewScoring.ingredientScore(primary, null, null, 0));
+        assertEquals(17, BrewScoring.ingredientScore(primary, null, catalyst, 0));
     }
 
     @Test
@@ -84,7 +108,7 @@ public final class BrewingRulesTest {
     }
 
     @Test
-    public void cauldronCollectsThreeQualityCheckedBottles() {
+    public void witchCauldronCollectsQualityCheckedBottles() {
         BrewCauldron cauldron = new BrewCauldron(VesselKind.WITCH_CAULDRON, BrewForm.DRINK);
         cauldron.addWater(3);
         cauldron.addIngredient(IngredientSlot.PRIMARY,
@@ -103,8 +127,43 @@ public final class BrewingRulesTest {
                 HeatSourceKind.NONE, 0, SmokeVentState.OPEN, HerbState.PRESENT));
         BrewCollectionResult result = cauldron.collectBottle(3);
         assertEquals(BrewCollectionKind.POTION, result.kind());
-        assertEquals(BrewQuality.SUPERIOR, result.score().orElseThrow().quality());
-        assertEquals(2, result.remainingBottles());
+        assertEquals(Optional.of(BrewQuality.SUPERIOR), result.score().orElseThrow().quality());
+        assertEquals(VesselKind.WITCH_CAULDRON.waterCapacity() - 1, result.remainingBottles());
+        assertEquals("message.meridian_brewing.cauldron.collect.potion", result.message().key());
+    }
+
+    @Test
+    public void bucketPoursOnlyUpToCapacity() {
+        BrewCauldron copper = new BrewCauldron(VesselKind.COPPER_CAULDRON, BrewForm.DRINK);
+        assertTrue(copper.addWater(3).accepted());
+        assertEquals(3, copper.waterUnits());
+        assertTrue(!copper.addWater(1).accepted());
+        BrewCauldron witch = new BrewCauldron(VesselKind.WITCH_CAULDRON, BrewForm.DRINK);
+        witch.addWater(3);
+        BrewActionResult topUp = witch.addWater(3);
+        assertTrue(topUp.accepted());
+        assertEquals(List.of(1, 4, 4), topUp.message().args());
+        assertEquals(4, witch.waterUnits());
+    }
+
+    @Test
+    public void herbCrateTimesEachSlotAndDilutesAddedHerbs() {
+        HerbCrateState crate = new HerbCrateState();
+        crate.observe(0, "minecraft:poppy", 2);
+        crate.observe(1, "minecraft:dirt", 1);
+        crate.tick(CRATE_SUN_SECONDS / 2, SUNNY);
+        assertEquals(CRATE_SUN_SECONDS / 2, crate.dryingSeconds(0), 0.0001);
+        assertEquals(0.0, crate.dryingSeconds(1), 0.0001);
+        crate.observe(0, "minecraft:poppy", 4);
+        assertEquals(CRATE_SUN_SECONDS / 4, crate.dryingSeconds(0), 0.0001);
+        crate.observe(0, "minecraft:poppy", 1);
+        assertEquals(CRATE_SUN_SECONDS / 4, crate.dryingSeconds(0), 0.0001);
+        crate.tick(CRATE_SUN_SECONDS, new DryingConditions(DaylightPhase.NIGHT, DryWeather.CLEAR, true));
+        assertTrue(crate.readyRecipe(0).isEmpty());
+        crate.tick(CRATE_SUN_SECONDS, SUNNY);
+        assertEquals("meridian_brewing:dry_poppy", crate.readyRecipe(0).orElseThrow().outputItemId());
+        crate.observe(0, "minecraft:moss_block", 1);
+        assertEquals(0.0, crate.dryingSeconds(0), 0.0001);
     }
 
     @Test
@@ -188,10 +247,13 @@ public final class BrewingRulesTest {
     }
 
     @Test
-    public void copperParametersMatchSecondTierRules() {
-        assertEquals(4, VesselKind.COPPER_CAULDRON.waterCapacity());
-        assertEquals(10.0, VesselKind.COPPER_CAULDRON.waterCoolingDegrees(), 0.0001);
-        assertEquals(1.3, VesselKind.COPPER_CAULDRON.qiCost(), 0.0001);
+    public void copperIsFirstTierAndWitchIsSecondTier() {
+        assertEquals(3, VesselKind.COPPER_CAULDRON.waterCapacity());
+        assertEquals(15.0, VesselKind.COPPER_CAULDRON.waterCoolingDegrees(), 0.0001);
+        assertEquals(1.0, VesselKind.COPPER_CAULDRON.qiCost(), 0.0001);
+        assertEquals(4, VesselKind.WITCH_CAULDRON.waterCapacity());
+        assertEquals(10.0, VesselKind.WITCH_CAULDRON.waterCoolingDegrees(), 0.0001);
+        assertEquals(1.3, VesselKind.WITCH_CAULDRON.qiCost(), 0.0001);
         CopperCauldronState state = new CopperCauldronState(
                 CopperOxidation.UNAFFECTED, false);
         state = state.age(CopperExposure.EXPOSED);

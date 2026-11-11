@@ -71,6 +71,14 @@
       }
     ]
   },
+  "cauldron.scorch_fire": {
+    "sounds": [
+      {
+        "name": "minecraft:block.fire.extinguish",
+        "type": "event"
+      }
+    ]
+  },
   "cauldron.scrub": {
     "sounds": [
       {

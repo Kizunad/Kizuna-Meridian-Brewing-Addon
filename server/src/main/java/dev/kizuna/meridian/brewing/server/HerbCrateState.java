@@ -1,88 +1,95 @@
 package dev.kizuna.meridian.brewing.server;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
-/** 九格晒药匾的服务端晒料状态。 */
+/**
+ * 九格晒药匾每一格各自的晒制进度。
+ *
+ * <p>方块实体每 tick 把每格放的物品和数量报上来：格子空了或换了物品就清零；
+ * 同种物品补多了按数量摊薄（旧秒数 × 旧数量 / 新数量）；拿走一部分时进度不变。</p>
+ */
 public final class HerbCrateState {
     public static final int SLOT_COUNT = 9;
-    private final List<IngredientBatch> slots = new ArrayList<>();
-    private double dryingSeconds;
+    private final List<SlotState> slots = new ArrayList<>(Collections.nCopies(SLOT_COUNT, SlotState.EMPTY));
 
-    public List<IngredientBatch> slots() {
+    public List<SlotState> slots() {
         return List.copyOf(slots);
     }
 
-    public double dryingSeconds() {
-        return dryingSeconds;
+    public double dryingSeconds(int slot) {
+        return slots.get(slot).dryingSeconds();
     }
 
-    public BrewActionResult insert(IngredientBatch batch) {
-        if (batch == null) {
-            return BrewActionResult.returned("晒药匾不能放入空投料");
+    /** 记下这一格现在放的东西；物品 ID 为空表示空格。 */
+    public void observe(int slot, String itemId, int count) {
+        SlotState previous = slots.get(slot);
+        if (itemId == null || itemId.isBlank() || count <= 0) {
+            slots.set(slot, SlotState.EMPTY);
+            return;
         }
-        if (slots.size() >= SLOT_COUNT) {
-            return BrewActionResult.returned("晒药匾已满", batch);
+        if (!itemId.equals(previous.itemId())) {
+            slots.set(slot, new SlotState(itemId, count, 0.0));
+            return;
         }
-        PreparationRecipe recipe = PreparationRecipes.all().get(batch.itemId());
-        if (batch.preparation() != PreparationKind.RAW || recipe == null
-                || recipe.method() != PreparationMethod.SUN_DRY) {
-            return BrewActionResult.returned("晒药匾只接受需要晒制的生料", batch);
+        double seconds = previous.dryingSeconds();
+        if (count > previous.count()) {
+            seconds = previous.dryingSeconds() * previous.count() / count;
         }
-        slots.add(batch);
-        return BrewActionResult.accepted("药材已放入晒药匾");
+        slots.set(slot, new SlotState(itemId, count, seconds));
     }
 
+    /** 白天、不下雨时，每格要晒的生药各自加时间。 */
     public void tick(double seconds, DryingConditions conditions) {
         if (!Double.isFinite(seconds) || seconds < 0.0 || conditions == null) {
             throw new IllegalArgumentException("晒料推进参数非法");
         }
-        if (conditions.canDry()) {
-            dryingSeconds += seconds;
+        if (!conditions.canDry()) {
+            return;
         }
-    }
-
-    public List<IngredientBatch> collectPrepared(long preparedGameDay) {
-        if (preparedGameDay < 0) {
-            throw new IllegalArgumentException("制成日不能为负数");
-        }
-        List<IngredientBatch> prepared = new ArrayList<>();
-        List<IngredientBatch> remaining = new ArrayList<>();
-        for (IngredientBatch batch : slots) {
-            PreparationRecipe recipe = PreparationRecipes.all().get(batch.itemId());
-            if (recipe != null && recipe.method() == PreparationMethod.SUN_DRY
-                    && dryingSeconds >= recipe.durationSeconds()) {
-                prepared.add(IngredientBatch.prepared(recipe.outputItemId(), preparedGameDay,
-                        batch.count()));
-            } else {
-                remaining.add(batch);
+        for (int slot = 0; slot < SLOT_COUNT; slot++) {
+            SlotState state = slots.get(slot);
+            if (sunDryRecipe(state.itemId()).isPresent()) {
+                slots.set(slot, new SlotState(state.itemId(), state.count(), state.dryingSeconds() + seconds));
             }
         }
-        slots.clear();
-        slots.addAll(remaining);
-        return List.copyOf(prepared);
     }
 
-    public Snapshot snapshot() {
-        return new Snapshot(slots, dryingSeconds);
+    /** 这一格晒够了时返回晒成的配方。 */
+    public Optional<PreparationRecipe> readyRecipe(int slot) {
+        SlotState state = slots.get(slot);
+        return sunDryRecipe(state.itemId())
+                .filter(recipe -> state.dryingSeconds() >= recipe.durationSeconds());
     }
 
-    public void restore(Snapshot snapshot) {
-        if (snapshot == null || !Double.isFinite(snapshot.dryingSeconds())
-                || snapshot.dryingSeconds() < 0.0 || snapshot.slots().size() > SLOT_COUNT) {
-            throw new IllegalArgumentException("晒药匾快照不完整");
+    public void restore(List<SlotState> restored) {
+        if (restored == null || restored.size() != SLOT_COUNT) {
+            throw new IllegalArgumentException("晒药匾快照必须正好九格");
         }
         slots.clear();
-        slots.addAll(snapshot.slots());
-        dryingSeconds = snapshot.dryingSeconds();
+        slots.addAll(restored);
     }
 
-    public record Snapshot(List<IngredientBatch> slots, double dryingSeconds) {
-        public Snapshot {
-            if (slots == null) {
-                throw new IllegalArgumentException("晒药匾槽位不能为空");
+    /** 只收要晒的生药。 */
+    public static boolean acceptsRaw(String itemId) {
+        return sunDryRecipe(itemId).isPresent();
+    }
+
+    private static Optional<PreparationRecipe> sunDryRecipe(String itemId) {
+        return Optional.ofNullable(PreparationRecipes.all().get(itemId))
+                .filter(recipe -> recipe.method() == PreparationMethod.SUN_DRY);
+    }
+
+    /** 一格的物品、数量和已经晒了多少秒；空格的物品 ID 是空串。 */
+    public record SlotState(String itemId, int count, double dryingSeconds) {
+        public static final SlotState EMPTY = new SlotState("", 0, 0.0);
+
+        public SlotState {
+            if (itemId == null || count < 0 || !Double.isFinite(dryingSeconds) || dryingSeconds < 0.0) {
+                throw new IllegalArgumentException("晒药匾格子状态非法");
             }
-            slots = List.copyOf(slots);
         }
     }
 }

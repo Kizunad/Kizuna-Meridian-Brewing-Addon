@@ -42,6 +42,7 @@ public final class BrewingClient implements ClientModInitializer {
         PlacedModels.renderBlockEntity(blockEntityType("brew_fire"), BrewingClient::modelOf);
         DeadWoodTint.register();
         HerbKnifeDrawClient.register();
+        BrewTooltips.register();
     }
 
     static Identifier id(String path) {

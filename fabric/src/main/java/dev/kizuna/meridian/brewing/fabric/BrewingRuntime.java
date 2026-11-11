@@ -3,6 +3,7 @@ package dev.kizuna.meridian.brewing.fabric;
 import dev.kizuna.meridian.brewing.server.ArmorRotProfile;
 import dev.kizuna.meridian.brewing.server.BitterYellowProfile;
 import dev.kizuna.meridian.brewing.server.BrewActionResult;
+import dev.kizuna.meridian.brewing.server.BrewText;
 import dev.kizuna.meridian.brewing.server.BrewEffectProfiles;
 import dev.kizuna.meridian.brewing.server.BrewKind;
 import dev.kizuna.meridian.brewing.server.BrewQuality;
@@ -150,10 +151,10 @@ public final class BrewingRuntime {
         }
         BlockPos targetFirePos = active.pos().below();
         if (active.level() != player.level() || !targetFirePos.equals(firePos)) {
-            return Optional.of(BrewActionResult.returned("熬药式只能操作目标巫釜下方火源"));
+            return Optional.of(BrewActionResult.returned(BrewText.message("technique.fire_not_target")));
         }
         if (!(active.level().getBlockEntity(firePos) instanceof BrewFireBlockEntity fire)) {
-            return Optional.of(BrewActionResult.returned("目标巫釜下方没有可调火源"));
+            return Optional.of(BrewActionResult.returned(BrewText.message("technique.no_fire_below")));
         }
         return Optional.of(fire.useTechnique(player, hand));
     }
@@ -227,7 +228,7 @@ public final class BrewingRuntime {
         BrewActionResult result = cauldron.advanceTechniqueBrew(player);
         if (!result.accepted()) {
             cauldron.interruptTechniqueBrew();
-            return EffectHandling.rejected(result.reason());
+            return EffectHandling.rejected(BrewTexts.chinese(result.message()));
         }
         markHandled(step.key());
         if (cauldron.cauldron().state() == BrewCauldronState.BREWING) {
@@ -244,7 +245,7 @@ public final class BrewingRuntime {
         }
         BrewActionResult result = cauldron.startBrew(player);
         if (!result.accepted()) {
-            return EffectHandling.rejected(result.reason());
+            return EffectHandling.rejected(BrewTexts.chinese(result.message()));
         }
         cauldron.beginTechniqueControl(player.getUUID());
         BrewSoundPlayback sounds = new BrewSoundPlayback();

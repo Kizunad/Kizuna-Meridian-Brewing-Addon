@@ -45,13 +45,13 @@ public final class BrewFireState {
 
     public BrewActionResult changeFireKind(FireKind nextFireKind) {
         if (nextFireKind == null) {
-            return BrewActionResult.returned("火种不能为空");
+            throw new IllegalArgumentException("火种不能为空");
         }
         if (fireKind == nextFireKind) {
-            return BrewActionResult.returned("当前已经是该火种");
+            return BrewActionResult.returned(BrewText.message("fire.kind.same", BrewStructure.fireName(fireKind)));
         }
         fireKind = nextFireKind;
-        return BrewActionResult.accepted("火种已切换");
+        return BrewActionResult.accepted(BrewText.message("fire.kind.changed", BrewStructure.fireName(fireKind)));
     }
 
     public int level() {
@@ -64,37 +64,37 @@ public final class BrewFireState {
 
     public BrewActionResult addFuel(String itemId) {
         if (!COAL_ID.equals(itemId) && !CHARCOAL_ID.equals(itemId)) {
-            return BrewActionResult.returned("铁火盆只收煤炭或木炭");
+            return BrewActionResult.returned(BrewText.message("fire.fuel.wrong"));
         }
         if (source == BrewFireSource.CAMPFIRE) {
-            return BrewActionResult.returned("营火不能调档");
+            return BrewActionResult.returned(BrewText.message("fire.campfire_fixed"));
         }
         if (level >= MAX_LEVEL) {
-            return BrewActionResult.returned("火档已经最高");
+            return BrewActionResult.returned(BrewText.message("fire.level.max", MAX_LEVEL));
         }
         level++;
         fuelSeconds += FUEL_SECONDS_PER_LEVEL;
-        return BrewActionResult.accepted("火档升至 " + level);
+        return BrewActionResult.accepted(BrewText.message("fire.level.up", level));
     }
 
     public BrewActionResult lowerLevel() {
         if (source == BrewFireSource.CAMPFIRE) {
-            return BrewActionResult.returned("营火不能调档");
+            return BrewActionResult.returned(BrewText.message("fire.campfire_fixed"));
         }
         if (level <= 0) {
-            return BrewActionResult.returned("火已经熄灭");
+            return BrewActionResult.returned(BrewText.message("fire.level.out"));
         }
         level--;
-        return BrewActionResult.accepted("火档降至 " + level);
+        return BrewActionResult.accepted(BrewText.message("fire.level.down", level));
     }
 
     public BrewActionResult extinguish() {
         if (source != BrewFireSource.CAMPFIRE) {
             level = 0;
             fuelSeconds = 0.0;
-            return BrewActionResult.accepted("火已熄灭");
+            return BrewActionResult.accepted(BrewText.message("fire.extinguished"));
         }
-        return BrewActionResult.returned("营火状态由方块本身控制");
+        return BrewActionResult.returned(BrewText.message("fire.campfire_block"));
     }
 
     public void tick(double seconds) {

@@ -1,5 +1,7 @@
 package dev.kizuna.meridian.brewing.server;
 
+import java.util.Optional;
+
 /** 按旧稿五项规则计算炼药结果；分数只在服务端生成品质时使用。 */
 public final class BrewScoring {
     public static final int INGREDIENT_MAX = 25;
@@ -29,7 +31,10 @@ public final class BrewScoring {
         int rawTotal = input.ingredientScore() + input.soakScore() + input.heatScore()
                 + input.timingScore() + input.collectionScore() - scorchPenalty;
         int totalScore = clamp(rawTotal, 0, SCORE_MAX);
-        BrewQuality quality = quality(totalScore, input.catalystRequirement());
+        Optional<BrewQuality> quality = Optional.empty();
+        if (totalScore >= SCRAP_THRESHOLD) {
+            quality = Optional.of(quality(totalScore, input.catalystRequirement()));
+        }
         return new BrewScore(input.ingredientScore(), input.soakScore(), input.heatScore(),
                 input.timingScore(), input.collectionScore(), scorchPenalty, totalScore,
                 quality, input.catalystRequirement());
@@ -49,11 +54,14 @@ public final class BrewScoring {
 
     public static int ingredientScore(IngredientBatch primary, IngredientBatch accessory,
                                       IngredientBatch catalyst, long currentGameDay) {
-        if (primary == null || accessory == null || currentGameDay < 0) {
+        if (primary == null || currentGameDay < 0) {
             throw new IllegalArgumentException("料分输入不完整");
         }
-        double totalMultiplier = primary.scoreMultiplier(currentGameDay)
-                + PREPARED_INGREDIENT_MULTIPLIER;
+        // 没下辅料时它在平均里算 0，分母照旧；引药可以不下，不下就只平均主料和辅料两味。
+        double totalMultiplier = primary.scoreMultiplier(currentGameDay);
+        if (accessory != null) {
+            totalMultiplier += PREPARED_INGREDIENT_MULTIPLIER;
+        }
         int ingredientCount = 2;
         if (catalyst != null) {
             totalMultiplier += PREPARED_INGREDIENT_MULTIPLIER;
@@ -93,7 +101,6 @@ public final class BrewScoring {
     }
 
     private static BrewQuality quality(int totalScore, CatalystRequirement catalystRequirement) {
-        // 小于药渣阈值的结果由调用方先判定，品质转换只处理可装瓶的分数。
         CatalystState catalystState = CatalystState.ABSENT;
         if (catalystRequirement == CatalystRequirement.INCLUDED) {
             catalystState = CatalystState.PRESENT;

@@ -4,23 +4,24 @@ import dev.kizuna.meridian.brewing.server.DaylightPhase;
 import dev.kizuna.meridian.brewing.server.DryWeather;
 import dev.kizuna.meridian.brewing.server.DryingConditions;
 import dev.kizuna.meridian.brewing.server.HerbCrateState;
-import dev.kizuna.meridian.brewing.server.IngredientBatch;
-import dev.kizuna.meridian.brewing.server.PreparationKind;
-import dev.kizuna.meridian.brewing.server.PreparationMethod;
 import dev.kizuna.meridian.brewing.server.PreparationRecipe;
-import dev.kizuna.meridian.brewing.server.PreparationRecipes;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.IntStream;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.NonNullList;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.WorldlyContainer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.inventory.DispenserMenu;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -32,11 +33,18 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 
-/** 晒药匾的九格晒料容器，晴天白天且露天时才推进。 */
-public final class HerbCrateBlockEntity extends BaseContainerBlockEntity {
+/**
+ * 晒药匾的九格晒料容器：每格各自计时，晴天白天且露天时才推进，晒够了原地换成干药。
+ *
+ * <p>漏斗和投掷器从任意一面只送要晒的生药进来；漏斗只能从底下抽走晒好的干药，生药抽不走。</p>
+ */
+public final class HerbCrateBlockEntity extends BaseContainerBlockEntity implements WorldlyContainer {
     private static final double SECONDS_PER_TICK = 0.05;
     private static final long DAY_TICKS = 24_000L;
     private static final long DAYLIGHT_TICKS = 12_000L;
+    private static final String DRYING_TAG = "drying";
+    private static final String LEGACY_SLOTS_TAG = "slots";
+    private static final int[] ALL_SLOTS = IntStream.range(0, HerbCrateState.SLOT_COUNT).toArray();
 
     private final NonNullList<ItemStack> items = NonNullList.withSize(
             HerbCrateState.SLOT_COUNT, ItemStack.EMPTY);
@@ -97,19 +105,51 @@ public final class HerbCrateBlockEntity extends BaseContainerBlockEntity {
 
     @Override
     protected AbstractContainerMenu createMenu(int id, Inventory inventory) {
-        return ChestMenu.threeRows(id, inventory, this);
+        return new DispenserMenu(id, inventory, this);
+    }
+
+    /** 漏斗只往里送要晒的生药；界面里玩家放别的东西不会晒。 */
+    @Override
+    public boolean canPlaceItem(int slot, ItemStack stack) {
+        return slot >= 0 && slot < items.size() && !isDried(stack) && HerbCrateState.acceptsRaw(itemId(stack));
     }
 
     @Override
-    public boolean canPlaceItem(int slot, ItemStack stack) {
-        return slot >= 0 && slot < items.size() && rawSunDryBatch(stack) != null;
+    public int[] getSlotsForFace(Direction side) {
+        return ALL_SLOTS;
+    }
+
+    @Override
+    public boolean canPlaceItemThroughFace(int slot, ItemStack stack, Direction side) {
+        // 原版漏斗只往空格放，或者往同种、同组件的格里补；晒好的干药是另一种物品，补不进去。
+        return canPlaceItem(slot, stack);
+    }
+
+    @Override
+    public boolean canTakeItemThroughFace(int slot, ItemStack stack, Direction side) {
+        return side == Direction.DOWN && isDried(stack);
+    }
+
+    /** 晒好的格数，比较器按它出 0–9 格信号。 */
+    int driedSlots() {
+        int dried = 0;
+        for (ItemStack stack : items) {
+            if (isDried(stack)) {
+                dried++;
+            }
+        }
+        return dried;
+    }
+
+    private static boolean isDried(ItemStack stack) {
+        return stack.get(BrewingComponents.PREPARED_DAY) != null;
     }
 
     private void tick(Level currentLevel) {
         if (currentLevel.isClientSide()) {
             return;
         }
-        syncStateFromItems();
+        observeItems();
         crate.tick(SECONDS_PER_TICK, dryingConditions());
         prepareReadyItems();
         setChanged();
@@ -127,113 +167,87 @@ public final class HerbCrateBlockEntity extends BaseContainerBlockEntity {
         return Math.floorDiv(level.getOverworldClockTime(), DAY_TICKS);
     }
 
-    private void syncStateFromItems() {
-        List<IngredientBatch> batches = new ArrayList<>();
-        for (ItemStack stack : items) {
-            IngredientBatch batch = rawSunDryBatch(stack);
-            if (batch != null) {
-                batches.add(batch);
-            }
+    /** 每 tick 逐格对比物品和数量；原版界面合并堆叠时直接改原物品堆，不经过 setItem。 */
+    private void observeItems() {
+        for (int slot = 0; slot < items.size(); slot++) {
+            ItemStack stack = items.get(slot);
+            crate.observe(slot, itemId(stack), stack.getCount());
         }
-        double dryingSeconds = crate.dryingSeconds();
-        crate.restore(new HerbCrateState.Snapshot(batches, dryingSeconds));
     }
 
     private void prepareReadyItems() {
-        long preparedGameDay = currentGameDay();
         for (int slot = 0; slot < items.size(); slot++) {
-            IngredientBatch rawBatch = rawSunDryBatch(items.get(slot));
-            if (rawBatch == null) {
+            Optional<PreparationRecipe> recipe = crate.readyRecipe(slot);
+            if (recipe.isEmpty() || isDried(items.get(slot))) {
                 continue;
             }
-            PreparationRecipe recipe = PreparationRecipes.all().get(rawBatch.itemId());
-            if (recipe == null || crate.dryingSeconds() < recipe.durationSeconds()) {
-                continue;
-            }
-            IngredientBatch preparedBatch = IngredientBatch.prepared(
-                    recipe.outputItemId(), preparedGameDay, rawBatch.count());
-            items.set(slot, itemStack(preparedBatch));
+            Identifier outputId = Identifier.parse(recipe.orElseThrow().outputItemId());
+            ItemStack prepared = new ItemStack(BuiltInRegistries.ITEM.getValue(outputId), items.get(slot).getCount());
+            prepared.set(BrewingComponents.PREPARED_DAY, currentGameDay());
+            items.set(slot, prepared);
+            crate.observe(slot, itemId(prepared), prepared.getCount());
         }
-        syncStateFromItems();
     }
 
-    private IngredientBatch rawSunDryBatch(ItemStack stack) {
-        if (stack.isEmpty() || stack.get(BrewingComponents.PREPARED_DAY) != null) {
-            return null;
+    private static String itemId(ItemStack stack) {
+        if (stack.isEmpty()) {
+            return "";
         }
-        String itemId = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
-        PreparationRecipe recipe = PreparationRecipes.all().get(itemId);
-        if (recipe == null || recipe.method() != PreparationMethod.SUN_DRY) {
-            return null;
-        }
-        return IngredientBatch.raw(itemId, stack.getCount());
-    }
-
-    private ItemStack itemStack(IngredientBatch batch) {
-        Item item = BuiltInRegistries.ITEM.getValue(Identifier.parse(batch.itemId()));
-        ItemStack stack = new ItemStack(item, batch.count());
-        if (batch.preparation() == PreparationKind.PREPARED) {
-            stack.set(BrewingComponents.PREPARED_DAY, batch.preparedGameDay());
-        }
-        return stack;
+        return BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
     }
 
     @Override
     protected void loadAdditional(ValueInput input) {
         super.loadAdditional(input);
-        HerbCrateState.Snapshot snapshot = readSnapshot(input);
-        crate.restore(snapshot);
-        if (snapshot.slots().isEmpty()) {
-            syncStateFromItems();
-            return;
+        for (int slot = 0; slot < items.size(); slot++) {
+            items.set(slot, ItemStack.EMPTY);
         }
-        restoreItems(snapshot.slots());
+        ContainerHelper.loadAllItems(input, items);
+        double[] seconds = new double[items.size()];
+        for (ValueInput child : input.childrenListOrEmpty(DRYING_TAG)) {
+            int slot = child.getIntOr("slot", -1);
+            if (slot >= 0 && slot < seconds.length) {
+                seconds[slot] = child.getDoubleOr("seconds", 0.0);
+            }
+        }
+        restoreLegacyRawHerbs(input);
+        List<HerbCrateState.SlotState> slots = new ArrayList<>();
+        for (int slot = 0; slot < items.size(); slot++) {
+            ItemStack stack = items.get(slot);
+            slots.add(new HerbCrateState.SlotState(itemId(stack), stack.getCount(), seconds[slot]));
+        }
+        crate.restore(slots);
+    }
+
+    /**
+     * 旧版药匾只存了还没晒好的生药（{@code slots}），晒好的干药没有存。读到旧格式时把生药按顺序放回前几格，
+     * 晒制进度从 0 重新算；之后按新格式保存，这段只会走一次。
+     */
+    private void restoreLegacyRawHerbs(ValueInput input) {
+        int slot = 0;
+        for (ValueInput child : input.childrenListOrEmpty(LEGACY_SLOTS_TAG)) {
+            String legacyItemId = child.getStringOr("item_id", "");
+            int count = child.getIntOr("count", 1);
+            if (slot < items.size() && HerbCrateState.acceptsRaw(legacyItemId) && count > 0) {
+                Item item = BuiltInRegistries.ITEM.getValue(Identifier.parse(legacyItemId));
+                items.set(slot, new ItemStack(item, count));
+                slot++;
+            }
+        }
     }
 
     @Override
     protected void saveAdditional(ValueOutput output) {
-        syncStateFromItems();
         super.saveAdditional(output);
-        HerbCrateState.Snapshot snapshot = crate.snapshot();
-        output.putDouble("drying_seconds", snapshot.dryingSeconds());
-        ValueOutput.ValueOutputList list = output.childrenList("slots");
-        for (IngredientBatch batch : snapshot.slots()) {
-            ValueOutput child = list.addChild();
-            child.putString("item_id", batch.itemId());
-            child.putString("preparation", batch.preparation().name());
-            child.putLong("prepared_game_day", batch.preparedGameDay());
-            child.putInt("count", batch.count());
-        }
-    }
-
-    private static HerbCrateState.Snapshot readSnapshot(ValueInput input) {
-        List<IngredientBatch> slots = new ArrayList<>();
-        for (ValueInput child : input.childrenListOrEmpty("slots")) {
-            String itemId = child.getStringOr("item_id", "");
-            PreparationKind preparation = enumValue(child.getStringOr("preparation", "RAW"),
-                    PreparationKind.RAW);
-            long preparedGameDay = child.getLongOr("prepared_game_day", -1L);
-            int count = child.getIntOr("count", 1);
-            slots.add(new IngredientBatch(itemId, preparation, preparedGameDay, count));
-        }
-        double dryingSeconds = input.getDoubleOr("drying_seconds", 0.0);
-        return new HerbCrateState.Snapshot(slots, dryingSeconds);
-    }
-
-    private void restoreItems(List<IngredientBatch> slots) {
+        ContainerHelper.saveAllItems(output, items);
+        ValueOutput.ValueOutputList list = output.childrenList(DRYING_TAG);
         for (int slot = 0; slot < items.size(); slot++) {
-            items.set(slot, ItemStack.EMPTY);
-        }
-        for (int slot = 0; slot < slots.size(); slot++) {
-            items.set(slot, itemStack(slots.get(slot)));
-        }
-    }
-
-    private static <T extends Enum<T>> T enumValue(String value, T fallback) {
-        try {
-            return Enum.valueOf(fallback.getDeclaringClass(), value);
-        } catch (IllegalArgumentException exception) {
-            return fallback;
+            double seconds = crate.dryingSeconds(slot);
+            if (seconds > 0.0) {
+                ValueOutput child = list.addChild();
+                child.putInt("slot", slot);
+                child.putDouble("seconds", seconds);
+            }
         }
     }
 }

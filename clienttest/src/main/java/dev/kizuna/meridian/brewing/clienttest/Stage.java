@@ -3,6 +3,7 @@ package dev.kizuna.meridian.brewing.clienttest;
 import java.lang.reflect.Field;
 import java.util.Locale;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.fabricmc.fabric.api.client.gametest.v1.screenshot.TestScreenshotOptions;
@@ -153,6 +154,39 @@ final class Stage {
         } catch (ReflectiveOperationException missing) {
             throw new IllegalStateException("原版 MultiPlayerGameMode 没有 carriedIndex 字段", missing);
         }
+    }
+
+    void hand(String slot, String item) {
+        // slot 用原版槽位名，例如 weapon.mainhand、weapon.offhand；清空写 air。
+        command("item replace entity @a " + slot + " with " + item);
+    }
+
+    void use() {
+        // 右键点一下：按下一 tick 就松开，与玩家点一下鼠标右键相同。
+        context.getInput().pressKey(options -> options.keyUse);
+    }
+
+    void container(BlockPos offset, int slot, String item) {
+        command("item replace block " + coordinates(origin.offset(offset)) + " container." + slot + " with " + item);
+    }
+
+    BlockPos block(BlockPos offset) {
+        return origin.offset(offset);
+    }
+
+    <T> T computeOnServer(Function<MinecraftServer, T> action) {
+        return world.getServer().computeOnServer(action::apply);
+    }
+
+    int guiScale(int scale) {
+        // 返回原界面缩放，拍完换回。
+        int previous = context.computeOnClient(client -> client.options.guiScale().get());
+        context.runOnClient(client -> {
+            client.options.guiScale().set(scale);
+            client.resizeGui();
+        });
+        settle();
+        return previous;
     }
 
     void holdUse() {

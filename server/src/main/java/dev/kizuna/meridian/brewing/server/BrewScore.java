@@ -1,6 +1,8 @@
 package dev.kizuna.meridian.brewing.server;
 
-/** 一瓶药在舀出时的可审计分数和品质。 */
+import java.util.Optional;
+
+/** 一瓶药在舀出时的可审计分数和品质；总分不到药渣线时没有品质。 */
 public record BrewScore(
         int ingredientScore,
         int soakScore,
@@ -9,6 +11,6 @@ public record BrewScore(
         int collectionScore,
         int scorchPenalty,
         int totalScore,
-        BrewQuality quality,
+        Optional<BrewQuality> quality,
         CatalystRequirement catalystRequirement) {
 }

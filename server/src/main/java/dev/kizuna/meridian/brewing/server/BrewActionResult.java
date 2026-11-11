@@ -5,10 +5,10 @@ import java.util.Optional;
 /** 一次可由右键触发的巫釜操作结果；退回的投料交给交互层返还。 */
 public record BrewActionResult(
         BrewActionStatus status,
-        String reason,
+        BrewText message,
         Optional<IngredientBatch> returnedIngredient) {
     public BrewActionResult {
-        if (status == null || reason == null || reason.isBlank() || returnedIngredient == null) {
+        if (status == null || message == null || returnedIngredient == null) {
             throw new IllegalArgumentException("巫釜操作结果不完整");
         }
         if (status == BrewActionStatus.ACCEPTED && returnedIngredient.isPresent()) {
@@ -24,15 +24,15 @@ public record BrewActionResult(
         return status == BrewActionStatus.RETURNED;
     }
 
-    public static BrewActionResult accepted(String reason) {
-        return new BrewActionResult(BrewActionStatus.ACCEPTED, reason, Optional.empty());
+    public static BrewActionResult accepted(BrewText message) {
+        return new BrewActionResult(BrewActionStatus.ACCEPTED, message, Optional.empty());
     }
 
-    public static BrewActionResult returned(String reason) {
-        return new BrewActionResult(BrewActionStatus.RETURNED, reason, Optional.empty());
+    public static BrewActionResult returned(BrewText message) {
+        return new BrewActionResult(BrewActionStatus.RETURNED, message, Optional.empty());
     }
 
-    public static BrewActionResult returned(String reason, IngredientBatch ingredient) {
-        return new BrewActionResult(BrewActionStatus.RETURNED, reason, Optional.ofNullable(ingredient));
+    public static BrewActionResult returned(BrewText message, IngredientBatch ingredient) {
+        return new BrewActionResult(BrewActionStatus.RETURNED, message, Optional.ofNullable(ingredient));
     }
 }

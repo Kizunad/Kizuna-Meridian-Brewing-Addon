@@ -14,7 +14,8 @@ public final class BrewModifiers {
     private static final long RAMP_MILLIS = 500;
     private static final long FADE_MILLIS = 1_000;
     private static final double MILLIS_PER_SECOND = 1_000;
-    private static final double EXHAUSTED_INTAKE = 0.8;
+    /** 聚气汤药力过后肺虚期间的吐纳摄入倍率。 */
+    public static final double EXHAUSTED_INTAKE = 0.8;
 
     private BrewModifiers() {
         // 不单独维护修正列表，结果与药效进度一起提交到身体。

@@ -16,6 +16,8 @@ dependencies {
     implementation 'dev.kizuna.meridian.technique:shared'
     // 药刀开刃、切药由服务端经 PA 播放；PA 是硬依赖。
     implementation 'dev.kizuna:kizuna-players-animation'
+    // 物品重量登记在 BS3D 的物品元数据里，由负重附属读取；BS3D 是硬依赖。
+    implementation 'dev.kizuna.backpack3d:server'
     include project(':server')
     include project(':shared')
     testImplementation libs.junit4

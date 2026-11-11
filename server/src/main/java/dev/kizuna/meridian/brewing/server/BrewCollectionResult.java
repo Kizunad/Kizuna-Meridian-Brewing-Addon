@@ -7,9 +7,9 @@ public record BrewCollectionResult(
         BrewCollectionKind kind,
         Optional<BrewScore> score,
         int remainingBottles,
-        String reason) {
+        BrewText message) {
     public BrewCollectionResult {
-        if (kind == null || score == null || remainingBottles < 0 || reason == null) {
+        if (kind == null || score == null || remainingBottles < 0 || message == null) {
             throw new IllegalArgumentException("舀药结果不完整");
         }
     }

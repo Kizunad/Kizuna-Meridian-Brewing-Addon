@@ -1,6 +1,8 @@
 package dev.kizuna.meridian.brewing.server;
 
 import java.util.EnumSet;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 
 /** 一次结构检查的纯数据快照。 */
@@ -20,6 +22,29 @@ public record BrewStructure(
                 || hearthStoneCount < 0 || hearthStoneCount > REQUIRED_HEARTH_STONES) {
             throw new IllegalArgumentException("结构快照不完整");
         }
+    }
+
+    /** 按药方要的火种看这套灶缺什么；齐了返回空。 */
+    public Optional<BrewText> problemFor(BrewKind kind, FireKind expectedFire) {
+        if (heatSource == HeatSourceKind.NONE) {
+            return Optional.of(BrewText.message("structure.no_fire"));
+        }
+        if (heatSource.fireKind() != expectedFire) {
+            return Optional.of(BrewText.message("structure.wrong_fire",
+                    BrewCauldron.recipeName(kind), fireName(expectedFire)));
+        }
+        if (herb == HerbState.MISSING) {
+            return Optional.of(BrewText.message("structure.no_herb"));
+        }
+        if (!accepts(expectedFire)) {
+            return Optional.of(BrewText.message("structure.hearth"));
+        }
+        return Optional.empty();
+    }
+
+    /** 火种名，例如「阳火」。 */
+    public static BrewText fireName(FireKind fireKind) {
+        return BrewText.message("fire." + fireKind.name().toLowerCase(Locale.ROOT));
     }
 
     public boolean accepts(FireKind expectedFire) {

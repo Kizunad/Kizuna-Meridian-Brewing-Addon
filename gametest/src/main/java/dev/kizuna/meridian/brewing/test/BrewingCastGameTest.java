@@ -19,7 +19,10 @@ import dev.kizuna.meridian.technique.server.TechniqueCastEndReason;
 import dev.kizuna.meridian.technique.server.TechniqueService;
 import dev.kizuna.meridian.technique.server.TechniqueState;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.function.Consumer;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
@@ -50,6 +53,12 @@ public final class BrewingCastGameTest {
     private static final String VOLUME = "meridian_brewing:brewing_basics";
     private static final int SLOWED_TIMEOUT = 1_000;
     private static final long SLOWED_FINISHED_TICK = 900;
+    // 起手约一秒后开始推进，到这一刻熬了约 11 秒：引药时窗还没开，辅料时窗（8–12 秒）正开着。
+    private static final long PROGRESS_OBSERVED_TICK = 245;
+    private static final int MINIMUM_PROGRESS_LINES = 10;
+    private static final long TICKS_PER_SECOND = 20;
+    private static final String MESSAGE = "message.meridian_brewing.";
+    private static final String PROGRESS_LINE_KEY = MESSAGE + "progress.remaining";
 
     @GameTest(maxTicks = SHORT_TIMEOUT)
     public void realCastRejectsIncompleteStructureWithReason(GameTestHelper context) {
@@ -93,6 +102,37 @@ public final class BrewingCastGameTest {
                     "正常收势后仍保留活动施放");
             finish(context, fixture);
         });
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void progressLineGoesOnlyToCasterOncePerSecond(GameTestHelper context) {
+        // 动作栏进度只发给施放者本人，每推进一秒一行；整行由语言键拼成，客户端按自己的语言显示。
+        Fixture fixture = fixture(context);
+        ServerPlayer watcher = BrewingTestPlayers.create(context);
+        cast(context, fixture);
+        context.runAfterDelay(PROGRESS_OBSERVED_TICK, () -> {
+            List<BrewingTestPlayers.OverlaySent> lines = progressLines(fixture.player());
+            context.assertTrue(lines.size() >= MINIMUM_PROGRESS_LINES, "动作栏进度行太少：" + lines.size());
+            for (int index = 1; index < lines.size(); index++) {
+                long gap = lines.get(index).tick() - lines.get(index - 1).tick();
+                context.assertTrue(gap == TICKS_PER_SECOND, "动作栏进度不是一秒一行，间隔 " + gap + " tick");
+            }
+            Set<String> keys = new HashSet<>();
+            lines.forEach(line -> keys.addAll(BrewingTestPlayers.translationKeys(line.text())));
+            String fireKey = MESSAGE + "fire." + BrewKind.QI_GATHER.fireKind().name().toLowerCase(Locale.ROOT);
+            List<String> expectedKeys = List.of(fireKey, MESSAGE + "progress.temperature", PROGRESS_LINE_KEY,
+                    MESSAGE + "progress.window.upcoming", MESSAGE + "progress.window.open");
+            context.assertTrue(keys.containsAll(expectedKeys), "动作栏进度缺语言键：" + keys);
+            context.assertTrue(progressLines(watcher).isEmpty(), "旁边的玩家也收到了熬药进度");
+            BrewingTestPlayers.close(watcher);
+            finish(context, fixture);
+        });
+    }
+
+    private static List<BrewingTestPlayers.OverlaySent> progressLines(ServerPlayer player) {
+        return BrewingTestPlayers.overlays(player).stream()
+                .filter(line -> BrewingTestPlayers.translationKeys(line.text()).contains(PROGRESS_LINE_KEY))
+                .toList();
     }
 
     @GameTest(maxTicks = SHORT_TIMEOUT)

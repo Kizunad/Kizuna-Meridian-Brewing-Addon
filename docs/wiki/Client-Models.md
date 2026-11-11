@@ -138,7 +138,9 @@ flock /tmp/kizuna-gradle.lock env ALSOFT_DRIVERS=null LIBGL_ALWAYS_SOFTWARE=1 \
   -PclienttestRunDir=<新目录>
 ```
 
-截图写在运行目录的 `screenshots/`。场景和文件名见 `BrewingModelsClientTest` 和 `KnifeScenes`。
+截图写在运行目录的 `screenshots/`。场景和文件名见 `BrewingModelsClientTest`、`KnifeScenes` 和 `BrewPlayScenes`。
+`BrewPlayScenes` 拍生存里能看到的熬药流程：晒药匾界面、注水下料点火、熬药式起手后动作栏的几个时刻、副手下辅料和引药、
+舀成药、焦锅舀药渣、成药提示、创造栏里的巫药，以及七个状态效果图标；每拍一张在日志里记一行 `[炼药截图]` 釜的状态。
 离线玩家名决定原版默认皮肤：缺省用 `Player991`（classic 宽臂），加 `-PclienttestUsername=Player507` 拍 slim 的 Alex。
 
 ## 许可
