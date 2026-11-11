@@ -36,6 +36,7 @@ definitions {
     }
   }
   presentation {
+    icon_id: "meridian_brewing:brew"
     display_name: "熬药"
     description: "沼泽高脚屋里那口大锅沿上，刻着密密麻麻深浅不一的细槽，木勺的一侧被锅底磨平了半寸。拨开灶膛，底下的柴灰分出黑、白、红三层，后人这才明白，每一锅药都是调了三次火候熬成的。"
   }

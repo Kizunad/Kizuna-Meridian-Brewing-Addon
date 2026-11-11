@@ -7,7 +7,7 @@
 
 玩家怎么做器具、搭灶、熬药和看品质，见 [怎么熬药](docs/wiki/How-To-Brew.md)。
 
-图标的出图和后处理，见 [美术素材](docs/wiki/Art.md)。
+状态效果图标、卷轴、阅读背景和熬药式图标的出图和后处理，见 [美术素材](docs/wiki/Art.md)。
 
 本仓依赖相邻工作区的 Framework 与 Technique 协议；Human、Threatening、Damage 和 BS3D 的跨仓入口
 只在接口边界处声明，由对应仓库实现。`shared/src/main/resources/data/meridian_brewing/`
