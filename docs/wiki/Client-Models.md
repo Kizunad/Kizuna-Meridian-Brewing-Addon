@@ -64,21 +64,25 @@
 
 ## 药刀动作
 
-药刀的手臂动作和刀刃开合都由服务端经 Players Animation 播放（`ServerPlayerAnimations.play`），PA 已有的下发和
-客户端补帧负责同步，不另开网络包。两段动作的关键帧、规格和门禁结果在 PA `docs/animation-specs/`
+药刀的手臂动作和刀刃开合都经 Players Animation 播放，PA 已有的下发和客户端补帧负责同步，不另开网络包。
+切药由服务端播（`ServerPlayerAnimations.play`）；开刃由本人客户端在换刀那一 tick 自己播，服务端只发给追踪者。两段动作的关键帧、规格和门禁结果在 PA `docs/animation-specs/`
 （`herb_knife_draw.md`、`herb_knife_cut.md`、`herb_knife_blade.md`、`PROGRESS-herb-knife.md`）。
 
-- **甩腕开刃** `herb_knife_draw`（0.60 s）：`HerbKnifeDraw` 每 tick 看在线玩家的主手，从别的物品换成药刀时播一次；
-  上线、换维度、重生时只记下当前主手不播，副手拿药刀不播。剪辑的 `open` 轨道 0.20 → 0.26 s 由 0 到 1，
-  物品定义按它画刀刃转开。开刃不出声。
+- **甩腕开刃** `herb_knife_draw`（0.60 s）：主手从别的物品换成药刀时播一次；上线、换维度、重生时只记下当前主手不播，
+  副手拿药刀不播，换走药刀不停（播满再淡出）。本人客户端 `HerbKnifeDrawClient` 每个客户端 tick 末尾看本机主手，
+  换刀当 tick 用 PA 客户端入口自己播，换刀后画的第一帧刀就是合着的，不等服务端往返；服务端 `HerbKnifeDraw`
+  每 tick 看在线玩家的主手，用 `ServerPlayerAnimations.playForTrackers` 只发给追踪这名玩家的其他人，
+  到期停止也只发他们。数字键换刀在客户端 tick 里处理，当 tick 就开播；滚轮换刀发生在两 tick 之间，
+  到下一 tick 末尾才开播，中间不到 1 tick 的帧会按原版持握姿势画一下开着的刀（已接受）。
+  剪辑的 `open` 轨道 0.20 → 0.26 s 由 0 到 1，物品定义按它画刀刃转开。开刃不出声。
 - **切药** `herb_knife_cut`（1.00 s）：只认主手药刀、副手毒马铃薯。右键开始使用（`startUsingItem`，不挥手），
   服务端同时播切药；使用时长 20 tick，开始使用后的第 11 tick（0.55 s，刃口压过药材）出一片毒薯片、
   扣一份药材、药刀耗损 1，并在持刀者处放 `meridian_brewing:knife.cut`（原版剪羊毛声，音量 0.5、音高 1.2）。
   按住右键时原版在用满后的下一 tick 再次开始使用，一秒一刀；第 11 tick 前松手不出片，松手时停止切药剪辑。
   开刃没播完就切，不拦，切药接管手臂和刀刃。一刀之间换走副手药材就不出片。
 - 收刀合刃不做动作：换走药刀时刀直接从手里消失。
-- 第一人称由 PA 画全身，低头才看得到切药的药材：原版视野 70° 时低头 45° 药材上沿进画面，50° 露得最多（上半截）；
-  再低头药材被前倾的躯干和两肩顶面挡住，classic 皮肤 60°、slim 皮肤 70° 起只剩刀（2026-11-11 真实客户端截图，身体和头同向）。
+- 第一人称由 PA 画全身。切药在第一人称里不取胯、腰、胸、头的轨道（PA 索引 `fpv_torso: false`），上身不跟着前倾，两手、刀和药材照剪辑；第三人称和别的玩家看到的不变。
+  原版视野 70° 时低头 30° 药材上沿进画面，40° 露上半截，slim 45°、classic 50° 起整块在两拳之间，一直低到 90° 都看得到（2026-11-11 真实客户端截图，身体和头同向）。
 
 ## 晒药匾
 
@@ -134,7 +138,8 @@ flock /tmp/kizuna-gradle.lock env ALSOFT_DRIVERS=null LIBGL_ALWAYS_SOFTWARE=1 \
   -PclienttestRunDir=<新目录>
 ```
 
-截图写在运行目录的 `screenshots/`。场景和文件名见 `BrewingModelsClientTest`。
+截图写在运行目录的 `screenshots/`。场景和文件名见 `BrewingModelsClientTest` 和 `KnifeScenes`。
+离线玩家名决定原版默认皮肤：缺省用 `Player991`（classic 宽臂），加 `-PclienttestUsername=Player507` 拍 slim 的 Alex。
 
 ## 许可
 

@@ -14,9 +14,10 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
- * 主手从别的物品换成药刀时，服务端让 PA 播一次甩腕开刃，刀刃开合跟着这段剪辑的 open 轨道。
+ * 主手从别的物品换成药刀时，服务端让 PA 给追踪者播一次甩腕开刃，刀刃开合跟着这段剪辑的 open 轨道。
+ * 本人客户端在换刀那一 tick 自己播（客户端 {@code HerbKnifeDrawClient}），不等这边的包，所以这里不发本人。
  *
- * <p>上线、换维度和重生时只记下当前主手，不算「换成药刀」；副手拿药刀不播。
+ * <p>上线、换维度和重生时只记下当前主手，不算「换成药刀」；副手拿药刀不播；换走药刀不停，开刃播满再淡出。
  */
 final class HerbKnifeDraw {
     private static final Map<UUID, Boolean> HOLDING = new HashMap<>();
@@ -40,7 +41,7 @@ final class HerbKnifeDraw {
             Boolean previous = HOLDING.put(player.getUUID(), holding);
             // 第一次见到的玩家没有「之前」，只记下不播。
             if (holding && Boolean.FALSE.equals(previous)) {
-                ServerPlayerAnimations.play(player, PlayerAnimationAction.HERB_KNIFE_DRAW);
+                ServerPlayerAnimations.playForTrackers(player, PlayerAnimationAction.HERB_KNIFE_DRAW);
             }
         }
     }

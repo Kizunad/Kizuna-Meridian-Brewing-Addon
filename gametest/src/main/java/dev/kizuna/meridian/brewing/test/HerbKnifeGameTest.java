@@ -1,8 +1,10 @@
 package dev.kizuna.meridian.brewing.test;
 
 import dev.kizuna.meridian.brewing.test.BrewingTestPlayers.AnimationSent;
+import dev.kizuna.playeranimation.animation.PlayerAnimationAction;
 import java.util.List;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
@@ -14,12 +16,16 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
-/** 药刀按住切药与甩腕开刃：走原版使用、松手和切快捷栏入口，断言实际发出的 PA 包和声音包。 */
+/**
+ * 药刀按住切药与甩腕开刃：走原版使用、松手和切快捷栏入口，断言实际发出的 PA 包和声音包。
+ * 开刃由本人客户端自己播，服务端只发追踪者，所以开刃用第二名假玩家旁观断言。
+ */
 public final class HerbKnifeGameTest {
     private static final int TIMEOUT = 100;
     private static final int CUT_TICKS = 20;
     private static final int SETTLE_TICK = 11;
     private static final int OBSERVE_TICKS = 3;
+    private static final int DRAW_TICKS = PlayerAnimationAction.HERB_KNIFE_DRAW.naturalDurationTicks();
     private static final String CUT = "herb_knife_cut";
     private static final String DRAW = "herb_knife_draw";
     private static final int POTATOES = 2;
@@ -99,25 +105,39 @@ public final class HerbKnifeGameTest {
     }
 
     @GameTest(maxTicks = TIMEOUT)
-    public void switchingTheMainHandToTheKnifePlaysTheDrawEachTime(GameTestHelper context) {
+    public void switchingTheMainHandToTheKnifeDrawsForWatchersEachTime(GameTestHelper context) {
         ServerPlayer player = BrewingTestPlayers.create(context);
+        ServerPlayer watcher = BrewingTestPlayers.create(context);
         player.getInventory().setItem(KNIFE_SLOT, new ItemStack(item("herb_knife")));
-        context.runAfterDelay(1, () -> select(player, KNIFE_SLOT));
-        context.runAfterDelay(1 + OBSERVE_TICKS, () -> {
-            context.assertTrue(plays(player, DRAW).size() == 1, "切到药刀没有播一次开刃："
-                    + BrewingTestPlayers.animations(player));
+        context.runAfterDelay(OBSERVE_TICKS, () -> {
+            context.assertTrue(PlayerLookup.tracking(player).contains(watcher), "旁观的假玩家没有追踪换刀的玩家");
+            select(player, KNIFE_SLOT);
+        });
+        context.runAfterDelay(2 * OBSERVE_TICKS, () -> {
+            context.assertTrue(watchedPlays(watcher, player).size() == 1, "切到药刀没有给旁观者播一次开刃："
+                    + BrewingTestPlayers.animationsAbout(watcher, player));
+            List<AnimationSent> own = ownDraws(player);
+            context.assertTrue(own.isEmpty(), "本人也收到了开刃包，会和本机自己播的那份重播：" + own);
+        });
+        // 开刃到资源末帧由 PA 统一停止，停止包同样只发旁观者。
+        context.runAfterDelay(2 * OBSERVE_TICKS + DRAW_TICKS, () -> {
+            context.assertTrue(watchedStops(watcher, player).size() == 1, "开刃播完没有给旁观者发停止");
+            context.assertTrue(ownDraws(player).isEmpty(), "开刃停止也发给了本人");
             select(player, EMPTY_SLOT);
         });
-        context.runAfterDelay(1 + 2 * OBSERVE_TICKS, () -> select(player, KNIFE_SLOT));
-        context.runAfterDelay(1 + 3 * OBSERVE_TICKS, () -> {
-            context.assertTrue(plays(player, DRAW).size() == 2, "换走再切回药刀没有再播开刃");
+        context.runAfterDelay(3 * OBSERVE_TICKS + DRAW_TICKS, () -> select(player, KNIFE_SLOT));
+        context.runAfterDelay(4 * OBSERVE_TICKS + DRAW_TICKS, () -> {
+            context.assertTrue(watchedPlays(watcher, player).size() == 2, "换走再切回药刀没有再给旁观者播开刃");
             // 副手拿药刀不算拔刀。
             select(player, EMPTY_SLOT);
             player.setItemInHand(InteractionHand.OFF_HAND, new ItemStack(item("herb_knife")));
         });
-        context.runAfterDelay(1 + 4 * OBSERVE_TICKS, () -> {
-            context.assertTrue(plays(player, DRAW).size() == 2, "副手拿药刀也播了开刃");
+        context.runAfterDelay(5 * OBSERVE_TICKS + DRAW_TICKS, () -> {
+            context.assertTrue(watchedPlays(watcher, player).size() == 2, "副手拿药刀也播了开刃");
+            List<AnimationSent> own = ownDraws(player);
+            context.assertTrue(own.isEmpty(), "本人收到了开刃包：" + own);
             BrewingTestPlayers.close(player);
+            BrewingTestPlayers.close(watcher);
             context.succeed();
         });
     }
@@ -125,15 +145,20 @@ public final class HerbKnifeGameTest {
     @GameTest(maxTicks = TIMEOUT)
     public void joiningWithTheKnifeAlreadyInHandDoesNotPlayTheDraw(GameTestHelper context) {
         ServerPlayer first = BrewingTestPlayers.create(context);
+        ServerPlayer watcher = BrewingTestPlayers.create(context);
         first.getInventory().setItem(KNIFE_SLOT, new ItemStack(item("herb_knife")));
         select(first, KNIFE_SLOT);
-        context.runAfterDelay(OBSERVE_TICKS, () -> {
+        // 等第一次换刀的开刃播完再重登，旁观者之后收到的开刃只可能来自上线。
+        context.runAfterDelay(DRAW_TICKS + OBSERVE_TICKS, () -> {
+            int before = watchedPlays(watcher, first).size();
             BrewingTestPlayers.close(first);
             ServerPlayer rejoined = BrewingTestPlayers.rejoin(context, first);
             context.assertTrue(rejoined.getMainHandItem().is(item("herb_knife")), "重新登录没有恢复主手药刀");
             context.runAfterDelay(OBSERVE_TICKS, () -> {
-                context.assertTrue(plays(rejoined, DRAW).isEmpty(), "上线时主手已是药刀也播了开刃");
+                context.assertTrue(PlayerLookup.tracking(rejoined).contains(watcher), "旁观者没有追踪重登的玩家");
+                context.assertTrue(watchedPlays(watcher, rejoined).size() == before, "上线时主手已是药刀也播了开刃");
                 BrewingTestPlayers.close(rejoined);
+                BrewingTestPlayers.close(watcher);
                 context.succeed();
             });
         });
@@ -154,6 +179,23 @@ public final class HerbKnifeGameTest {
     private static void select(ServerPlayer player, int slot) {
         // 与客户端切快捷栏发来的包同一处理。
         player.connection.handleSetCarriedItem(new ServerboundSetCarriedItemPacket(slot));
+    }
+
+    private static List<AnimationSent> watchedPlays(ServerPlayer watcher, ServerPlayer target) {
+        return watchedDraws(watcher, target).stream().filter(AnimationSent::play).toList();
+    }
+
+    private static List<AnimationSent> watchedStops(ServerPlayer watcher, ServerPlayer target) {
+        return watchedDraws(watcher, target).stream().filter(sent -> !sent.play()).toList();
+    }
+
+    private static List<AnimationSent> watchedDraws(ServerPlayer watcher, ServerPlayer target) {
+        return BrewingTestPlayers.animationsAbout(watcher, target).stream()
+                .filter(sent -> sent.animationId().equals(DRAW)).toList();
+    }
+
+    private static List<AnimationSent> ownDraws(ServerPlayer player) {
+        return BrewingTestPlayers.animations(player).stream().filter(sent -> sent.animationId().equals(DRAW)).toList();
     }
 
     private static List<Long> plays(ServerPlayer player, String animation) {

@@ -1,11 +1,13 @@
 package dev.kizuna.meridian.brewing.clienttest;
 
+import java.lang.reflect.Field;
 import java.util.Locale;
 import java.util.function.Consumer;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.fabricmc.fabric.api.client.gametest.v1.screenshot.TestScreenshotOptions;
 import net.minecraft.client.CameraType;
+import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
@@ -127,6 +129,30 @@ final class Stage {
     void pressHotbar(int slot) {
         // 只按键不等，动作场景自己按 tick 拍。
         context.getInput().pressKey(options -> options.keyHotbarSlots[slot]);
+    }
+
+    void selectHotbarUnsent(int slot) {
+        // 模拟换槽包晚到：只改本机槽位，并把原版记的「已发槽位」一起改掉，原版就不发换槽包，服务端不知道。
+        context.runOnClient(client -> {
+            client.player.getInventory().setSelectedSlot(slot);
+            sentHotbarSlot(client.gameMode, slot);
+        });
+    }
+
+    void resendHotbar(int previous) {
+        // 把「已发槽位」改回换之前的，原版下一 tick 比对不一致，自己补发换槽包。
+        context.runOnClient(client -> sentHotbarSlot(client.gameMode, previous));
+    }
+
+    private static void sentHotbarSlot(MultiPlayerGameMode gameMode, int slot) {
+        // 原版没有公开入口，只在截图夹具里改私有字段。
+        try {
+            Field field = MultiPlayerGameMode.class.getDeclaredField("carriedIndex");
+            field.setAccessible(true);
+            field.setInt(gameMode, slot);
+        } catch (ReflectiveOperationException missing) {
+            throw new IllegalStateException("原版 MultiPlayerGameMode 没有 carriedIndex 字段", missing);
+        }
     }
 
     void holdUse() {

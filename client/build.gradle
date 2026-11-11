@@ -18,6 +18,8 @@ dependencies {
     implementation libs.fabric.api
     // 放置模型入口在 BS3D 客户端；settings 按坐标组合其源码工程，编译直接取普通 JAR，运行时由完整装配装入。
     compileOnly 'dev.kizuna.backpack3d:client'
+    // 本机开刃调用 PA 客户端播放入口；PA 是硬依赖，同样由完整装配装入。
+    compileOnly 'dev.kizuna:kizuna-players-animation'
     testImplementation libs.junit4
 }
 test {

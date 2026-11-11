@@ -13,9 +13,10 @@ import org.joml.Vector3f;
 import org.joml.Vector3fc;
 
 /**
- * 炼药客户端入口：铁火盆、铁炉座和药刀用 Bong 的 .bbmodel 经 BS3D 放置模型绘制，枯木按方块颜色压暗。
+ * 炼药客户端入口：铁火盆、铁炉座和药刀用 Bong 的 .bbmodel 经 BS3D 放置模型绘制，枯木按方块颜色压暗，
+ * 本机换成药刀时当场播甩腕开刃。
  *
- * <p>放置模型与方块、物品同 ID；收刃药刀是导入脚本由药刀生成的另一份模型。方块和方块实体类型都在 fabric 模块注册，
+ * <p>放置模型与方块、物品同 ID；药刀开合由模型里的 open 剪辑按进度画。方块和方块实体类型都在 fabric 模块注册，
  * 这里只按注册 ID 查找。
  */
 public final class BrewingClient implements ClientModInitializer {
@@ -40,6 +41,7 @@ public final class BrewingClient implements ClientModInitializer {
         // 火盆和炉座共用一种方块实体，按方块 ID 选模型。
         PlacedModels.renderBlockEntity(blockEntityType("brew_fire"), BrewingClient::modelOf);
         DeadWoodTint.register();
+        HerbKnifeDrawClient.register();
     }
 
     static Identifier id(String path) {

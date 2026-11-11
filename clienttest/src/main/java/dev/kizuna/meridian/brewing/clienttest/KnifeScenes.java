@@ -18,7 +18,10 @@ import net.minecraft.world.phys.Vec3;
  * 药刀动作和贴地的真实客户端截图。
  *
  * <p>开刃、切药各拍一组真实触发（按快捷栏键、按住使用键）后逐 tick 的画面，再用 PA 定格（scrub）拍规格里的确切时刻，
- * 正面一组、头偏向右前方一组（每张拍前直接定身体和头的朝向）；第一人称定格在切药 0.55 s，逐 5° 低头拍，量药材进画面要低头多少度；
+ * 正面一组、头偏向右前方一组（每张拍前直接定身体和头的朝向）。开刃另拍一组换槽包晚到：只在本机换刀，
+ * 第 6 tick 才让原版补发换槽包，看本机是否照常开播、服务端知道后本人画面是否重开。
+ * 第一人称切药定格在规格三个时刻、按五档低头各拍一张，0.55 s 另从平视起逐 5° 低头拍，量药材进画面要低头多少度；
+ * 第一人称开刃定格两档低头，再真按数字键连拍头 4 tick。
  * 药刀、晒药匾、两件炉具和原版炼药锅的掉落物等到上下浮动的最低点再冻结实体，从贴地的侧面拍，三件器具另拍放下的方块。
  */
 final class KnifeScenes {
@@ -39,14 +42,19 @@ final class KnifeScenes {
     private static final List<Float> DRAW_MOMENTS = List.of(0.10f, 0.23f, 0.60f);
     private static final List<Float> CUT_MOMENTS = List.of(0.20f, 0.55f, 0.75f);
     private static final float FIRST_PERSON_CUT_MOMENT = 0.55f;
-    /** 按键后第几个客户端 tick 拍；开刃逐 tick 连拍一整段，看服务端剪辑到之前刀先开着的那一两 tick。 */
+    /** 按键后第几个客户端 tick 拍；开刃逐 tick 连拍一整段，第 1 tick 起刀应已是合着的。 */
     private static final int DRAW_CLIP_TICKS = 12;
     private static final List<Integer> DRAW_TICKS = IntStream.rangeClosed(1, DRAW_CLIP_TICKS).boxed().toList();
+    private static final List<Integer> FIRST_DRAW_TICKS = List.of(1, 2, 3, 4);
+    /** 换槽包晚到：本机换刀后第 6 tick 才补发，服务端第 7 tick 起才知道；之后几 tick 和正常连拍的同号 tick 对照。 */
+    private static final int LATE_PACKET_TICK = 6;
+    private static final List<Integer> LATE_PACKET_TICKS = List.of(7, 8, 9, 10);
     private static final List<Integer> CUT_TICKS = List.of(4, 11, 15);
     private static final int CUT_SETTLE_TICKS = 25;
-    private static final int FIRST_PITCH = 30;
     private static final int LAST_PITCH = 90;
     private static final int PITCH_STEP = 5;
+    private static final List<Integer> FIRST_PERSON_CUT_PITCHES = List.of(0, 20, 30, 45, 60);
+    private static final List<Integer> FIRST_PERSON_DRAW_PITCHES = List.of(30, 45);
     private static final float FACING_SOUTH = 0;
     private static final List<String> DROPPED = List.of(BREWING + "herb_knife", BREWING + "herb_crate",
             BREWING + "iron_brazier", BREWING + "iron_stove", "minecraft:cauldron");
@@ -69,11 +77,13 @@ final class KnifeScenes {
         actionStage(stage);
         int defaultFov = stage.fov(THIRD_PERSON_FOV);
         draw(stage);
+        lateDraw(stage);
         cut(stage);
         moments(stage, DRAW, DRAW_SECONDS, DRAW_MOMENTS, SIDE_YAW, "knife_draw_side_at");
         moments(stage, CUT, CUT_SECONDS, CUT_MOMENTS, SIDE_YAW, "knife_cut_side_at");
         stage.fov(defaultFov);
         firstPersonCut(stage);
+        firstPersonDraw(stage);
         stage.camera(CameraType.FIRST_PERSON);
         stage.command("clear @a");
         stage.spectate();
@@ -98,17 +108,28 @@ final class KnifeScenes {
     }
 
     private static void draw(Stage stage) {
-        // 真实触发：按快捷栏键换成药刀，服务端看到主手变化后播开刃。
+        // 真实触发：按快捷栏键换成药刀，本机当 tick 开播开刃。
         stage.pressHotbar(KNIFE_SLOT);
-        burst(stage, "knife_draw_real_tick", DRAW_TICKS);
+        burst(stage, "knife_draw_real_tick", DRAW_TICKS, 0);
         stage.settle();
         moments(stage, DRAW, DRAW_SECONDS, DRAW_MOMENTS, FRONT_YAW, "knife_draw_at");
+    }
+
+    private static void lateDraw(Stage stage) {
+        // 换槽包晚到：服务端头 6 tick 不知道换了刀，本机照样开播；补发后服务端只发追踪者，本人画面不应重开。
+        stage.selectHotbar(EMPTY_SLOT);
+        stage.selectHotbarUnsent(KNIFE_SLOT);
+        burst(stage, "knife_draw_unsent_tick", FIRST_DRAW_TICKS, 0);
+        stage.pause(LATE_PACKET_TICK - FIRST_DRAW_TICKS.getLast());
+        stage.resendHotbar(EMPTY_SLOT);
+        burst(stage, "knife_draw_late_packet_tick", LATE_PACKET_TICKS, LATE_PACKET_TICK);
+        stage.settle();
     }
 
     private static void cut(Stage stage) {
         // 真实触发：按住使用键切一刀，拍完松手；再按规格时刻定格。
         stage.holdUse();
-        burst(stage, "knife_cut_real_tick", CUT_TICKS);
+        burst(stage, "knife_cut_real_tick", CUT_TICKS, 0);
         stage.releaseUse();
         stage.pause(CUT_SETTLE_TICKS);
         moments(stage, CUT, CUT_SECONDS, CUT_MOMENTS, FRONT_YAW, "knife_cut_at");
@@ -125,20 +146,51 @@ final class KnifeScenes {
     }
 
     private static void firstPersonCut(Stage stage) {
-        // 定格在刃口压过药材的 0.55 s，原版视野下第一人称从平视下 30° 起每 5° 拍一张。
+        // 原版视野下第一人称：规格三个时刻各按五档低头拍；刃口压过药材的 0.55 s 再从平视起每 5° 拍到 90°。
         stage.camera(CameraType.FIRST_PERSON);
+        for (float moment : CUT_MOMENTS) {
+            hold(stage, CUT, moment / CUT_SECONDS);
+            for (int pitch : FIRST_PERSON_CUT_PITCHES) {
+                firstPerson(stage, pitch, name("knife_cut_first_person_at", moment) + pitchSuffix(pitch));
+            }
+        }
         hold(stage, CUT, FIRST_PERSON_CUT_MOMENT / CUT_SECONDS);
-        for (int pitch = FIRST_PITCH; pitch <= LAST_PITCH; pitch += PITCH_STEP) {
-            stage.turn(FACING_SOUTH, pitch);
-            // 身体摆正到头的朝向，手和药材在画面里的位置才不随身体偏转漂。
-            stage.face(FACING_SOUTH, FACING_SOUTH);
-            stage.shoot(String.format(Locale.ROOT, "knife_cut_first_person_pitch_%02d", pitch));
+        for (int pitch = 0; pitch <= LAST_PITCH; pitch += PITCH_STEP) {
+            firstPerson(stage, pitch, "knife_cut_first_person" + pitchSuffix(pitch));
         }
         stop(stage, CUT);
     }
 
-    private static void burst(Stage stage, String prefix, List<Integer> ticks) {
-        int elapsed = 0;
+    private static void firstPersonDraw(Stage stage) {
+        // 第一人称开刃照常取躯干：规格时刻按两档低头定格，再从空手真按数字键换刀连拍头 4 tick。
+        for (float moment : DRAW_MOMENTS) {
+            hold(stage, DRAW, moment / DRAW_SECONDS);
+            for (int pitch : FIRST_PERSON_DRAW_PITCHES) {
+                firstPerson(stage, pitch, name("knife_draw_first_person_at", moment) + pitchSuffix(pitch));
+            }
+        }
+        stop(stage, DRAW);
+        stage.selectHotbar(EMPTY_SLOT);
+        stage.turn(FACING_SOUTH, FIRST_PERSON_DRAW_PITCHES.getLast());
+        stage.pressHotbar(KNIFE_SLOT);
+        burst(stage, "knife_draw_first_person_real_tick", FIRST_DRAW_TICKS, 0);
+        stage.settle();
+    }
+
+    private static void firstPerson(Stage stage, int pitch, String shot) {
+        stage.turn(FACING_SOUTH, pitch);
+        // 身体摆正到头的朝向，手和药材在画面里的位置才不随身体偏转漂。
+        stage.face(FACING_SOUTH, FACING_SOUTH);
+        stage.shoot(shot);
+    }
+
+    private static String pitchSuffix(int pitch) {
+        return String.format(Locale.ROOT, "_pitch_%02d", pitch);
+    }
+
+    private static void burst(Stage stage, String prefix, List<Integer> ticks, int elapsedBefore) {
+        // 从第 elapsedBefore tick 接着等，拍到每个列出的 tick。
+        int elapsed = elapsedBefore;
         for (int tick : ticks) {
             stage.pause(tick - elapsed);
             elapsed = tick;

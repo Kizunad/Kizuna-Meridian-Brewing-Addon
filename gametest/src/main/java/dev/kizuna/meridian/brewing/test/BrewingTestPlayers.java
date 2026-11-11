@@ -141,7 +141,7 @@ public final class BrewingTestPlayers {
     }
 
     /**
-     * 发给该玩家客户端、动的是该玩家自己的 PA 播放或停止包；{@code startTick} 只对播放有意义。
+     * 某个玩家客户端收到的 PA 播放或停止包，{@code playerUuid} 是动作所属的玩家；{@code startTick} 只对播放有意义。
      * PA 在有人开始追踪时补发进行中的播放，沿用原请求 ID，这里只记第一次。
      */
     public record AnimationSent(boolean play, String animationId, long startTick, String playerUuid,
@@ -149,15 +149,19 @@ public final class BrewingTestPlayers {
 
     public static List<AnimationSent> animations(ServerPlayer player) {
         // 解析真正发出的 PA 载荷，不只断言调用了播放函数。
-        return List.copyOf(ANIMATIONS.getOrDefault(player.getUUID(), List.of()));
+        return animationsAbout(player, player);
     }
 
-    private static void recordAnimation(ServerPlayer player, AnimationPackets.Payload payload) {
-        // 同一场测试里其他假玩家的动作也会广播过来，只留动该玩家自己的包。
+    public static List<AnimationSent> animationsAbout(ServerPlayer viewer, ServerPlayer target) {
+        // 其他场地的假玩家也可能在追踪范围内，按动作所属玩家筛出这一位的包。
+        return ANIMATIONS.getOrDefault(viewer.getUUID(), List.of()).stream()
+                .filter(sent -> sent.playerUuid().equals(target.getStringUUID())).toList();
+    }
+
+    private static void recordAnimation(ServerPlayer viewer, AnimationPackets.Payload payload) {
         AnimationSent sent = decodeAnimation(payload);
-        List<AnimationSent> record = ANIMATIONS.get(player.getUUID());
-        if (sent != null && sent.playerUuid().equals(player.getStringUUID())
-                && record.stream().noneMatch(old -> old.requestId().equals(sent.requestId()))) {
+        List<AnimationSent> record = ANIMATIONS.get(viewer.getUUID());
+        if (sent != null && record.stream().noneMatch(old -> old.requestId().equals(sent.requestId()))) {
             record.add(sent);
         }
     }
