@@ -15,6 +15,12 @@ import dev.kizuna.playeranimation.protocol.pb.PlayerAnimationProtocol.StopReques
 import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 import java.util.ArrayList;
 import net.minecraft.core.BlockPos;
+import dev.kizuna.meridian.brewing.server.BrewKind;
+import net.minecraft.core.component.DataComponentType;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ClientInformation;
@@ -137,6 +143,55 @@ public final class BrewingTestPlayers {
     public static BodySnapshot body(ServerPlayer player) {
         // 公开 inspect 返回 Human 唯一权威身体，不能用测试宿主替换它。
         return VanillaDamageFabric.inspectBody(player).orElseThrow();
+    }
+
+    public static void readRecipes(ServerPlayer player, BrewKind... kinds) {
+        // 照玩家的做法读真实的药方羊皮纸：主手拿着右键，读完把原来的主手物品放回去。
+        Item scroll = BuiltInRegistries.ITEM.getValue(Identifier.parse("meridian_brewing:brew_recipe"));
+        ItemStack held = player.getMainHandItem();
+        for (BrewKind kind : kinds) {
+            player.setItemInHand(InteractionHand.MAIN_HAND, recipeScroll(kind));
+            scroll.use(player.level(), player, InteractionHand.MAIN_HAND);
+            player.closeContainer();
+        }
+        player.setItemInHand(InteractionHand.MAIN_HAND, held);
+    }
+
+    public static void readAllRecipes(ServerPlayer player) {
+        // 熬药测试的前提：六种药方都读过。
+        readRecipes(player, BrewKind.values());
+    }
+
+    public static void stockQi(ServerPlayer player) {
+        // 熬药耗元：开全部经脉再灌满，同一区块里几锅并行抢环境速率时由自身补足，不随排位抖动。
+        command(player, "meridian opening complete " + player.getScoreboardName() + " all");
+        command(player, "meridian qi fill");
+    }
+
+    public static void setQi(ServerPlayer player, double amount) {
+        // 开全部经脉后把自身真元设成指定总量（自由相，按各脉内腔容量分摊）。
+        command(player, "meridian opening complete " + player.getScoreboardName() + " all");
+        command(player, String.format(java.util.Locale.ROOT, "meridian qi set %s %.4f",
+                player.getScoreboardName(), amount));
+    }
+
+    private static void command(ServerPlayer player, String command) {
+        // 走正式指令入口，按服务端控制台权限、以玩家本人为执行者；目标写玩家名（玩家参数不收 UUID），
+        // 省略目标的指令就作用于执行者。反馈留在日志里，结果由调用方读身体确认。
+        var server = player.level().getServer();
+        var source = server.createCommandSourceStack().withEntity(player);
+        server.getCommands().performPrefixedCommand(source, command);
+    }
+
+    @SuppressWarnings("unchecked")
+    public static ItemStack recipeScroll(BrewKind kind) {
+        // 和女巫掉落一样，药方种类写在羊皮纸的 recipe_kind 组件里。
+        Item scroll = BuiltInRegistries.ITEM.getValue(Identifier.parse("meridian_brewing:brew_recipe"));
+        var kindType = (DataComponentType<String>) BuiltInRegistries.DATA_COMPONENT_TYPE
+                .getValue(Identifier.parse("meridian_brewing:recipe_kind"));
+        ItemStack stack = new ItemStack(scroll);
+        stack.set(kindType, kind.path());
+        return stack;
     }
 
     public static List<ControlIntent> controlIntents(ServerPlayer player) {

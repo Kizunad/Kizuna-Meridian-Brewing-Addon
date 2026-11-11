@@ -3,6 +3,10 @@ package dev.kizuna.meridian.brewing.fabric;
 import dev.kizuna.meridian.brewing.server.BrewCauldron;
 import dev.kizuna.meridian.brewing.server.BrewKind;
 import dev.kizuna.meridian.brewing.server.BrewText;
+import dev.kizuna.meridian.brewing.server.RecipeKnowledge;
+import java.util.EnumSet;
+import java.util.Optional;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -10,7 +14,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
-/** 药方羊皮纸的最小原版书本使用路径。 */
+/** 药方羊皮纸：服务端把药方记进读者的身体，客户端照原版书本打开。 */
 final class RecipeScrollItem extends Item {
     RecipeScrollItem(Properties properties) {
         super(properties);
@@ -18,26 +22,45 @@ final class RecipeScrollItem extends Item {
 
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
+        // 羊皮纸不消耗；读不出药方、身体暂停都只提示，不学。
         ItemStack stack = player.getItemInHand(hand);
-        if (!level.isClientSide()) {
-            BrewKind kind = kind(stack);
-            RecipeKnowledgeStore.learn(player, kind);
-            BrewTexts.sendOverlay(player, BrewText.message("recipe.learned", BrewCauldron.recipeName(kind)));
+        if (!level.isClientSide() && player instanceof ServerPlayer reader) {
+            BrewTexts.sendOverlay(player, read(reader, stack));
         }
         player.openItemGui(stack, hand);
         return InteractionResult.SUCCESS;
     }
 
-    private static BrewKind kind(ItemStack stack) {
+    static BrewText read(ServerPlayer reader, ItemStack stack) {
+        // 先认药方，再读身体；已经学过的不再写身体。
+        Optional<BrewKind> kind = kind(stack);
+        if (kind.isEmpty()) {
+            return BrewText.message("recipe.illegible");
+        }
+        BrewText name = BrewCauldron.recipeName(kind.orElseThrow());
+        BrewRecipeBook.Lookup current = BrewRecipeBook.lookup(reader);
+        if (current.presence() == BrewBodyHost.Presence.PAUSED) {
+            return BrewText.message("recipe.body_paused");
+        }
+        if (current.presence() == BrewBodyHost.Presence.UNBOUND) {
+            return BrewText.message("recipe.no_body");
+        }
+        if (current.knows(kind.orElseThrow())) {
+            return BrewText.message("recipe.already_known", name);
+        }
+        EnumSet<BrewKind> known = current.known().isEmpty()
+                ? EnumSet.noneOf(BrewKind.class) : EnumSet.copyOf(current.known());
+        known.add(kind.orElseThrow());
+        BrewRecipeBook.replace(reader, known);
+        return BrewText.message("recipe.learned", name);
+    }
+
+    private static Optional<BrewKind> kind(ItemStack stack) {
+        // 没有药方组件或组件认不出的羊皮纸算字迹模糊，不再默认当成枯竭药方。
         String path = stack.get(BrewingComponents.RECIPE_KIND);
         if (path == null) {
-            return BrewKind.DEPLETION;
+            return Optional.empty();
         }
-        for (BrewKind kind : BrewKind.values()) {
-            if (kind.path().equals(path)) {
-                return kind;
-            }
-        }
-        return BrewKind.DEPLETION;
+        return RecipeKnowledge.kind(path);
     }
 }

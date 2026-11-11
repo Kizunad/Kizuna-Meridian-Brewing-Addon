@@ -225,7 +225,7 @@ public final class BrewingRuntime {
         if (!(target.level().getBlockEntity(target.pos()) instanceof BrewCauldronBlockEntity cauldron)) {
             return interrupt(castKey, "目标方块没有巫釜方块实体");
         }
-        BrewActionResult result = cauldron.advanceTechniqueBrew(player);
+        BrewActionResult result = cauldron.advanceTechniqueBrew(player, active.drawId(step.key()));
         if (!result.accepted()) {
             cauldron.interruptTechniqueBrew();
             return EffectHandling.rejected(BrewTexts.chinese(result.message()));
@@ -250,7 +250,7 @@ public final class BrewingRuntime {
         cauldron.beginTechniqueControl(player.getUUID());
         BrewSoundPlayback sounds = new BrewSoundPlayback();
         sounds.schedule(target.level(), 0, step.intervalMillis());
-        activeBrews.put(castKey, new ActiveBrew(target.level(), target.pos(), cauldron, sounds));
+        activeBrews.put(castKey, new ActiveBrew(target.level(), target.pos(), cauldron, sounds, UUID.randomUUID()));
         markHandled(step.key());
         return EffectHandling.handled();
     }
@@ -434,6 +434,7 @@ public final class BrewingRuntime {
 
     private static BlockTarget target(ServerPlayer player, BlockWork work) {
         // 服务端视线最多取目录声明距离，并要求命中方块标签而非邻近方块实体。
+        // 熬药时要低头给釜下的火加炭、拨灰，所以命中声明方块正下方的火源也算看着这只釜（用户 2026-11-11 定）。
         double distance = work.getMaximumDistance().getValue();
         Vec3 eye = player.getEyePosition();
         Vec3 end = eye.add(player.getLookAngle().scale(distance));
@@ -443,11 +444,20 @@ public final class BrewingRuntime {
             return null;
         }
         BlockPos pos = hit.getBlockPos();
-        BlockState state = player.level().getBlockState(pos);
-        if (!matchesBlockTag(state, work)) {
-            return null;
+        Level level = player.level();
+        if (matchesBlockTag(level.getBlockState(pos), work)) {
+            return new BlockTarget((ServerLevel) level, pos);
         }
-        return new BlockTarget((ServerLevel) player.level(), pos);
+        BlockPos above = pos.above();
+        if (isHeatSource(level.getBlockState(pos)) && matchesBlockTag(level.getBlockState(above), work)) {
+            return new BlockTarget((ServerLevel) level, above);
+        }
+        return null;
+    }
+
+    private static boolean isHeatSource(BlockState state) {
+        // 和釜认热源的方块一致：铁火盆、铁炉座，以及原版营火、灵魂营火；旁边的灶石不算。
+        return state.is(BrewingTags.BREW_FIRES) || state.is(BlockTags.CAMPFIRES);
     }
 
     private static boolean matchesBlockTag(BlockState state, BlockWork work) {
@@ -486,10 +496,15 @@ public final class BrewingRuntime {
     private record BrewStep(BrewEffectKey key, long intervalMillis) { }
 
     private record ActiveBrew(ServerLevel level, BlockPos pos, BrewCauldronBlockEntity cauldron,
-                              BrewSoundPlayback sounds) {
+                              BrewSoundPlayback sounds, UUID brewId) {
         private boolean sameTarget(BlockTarget target) {
             // 世界和位置都一致才允许继续推进，跨维度不能复用旧釜。
             return level == target.level() && pos.equals(target.pos());
+        }
+
+        private String drawId(BrewEffectKey key) {
+            // 每锅一个随机号，再加这一秒的效果 ID：施放 ID 被重用时也不会撞上上一锅的取用记录。
+            return BrewingFabric.MOD_ID + ":brew/" + brewId + "/" + key.effectId();
         }
     }
 

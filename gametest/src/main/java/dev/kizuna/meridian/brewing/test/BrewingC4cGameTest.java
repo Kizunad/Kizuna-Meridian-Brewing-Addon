@@ -74,6 +74,8 @@ public final class BrewingC4cGameTest {
         BrewCauldronBlockEntity cauldron = placeCauldron(level, cauldronPos, player);
         assertIncompleteStart(context, player, cauldronPos);
         prepareInputs(cauldron, player, level, cauldronPos);
+        BrewingTestPlayers.readAllRecipes(player);
+        BrewingTestPlayers.stockQi(player);
         assertBrewProgress(context, player, cauldron, cauldronPos);
         assertDistanceInterrupt(context, player, cauldron, cauldronPos);
         context.succeed();

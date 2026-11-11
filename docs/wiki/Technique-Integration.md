@@ -2,6 +2,8 @@
 
 熬药卷由本仓目录提供。玩家通过 Technique 服务学卷和施放，`meridian_brewing:block_work`
 在进式 1 秒后接管视线命中的巫釜，此后按目录周期推进 30 次，每次推进一秒规则时间。
+视线命中声明巫釜正下方的火源（`#meridian_brewing:brew_fires` 或原版 `#minecraft:campfires`）时，
+目标按它上面那只釜算，所以熬制中低头加炭、拨灰不会被当成换了目标；命中灶石等其他方块仍判视线丢失。
 熬制全部属于可被僵直打断的 31 秒起手，随后收势 1 秒。启动时在 Technique 服务就绪通知中校验
 周期、持续时间、进式和三阶段声明；它们必须与 `BrewCauldron.BREW_SECONDS` 一致，否则中止装载。
 
@@ -9,6 +11,14 @@
 结构、目标、距离、权限、持物或火种失效时，处理器返回结构化拒绝原因。
 `CAST_ENDED` 释放巫釜接管并删除这次施放的活动与幂等记录，覆盖正常结束、失败、僵直、死亡、卸载和下线。
 中断回到生药时保留药材与浸泡累计，火候累计和投料时窗清零；已支付的功法费用由上游保持。
+
+熬药目录的功法费用为空，真元按锅另算（`BrewQiPayment`）。`block_work` 接管巫釜前预检：
+经 Human 的 `meridian_environment_host` 查施法者所在区域，取存量与 `spare_absorption_per_second × 30` 的小者，
+加施法者已开经脉腔体余额，不足一锅返回 `qi.short_at_start`。每次推进先按 `BrewQiTally.nextShare()` 付本秒份额：
+`draw` 从区域取（共享吸收速率窗口，取走的量进默认释放账户，下一窗口散回同一区域），不足部分通过 `BrewBodyHost.activity`
+从已开经脉按余额比例扣，`released_qi` 等于扣减合计，满足 Framework 守恒。两边仍不够时以 `technique.qi_short` 中断。
+`draw_id` 为 `meridian_brewing:brew/<本锅随机 UUID>/<推进事件 ID>`，同一秒重放不重复取。
+施法者身体暂停或解绑按付不起处理。只有正式熬药式推进收费；`BrewQiTally` 只在内存中，停服打断进行中的熬制。
 
 熬药目录绑定 `human:adult` 的手臂肌肉，实际迟滞会延长熬药。
 Human 统一拦截施放中主手，副手仅对目录声明的釜与火标签放行，下料、添水、加炭、拨灰和灭火照常执行。

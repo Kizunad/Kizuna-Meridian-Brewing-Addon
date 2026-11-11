@@ -207,26 +207,32 @@ public final class BrewCauldron {
                 slotName(slot), new BrewText.ItemName(batch.itemId())));
     }
 
-    public BrewActionResult startBrew(BrewStructure structure) {
+    public Optional<BrewText> startProblem(BrewStructure structure) {
+        // 釜自己这一侧能不能起熬：状态、药方、料、结构；施法者学没学过、真元够不够由宿主另查。
         if (structure == null) {
             throw new IllegalArgumentException("起熬结构不能为空");
         }
         if (state == BrewCauldronState.BREWING) {
-            return BrewActionResult.returned(BrewText.message("cauldron.start.already"));
+            return Optional.of(BrewText.message("cauldron.start.already"));
         }
         if (state != BrewCauldronState.RAW) {
-            return BrewActionResult.returned(stateBlocksStart());
+            return Optional.of(stateBlocksStart());
         }
         if (recipe == null) {
-            return BrewActionResult.returned(BrewText.message("cauldron.start.no_recipe"));
+            return Optional.of(BrewText.message("cauldron.start.no_recipe"));
         }
         Optional<BrewText> missingIngredients = missingIngredients();
         if (missingIngredients.isPresent()) {
-            return BrewActionResult.returned(missingIngredients.orElseThrow());
+            return missingIngredients;
         }
-        Optional<BrewText> structureProblem = structure.problemFor(recipe.kind(), recipe.fireKind());
-        if (structureProblem.isPresent()) {
-            return BrewActionResult.returned(structureProblem.orElseThrow());
+        return structure.problemFor(recipe.kind(), recipe.fireKind());
+    }
+
+    public BrewActionResult startBrew(BrewStructure structure) {
+        // 起熬前再按同一套规则查一遍，规则测试和宿主走同一个入口。
+        Optional<BrewText> problem = startProblem(structure);
+        if (problem.isPresent()) {
+            return BrewActionResult.returned(problem.orElseThrow());
         }
         state = BrewCauldronState.BREWING;
         brewElapsedSeconds = 0.0;

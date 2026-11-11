@@ -7,6 +7,7 @@ Threatening 类人生物的能力与进度走其活动宿主；治疗沿其已�
 由 Threatening 接入，玩家执行与客户端输入归 Human。
 
 药效计划保存在唯一身体的 `addon_progress["meridian_brewing:effects"]`，格式为 `effects.proto`。
+读过的药方存在同一具身体的 `addon_progress["meridian_brewing:recipes"]`，格式为 `recipes.proto`；读羊皮纸和 `/meridian progression recipes` 指令经活动宿主整份写回，身体暂停时只提示、不写。
 状态效果提供可见生命周期与每秒结算入口，命令清除、牛奶、自然到期撤销本药来源修正。
 重登录后首个 tick、玩家输入处理前，按原版保存的状态剩余时长平移剂量、治疗游标和退封曲线；离线不补算治疗。
 登录后到这一 tick 之间被直接移出玩家列表、没走断线事件的玩家（原版 GameTest 假玩家就是这样）查不到身体，

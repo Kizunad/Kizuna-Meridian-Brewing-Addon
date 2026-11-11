@@ -3,9 +3,11 @@ package dev.kizuna.meridian.brewing.clienttest;
 import com.mojang.blaze3d.platform.Window;
 import com.mojang.logging.LogUtils;
 import dev.kizuna.meridian.brewing.fabric.BrewCauldronBlockEntity;
+import dev.kizuna.meridian.brewing.fabric.BrewFireBlockEntity;
 import dev.kizuna.meridian.brewing.fabric.BrewingTechniqueContract;
 import dev.kizuna.meridian.brewing.server.BrewCauldron;
 import dev.kizuna.meridian.brewing.server.BrewCauldronState;
+import dev.kizuna.meridian.brewing.server.BrewQiTally;
 import dev.kizuna.meridian.technique.fabric.TechniqueFabric;
 import dev.kizuna.meridian.technique.protocol.pb.TechniqueMessages.CastOutcome;
 import dev.kizuna.meridian.technique.protocol.pb.TechniqueMessages.CastRequest;
@@ -43,7 +45,7 @@ import org.slf4j.Logger;
 
 /**
  * 炼药可玩性修正的真实客户端场景：晒药匾界面；漏斗链接晒药匾；创造模式里照现在的规矩熬一锅苦黄膏，每一步一张，动作栏拍开熬、辅料时窗、
- * 引药时窗和快熬成四个时刻；舀出成药和熬糊后舀出药渣的提示；药瓶提示里的品质和药效；炼药页末尾带品质的巫药；
+ * 引药时窗和快熬成四个时刻（行末带这锅的耗元），施放中副手下辅料、副手加炭升火再拨灰降回；舀出成药和熬糊后舀出药渣的提示；药瓶提示里的品质和药效；炼药页末尾带品质的巫药；
  * 七个状态效果在屏幕右上和背包里。
  *
  * <p>学式用 {@code /meridian technique learn}，起手经功法库公开入口，与 GameTest 相同；注水、下料、加炭、拨灰、舀药都是
@@ -103,6 +105,9 @@ final class BrewPlayScenes {
     private static final int MESSAGE_TICKS = 4;
     private static final double STARTED_SECONDS = 1.0;
     private static final double ACCESSORY_SECONDS = 7.0;
+    private static final double FIRE_UP_SECONDS = 9.0;
+    /** 升火、降火各占一个推进点，两张截图的动作栏不挤在同一秒。 */
+    private static final double FIRE_DOWN_SECONDS = 11.0;
     private static final double CATALYST_SECONDS = 19.0;
     private static final double ALMOST_DONE_SECONDS = 28.0;
     private static final double COLLECT_BELOW_DEGREES = 78.0;
@@ -120,6 +125,8 @@ final class BrewPlayScenes {
         crate(context, stage);
         hopperChain(context, stage);
         stage.command("meridian technique learn @a " + VOLUME);
+        // 学过药方才能熬；这里用调试指令一次学会，读羊皮纸的路径由 GameTest 覆盖。
+        stage.command("meridian progression recipes learn @a all");
         // 施放结束的原因写进日志：熬药式被拒时，釜上看不出是哪一条没满足。
         Consumer<TechniqueCastEnded> ended = event -> LOGGER.info("[炼药截图] 熬药式结束：{}，{}",
                 event.reason(), event.outcome().getReason());
@@ -253,6 +260,9 @@ final class BrewPlayScenes {
         progressShot(stage, STARTED_SECONDS, "brew_08_started");
         progressShot(stage, ACCESSORY_SECONDS, "brew_09_accessory_window");
         offHand(stage, "minecraft:honey_bottle", "brew_10_accessory_added");
+        // 施放中主手还拿着木棍，副手加一块炭升到三档、两秒后拨灰降回二档；三档 93° 只烧两秒，釜温仍在 82–90° 的火候带里。
+        offHandAtFire(stage, FIRE_UP_SECONDS, "minecraft:coal", "brew_10b_fire_up_offhand");
+        offHandAtFire(stage, FIRE_DOWN_SECONDS, "minecraft:iron_shovel", "brew_10c_fire_down_offhand");
         progressShot(stage, CATALYST_SECONDS, "brew_11_catalyst_window");
         offHand(stage, "minecraft:cobweb", "brew_12_catalyst_added");
         progressShot(stage, ALMOST_DONE_SECONDS, "brew_13_almost_done");
@@ -340,6 +350,21 @@ final class BrewPlayScenes {
         log(stage, shot);
     }
 
+    private static void offHandAtFire(Stage stage, double seconds, String item, String shot) {
+        // 低头看釜正下方的炉座，副手右键一下，拍完看回釜；看着釜下的火也算看着这只釜，熬制不会断。
+        waitCauldron(stage, "熬到第 " + seconds + " 秒", BREW_TIMEOUT_TICKS,
+                cauldronState -> cauldronState.brewElapsedSeconds() >= seconds);
+        Vec3 eye = stage.at(STAND_EYE);
+        stage.look(eye, stage.at(STOVE_FACE));
+        stage.hand(OFF_HAND, item);
+        stage.pause(POLL_TICKS);
+        stage.use();
+        stage.pause(POLL_TICKS);
+        stage.shoot(shot);
+        stage.look(eye, stage.center(CAULDRON));
+        log(stage, shot);
+    }
+
     private static void progressShot(Stage stage, double seconds, String shot) {
         waitCauldron(stage, "熬到第 " + seconds + " 秒", BREW_TIMEOUT_TICKS,
                 cauldronState -> cauldronState.brewElapsedSeconds() >= seconds);
@@ -383,8 +408,11 @@ final class BrewPlayScenes {
     }
 
     private static BrewCauldron cauldron(Stage stage, MinecraftServer server) {
-        var entity = (BrewCauldronBlockEntity) server.overworld().getBlockEntity(stage.block(CAULDRON));
-        return entity.cauldron();
+        return cauldronEntity(stage, server).cauldron();
+    }
+
+    private static BrewCauldronBlockEntity cauldronEntity(Stage stage, MinecraftServer server) {
+        return (BrewCauldronBlockEntity) server.overworld().getBlockEntity(stage.block(CAULDRON));
     }
 
     private static void log(Stage stage, String shot) {
@@ -393,13 +421,20 @@ final class BrewPlayScenes {
 
     private static String describe(Stage stage) {
         return stage.computeOnServer(server -> {
-            BrewCauldron cauldron = cauldron(stage, server);
+            BrewCauldronBlockEntity entity = cauldronEntity(stage, server);
+            BrewCauldron cauldron = entity.cauldron();
+            var fire = (BrewFireBlockEntity) server.overworld().getBlockEntity(stage.block(STOVE));
+            String qi = entity.qiTally().map(BrewPlayScenes::describeQi).orElse("无");
             ServerPlayer player = server.getPlayerList().getPlayers().getFirst();
-            return String.format(Locale.ROOT, "%s，%.1f°，%d 份水，熬了 %.1f 秒，料 %s，焦 %d 次；主手 %s，副手 %s",
+            return String.format(Locale.ROOT, "%s，%.1f°，%d 份水，熬了 %.1f 秒，料 %s，焦 %d 次；火 %d 档；耗元 %s；主手 %s，副手 %s",
                     cauldron.state(), cauldron.temperature(), cauldron.waterUnits(), cauldron.brewElapsedSeconds(),
-                    cauldron.ingredients().keySet(), cauldron.scorchCount(),
+                    cauldron.ingredients().keySet(), cauldron.scorchCount(), fire.fire().level(), qi,
                     player.getMainHandItem(), player.getOffhandItem());
         });
+    }
+
+    private static String describeQi(BrewQiTally qi) {
+        return String.format(Locale.ROOT, "%.2f/%.2f（环境 %.2f · 自身 %.2f）", qi.paid(), qi.total(), qi.ambient(), qi.self());
     }
 
     private static void potionTooltip(ClientGameTestContext context, Stage stage) {

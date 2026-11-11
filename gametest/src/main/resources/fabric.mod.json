@@ -18,7 +18,9 @@
       "dev.kizuna.meridian.brewing.fabric.WitchProjectileGameTest",
       "dev.kizuna.meridian.brewing.fabric.WitchSoundResourceGameTest",
       "dev.kizuna.meridian.brewing.fabric.BrewingPlayFixGameTest",
-      "dev.kizuna.meridian.brewing.fabric.BrewingAutomationGameTest"
+      "dev.kizuna.meridian.brewing.fabric.BrewingRecipeGameTest",
+      "dev.kizuna.meridian.brewing.fabric.BrewingAutomationGameTest",
+      "dev.kizuna.meridian.brewing.fabric.BrewingQiGameTest"
     ]
   },
   "depends": {

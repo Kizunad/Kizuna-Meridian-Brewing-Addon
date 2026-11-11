@@ -5,6 +5,7 @@ import dev.kizuna.meridian.brewing.fabric.BrewFireBlockEntity;
 import dev.kizuna.meridian.brewing.fabric.BrewingTechniqueContract;
 import dev.kizuna.meridian.brewing.fabric.BrewingBodyGameTest;
 import dev.kizuna.meridian.brewing.server.BrewKind;
+import dev.kizuna.meridian.brewing.server.BrewQiTally;
 import dev.kizuna.meridian.brewing.server.BrewUse;
 import dev.kizuna.meridian.brewing.server.BrewCauldron;
 import dev.kizuna.meridian.brewing.server.BrewCauldronState;
@@ -26,6 +27,7 @@ import java.util.Set;
 import java.util.function.Consumer;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerPlayer;
@@ -34,6 +36,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.Vec3;
 
 /** 学卷、正式施放、周期调度与结束通知共同驱动真实巫釜的跨仓回归。 */
 public final class BrewingCastGameTest {
@@ -47,6 +50,9 @@ public final class BrewingCastGameTest {
     private static final long BREWED_TICK = 625;
     private static final long FINISHED_TICK = 645;
     private static final double FAR_DISTANCE = 10;
+    private static final long GAZE_WAIT = 70;
+    private static final double GAZE_STEPS = 3;
+    private static final double FIRE_FACE_HEIGHT = 0.25;
     private static final double CENTER = 0.5;
     private static final long STAGGER_MILLIS = 500;
     private static final double STAGGER_SPEED = 0.5;
@@ -59,6 +65,7 @@ public final class BrewingCastGameTest {
     private static final long TICKS_PER_SECOND = 20;
     private static final String MESSAGE = "message.meridian_brewing.";
     private static final String PROGRESS_LINE_KEY = MESSAGE + "progress.remaining";
+    private static final double QI_DELTA = 1e-6;
 
     @GameTest(maxTicks = SHORT_TIMEOUT)
     public void realCastRejectsIncompleteStructureWithReason(GameTestHelper context) {
@@ -94,9 +101,17 @@ public final class BrewingCastGameTest {
             context.assertTrue(fixture.cauldron().cauldron().brewElapsedSeconds() == BrewCauldron.BREW_SECONDS,
                     "巫釜推进次数与 30 秒规则不一致");
             context.assertTrue(fixture.ended().isEmpty(), "收势前提前结束施放");
+            BrewQiTally qi = fixture.cauldron().qiTally().orElseThrow();
+            context.assertTrue(Math.abs(qi.paid() - qi.total()) < QI_DELTA && qi.total() > 0,
+                    "熬成时这锅的真元没有付满：" + qi);
         });
         context.runAfterDelay(FINISHED_TICK, () -> {
             ended(context, fixture, TechniqueCastEndReason.COMPLETED);
+            Set<String> brewedKeys = new HashSet<>();
+            BrewingTestPlayers.overlays(fixture.player())
+                    .forEach(line -> brewedKeys.addAll(BrewingTestPlayers.translationKeys(line.text())));
+            context.assertTrue(brewedKeys.contains(MESSAGE + "cauldron.brewed_qi"),
+                    "熬成那一句没有带耗元总数：" + brewedKeys);
             var body = BodyProtobuf.fromMessage(BrewingTestPlayers.body(fixture.player()));
             context.assertTrue(!TechniqueState.read(body).hasActiveCast(),
                     "正常收势后仍保留活动施放");
@@ -121,7 +136,7 @@ public final class BrewingCastGameTest {
             lines.forEach(line -> keys.addAll(BrewingTestPlayers.translationKeys(line.text())));
             String fireKey = MESSAGE + "fire." + BrewKind.QI_GATHER.fireKind().name().toLowerCase(Locale.ROOT);
             List<String> expectedKeys = List.of(fireKey, MESSAGE + "progress.temperature", PROGRESS_LINE_KEY,
-                    MESSAGE + "progress.window.upcoming", MESSAGE + "progress.window.open");
+                    MESSAGE + "progress.window.upcoming", MESSAGE + "progress.window.open", MESSAGE + "progress.qi");
             context.assertTrue(keys.containsAll(expectedKeys), "动作栏进度缺语言键：" + keys);
             context.assertTrue(progressLines(watcher).isEmpty(), "旁边的玩家也收到了熬药进度");
             BrewingTestPlayers.close(watcher);
@@ -149,6 +164,40 @@ public final class BrewingCastGameTest {
                 ended(context, fixture, TechniqueCastEndReason.FAILED);
                 assertInterrupted(context, fixture, before);
                 finish(context, fixture);
+            });
+        });
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void lookingAtFireUnderCauldronKeepsBrewingButHearthStoneInterrupts(GameTestHelper context) {
+        // 熬药中低头看釜正下方的炉座仍算看着这只釜，周期事件照常推进；改看旁边的灶石照旧打断。
+        Fixture fixture = fixture(context);
+        cast(context, fixture);
+        context.runAfterDelay(PROGRESSED_TICK, () -> {
+            assertBrewing(context, fixture);
+            double elapsed = fixture.cauldron().cauldron().brewElapsedSeconds();
+            BlockPos fire = fixture.pos().below();
+            BlockPos hearth = fire.east();
+            // 炉座四面都围着灶石，拆掉东面一块才看得到炉座侧面；炉座本身不要求灶石，火温不受影响。
+            // 玩家站在与炉座同一层、隔一格的地方（离釜心约 2.5 格），低头看炉座侧面偏下处，模拟加炭时的视线。
+            context.getLevel().setBlockAndUpdate(hearth, Blocks.AIR.defaultBlockState());
+            ServerPlayer player = fixture.player();
+            player.setPos(hearth.getX() + 1 + CENTER, fire.getY(), hearth.getZ() + CENTER);
+            player.lookAt(EntityAnchorArgument.Anchor.EYES,
+                    new Vec3(hearth.getX(), fire.getY() + FIRE_FACE_HEIGHT, fire.getZ() + CENTER));
+            context.runAfterDelay(GAZE_WAIT, () -> {
+                assertBrewing(context, fixture);
+                context.assertTrue(fixture.ended().isEmpty(), "看釜下的火被当成视线离开：" + fixture.ended());
+                double gained = fixture.cauldron().cauldron().brewElapsedSeconds() - elapsed;
+                context.assertTrue(gained >= GAZE_STEPS, "看火期间熬制没有推进：" + gained);
+                BrewCauldron.Snapshot before = fixture.cauldron().cauldron().snapshot();
+                context.getLevel().setBlockAndUpdate(hearth, Blocks.STONE.defaultBlockState());
+                BrewingC4cGameTest.setLookingAt(player, hearth);
+                context.runAfterDelay(INTERRUPTION_WAIT, () -> {
+                    ended(context, fixture, TechniqueCastEndReason.FAILED);
+                    assertInterrupted(context, fixture, before);
+                    finish(context, fixture);
+                });
             });
         });
     }
@@ -218,6 +267,8 @@ public final class BrewingCastGameTest {
         BrewCauldronBlockEntity cauldron = BrewingC4cGameTest.placeCauldron(context.getLevel(), pos, player);
         BrewingC4cGameTest.prepareInputs(cauldron, player, context.getLevel(), pos);
         TechniqueFabric.service().learn(player.getUUID(), VOLUME);
+        BrewingTestPlayers.readAllRecipes(player);
+        BrewingTestPlayers.stockQi(player);
         var ended = new ArrayList<TechniqueCastEnded>();
         Consumer<TechniqueCastEnded> listener = event -> {
             if (event.entityUuid().equals(player.getUUID())) {

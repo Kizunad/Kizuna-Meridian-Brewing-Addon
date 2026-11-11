@@ -8,6 +8,7 @@ import dev.kizuna.meridian.brewing.server.BrewDirection;
 import dev.kizuna.meridian.brewing.server.BrewForm;
 import dev.kizuna.meridian.brewing.server.BrewKind;
 import dev.kizuna.meridian.brewing.server.BrewProgress;
+import dev.kizuna.meridian.brewing.server.BrewQiTally;
 import dev.kizuna.meridian.brewing.server.BrewRecipe;
 import dev.kizuna.meridian.brewing.server.BrewStructure;
 import dev.kizuna.meridian.brewing.server.BrewText;
@@ -75,6 +76,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
     private BrewStructure structure;
     private long copperOxidationTicks;
     private UUID techniqueCaster;
+    private BrewQiTally qiTally;
 
     public BrewCauldronBlockEntity(BlockPos pos, BlockState state, VesselKind vessel) {
         super(BrewingBlocks.BREW_CAULDRON_ENTITY, pos, state);
@@ -138,6 +140,16 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
             return BrewActionResult.returned(BrewText.message("no_permission"));
         }
         structure = scanStructure();
+        Optional<BrewText> problem = cauldron.startProblem(structure);
+        if (problem.isEmpty()) {
+            problem = casterProblem(caster, cauldron.recipe().orElseThrow().kind());
+        }
+        if (problem.isEmpty()) {
+            problem = BrewQiPayment.startProblem(caster, level, worldPosition, vessel);
+        }
+        if (problem.isPresent()) {
+            return BrewActionResult.returned(problem.orElseThrow());
+        }
         BrewActionResult result = cauldron.startBrew(structure);
         if (result.accepted()) {
             setChanged();
@@ -145,16 +157,35 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
         return result;
     }
 
+    private static Optional<BrewText> casterProblem(ServerPlayer caster, BrewKind kind) {
+        // 釜这边都齐了才查施法者：创造模式也要读过药方。
+        BrewRecipeBook.Lookup recipes = BrewRecipeBook.lookup(caster);
+        if (recipes.presence() == BrewBodyHost.Presence.PAUSED) {
+            return Optional.of(BrewText.message("recipe.body_paused"));
+        }
+        if (!recipes.knows(kind)) {
+            return Optional.of(BrewText.message("recipe.not_learned", BrewCauldron.recipeName(kind)));
+        }
+        return Optional.empty();
+    }
+
     public void beginTechniqueControl(UUID casterUuid) {
-        // 技法接管后暂停普通 ticker，避免一次熬药被推进两遍。
+        // 技法接管后暂停普通 ticker，避免一次熬药被推进两遍；同时开一本这锅的耗元账。
         if (casterUuid == null) {
             throw new IllegalArgumentException("熬药式施放者不能为空");
         }
         techniqueCaster = casterUuid;
+        qiTally = BrewQiPayment.tally(vessel);
     }
 
-    public BrewActionResult advanceTechniqueBrew(ServerPlayer caster) {
-        // 每个周期只推进一次规则时间，结构或权限失效时先恢复普通 ticker。
+    /** 当前或刚熬成的这一锅耗了多少真元；中断后清空，不存档。 */
+    public Optional<BrewQiTally> qiTally() {
+        return Optional.ofNullable(qiTally);
+    }
+
+    public BrewActionResult advanceTechniqueBrew(ServerPlayer caster, String drawId) {
+        // 每个周期只推进一次规则时间，结构或权限失效时先恢复普通 ticker；推进前先付这一秒的真元，
+        // 付不起就中断，不降分。
         if (!techniqueControlled()) {
             return BrewActionResult.returned(BrewText.message("technique.not_controlled"));
         }
@@ -172,6 +203,12 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
         if (structureProblem.isPresent()) {
             return interruptTechnique(BrewText.message("technique.interrupted", structureProblem.orElseThrow()));
         }
+        Optional<BrewQiTally> paid = BrewQiPayment.paySecond(caster, level, worldPosition, drawId, qiTally);
+        if (paid.isEmpty()) {
+            BrewTexts.sendOverlay(caster, BrewText.message("technique.qi_short"));
+            return interruptTechnique(BrewText.message("technique.qi_short"));
+        }
+        qiTally = paid.orElseThrow();
         tickCauldron(TECHNIQUE_SECONDS_PER_STEP);
         setChanged();
         if (cauldron.state() == BrewCauldronState.SCORCHED) {
@@ -180,10 +217,10 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
         }
         if (cauldron.state() == BrewCauldronState.BREWED) {
             techniqueCaster = null;
-            BrewTexts.sendOverlay(caster, BrewText.message("cauldron.brewed"));
+            BrewTexts.sendOverlay(caster, BrewTexts.brewed(qiTally));
             return BrewActionResult.accepted(BrewText.message("cauldron.brewed"));
         }
-        BrewTexts.sendProgress(caster, BrewProgress.of(cauldron));
+        BrewTexts.sendProgress(caster, BrewProgress.of(cauldron), qiTally);
         return BrewActionResult.accepted(BrewText.message("technique.step"));
     }
 
@@ -255,6 +292,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
         // 无论规则中断是否接受都释放接管，避免方块 ticker 永久暂停。
         BrewActionResult interruption = cauldron.interruptBrew();
         techniqueCaster = null;
+        qiTally = null;
         setChanged();
         if (interruption.accepted()) {
             return BrewActionResult.returned(reason);

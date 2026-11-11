@@ -53,7 +53,7 @@ final class BrewEffectResume {
         if (found.isEmpty()) {
             return;
         }
-        var binding = found.get();
+        var binding = BrewRecipeBook.mergeLegacy(player, found.get());
         if (binding.body().getVitality().getDead()
                 || !binding.body().containsAddonProgress(BrewBodyProgress.KEY)) {
             return;

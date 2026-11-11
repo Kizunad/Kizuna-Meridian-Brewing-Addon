@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package kizuna.meridian.brewing.v1;
+
+option java_package = "dev.kizuna.meridian.brewing.protocol.pb";
+option java_outer_classname = "BrewRecipeMessages";
+
+// 存在施法者唯一身体的 addon_progress["meridian_brewing:recipes"]：读过的药方。
+message BrewRecipeBook {
+  int32 schema_version = 1;
+  // 药方路径（BrewKind 的注册尾段，如 depletion），按枚举顺序排列、不重复。
+  repeated string recipe_ids = 2;
+}

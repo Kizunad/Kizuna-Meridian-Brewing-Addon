@@ -6,7 +6,6 @@ import dev.kizuna.meridian.brewing.fabric.BrewFireBlockEntity;
 import dev.kizuna.meridian.brewing.fabric.HerbCrateBlockEntity;
 import dev.kizuna.meridian.brewing.fabric.BrewingCreativeTab;
 import dev.kizuna.meridian.brewing.fabric.BrewingRuntime;
-import dev.kizuna.meridian.brewing.fabric.RecipeKnowledgeStore;
 import dev.kizuna.meridian.technique.fabric.TechniqueScrollItem;
 import dev.kizuna.meridian.brewing.server.BrewActionResult;
 import dev.kizuna.meridian.brewing.server.BrewCauldron;
@@ -242,6 +241,8 @@ public final class BrewingGameTest {
         player.addItem(returnedBucket);
         useCauldronItem(cauldron, player, itemStack("meridian_brewing:dried_pufferfish"));
         useCauldronItem(cauldron, player, new ItemStack(Items.GLOWSTONE_DUST));
+        BrewingTestPlayers.readRecipes(player, BrewKind.QI_GATHER);
+        BrewingTestPlayers.stockQi(player);
         context.assertTrue(cauldron.startBrew(player).accepted(), "方块实体入口没有开始熬制");
 
         context.runAfterDelay(ACCESSORY_TICK, () -> useCauldronItem(
@@ -431,29 +432,6 @@ public final class BrewingGameTest {
 
         new ItemStack(Items.MILK_BUCKET).finishUsingItem(level, player);
         context.assertTrue(!player.hasEffect(bitterEffect), "牛奶没有清除巫药状态");
-        context.succeed();
-    }
-
-    @GameTest(maxTicks = DEFAULT_TIMEOUT)
-    public void recipeScrollRoundTripsAddonProgress(GameTestHelper context) {
-        // 药方知识经真实玩家进度保存，并验证重复阅读不会消耗第二次。
-        ServerLevel level = context.getLevel();
-        ServerPlayer player = BrewingTestPlayers.create(context);
-        player.setGameMode(GameType.SURVIVAL);
-        Item scroll = BuiltInRegistries.ITEM.getValue(id("brew_recipe"));
-        player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(scroll));
-        scroll.use(level, player, InteractionHand.MAIN_HAND);
-        player.closeContainer();
-
-        TagValueOutput output = TagValueOutput.createWithContext(
-                ProblemReporter.DISCARDING, level.registryAccess());
-        RecipeKnowledgeStore.save(player, output);
-        CompoundTag saved = output.buildResult();
-        RecipeKnowledgeStore.load(player, input(level, saved));
-        ValueInput progress = input(level, saved).childOrEmpty("addon_progress");
-        ValueInput recipes = progress.childOrEmpty("meridian_brewing:recipes");
-        context.assertTrue(recipes.getBooleanOr("depletion", false),
-                "药方羊皮纸没有写入 addon_progress");
         context.succeed();
     }
 

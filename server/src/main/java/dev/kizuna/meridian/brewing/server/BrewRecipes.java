@@ -82,11 +82,11 @@ public final class BrewRecipes {
                                      String primary, String accessory, double accessoryStart,
                                      double accessoryEnd, String catalyst, double catalystStart,
                                      double catalystEnd) {
-        // 统一构造药方，避免六份配置在时窗和火种校验上出现分叉。
+        // 统一构造药方，避免六份配置在时窗和火种校验上出现分叉；真元要求这轮一律不设门槛。
         var band = new HeatBand(minimum, maximum);
         var ingredients = new IngredientPlan(primary, accessory,
                 new TimingWindow(accessoryStart, accessoryEnd), catalyst,
                 new TimingWindow(catalystStart, catalystEnd));
-        return new BrewRecipe(kind, kind.fireKind(), band, ingredients);
+        return new BrewRecipe(kind, kind.fireKind(), band, ingredients, BrewQiRule.NONE);
     }
 }

@@ -35,6 +35,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 
+import java.nio.file.Path;
 import java.util.List;
 
 /** 从真实用药事件选择部位，再经可信宿主提交身体药效。 */
@@ -52,8 +53,9 @@ final class BrewBodyEffects {
     static void initialize() {
         // 宿主与配置都是服务端硬依赖，初始化失败应停止装配。
         BrewBodyHost.initialize();
-        thresholds = BrewThresholds.load(FabricLoader.getInstance().getConfigDir()
-                .resolve("meridian-brewing.properties"));
+        Path config = FabricLoader.getInstance().getConfigDir().resolve("meridian-brewing.properties");
+        thresholds = BrewThresholds.load(config);
+        BrewQiPayment.initialize(config);
         VanillaDamageFabric.registerPartArmorModifier(BrewArmorEffects::multiplier);
         BrewNausea.initialize();
         BrewEffectResume.initialize();

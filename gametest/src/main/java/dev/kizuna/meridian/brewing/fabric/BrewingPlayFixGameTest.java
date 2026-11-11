@@ -17,8 +17,11 @@ import dev.kizuna.meridian.brewing.server.IngredientPlan;
 import dev.kizuna.meridian.brewing.server.IngredientSlot;
 import dev.kizuna.meridian.brewing.server.SmokeVentState;
 import dev.kizuna.meridian.brewing.test.BrewingTestPlayers;
+import dev.kizuna.meridian.protocol.pb.BodyMessages.HealthTarget;
+import dev.kizuna.meridian.protocol.pb.BodyMessages.PartState;
 import dev.kizuna.meridian.protocol.pb.BodyMessages.Realm;
 import dev.kizuna.meridian.technique.fabric.TechniqueScrollItem;
+import dev.kizuna.meridian.vanilla.fabric.VanillaDamageFabric;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -27,6 +30,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.fabricmc.fabric.api.loot.v3.LootTableEvents;
 import net.minecraft.commands.CommandSourceStack;
@@ -69,7 +74,11 @@ public final class BrewingPlayFixGameTest {
     private static final int TIMEOUT = 100;
     private static final int OBSERVE_TICKS = 2;
     private static final int BIRTH_TICKS = 2;
-    private static final int KILL_TICKS = 5;
+    /** 原版受击后 20 tick 无敌，过了一半才吃满新的一下。 */
+    private static final int REHIT_TICKS = 11;
+    /** 第二下必死：已毁的手臂再挨一下按 0.7 整体蔓延，也超过剩下的血；第三下只是余量。 */
+    private static final int MAX_HITS = 3;
+    private static final int KILL_TICKS = BIRTH_TICKS + REHIT_TICKS * (MAX_HITS - 1) + 3;
     private static final int SPAWN_HEIGHT = 2;
     private static final BlockPos FIRST = new BlockPos(1, SPAWN_HEIGHT, 1);
     private static final BlockPos SECOND = new BlockPos(4, SPAWN_HEIGHT, 1);
@@ -93,7 +102,9 @@ public final class BrewingPlayFixGameTest {
     private static final BrewStructure COLD = new BrewStructure(
             HeatSourceKind.NONE, 0, SmokeVentState.OPEN, HerbState.PRESENT);
     private static final Map<UUID, Boolean> CULTIVATOR_AT_DEATH = new HashMap<>();
+    private static final Map<UUID, List<String>> WITCH_HITS = new ConcurrentHashMap<>();
     private static boolean listening;
+    private static boolean observing;
 
     @GameTest(maxTicks = TIMEOUT)
     public void herbCrateOpensNineSlotDispenserMenu(GameTestHelper context) {
@@ -307,16 +318,25 @@ public final class BrewingPlayFixGameTest {
     @GameTest(maxTicks = TIMEOUT)
     public void killedTrueQiWitchStillHasItsBodyWhenLootRolls(GameTestHelper context) {
         // 真打死一只真炁女巫，抽掉落那一刻身体还认领着、境界读得到真炁。
+        // 1000 点近战超出测试玩家手臂的做功，按力竭只剩四分之一；打在手臂上时余量按 0.7 蔓延，
+        // 女巫还剩四成血。所以没死就等原版无敌帧过去再补一刀，致命一击始终是玩家近战。
         listenForWitchDeaths();
+        observeWitchHits();
         ServerLevel level = context.getLevel();
         ServerPlayer player = BrewingTestPlayers.create(context);
         Witch witch = spawnWitch(context, "true_qi", FIRST);
-        context.runAfterDelay(BIRTH_TICKS, () -> {
-            assertRealm(context, witch, true);
-            witch.hurtServer(level, level.damageSources().playerAttack(player), LETHAL_DAMAGE);
-        });
+        context.runAfterDelay(BIRTH_TICKS, () -> assertRealm(context, witch, true));
+        for (int hit = 0; hit < MAX_HITS; hit++) {
+            context.runAfterDelay(BIRTH_TICKS + (long) hit * REHIT_TICKS, () -> {
+                if (witch.isAlive()) {
+                    witch.hurtServer(level, level.damageSources().playerAttack(player), LETHAL_DAMAGE);
+                }
+            });
+        }
         context.runAfterDelay(KILL_TICKS, () -> {
-            context.assertTrue(!witch.isAlive(), "一击没有打死真炁女巫");
+            List<String> hits = WITCH_HITS.getOrDefault(witch.getUUID(), List.of());
+            System.out.println("[女巫补刀] " + hits.size() + " 刀：" + hits);
+            context.assertTrue(!witch.isAlive(), "补了 " + MAX_HITS + " 刀还没打死真炁女巫：" + hits);
             Boolean cultivator = CULTIVATOR_AT_DEATH.get(witch.getUUID());
             context.assertTrue(cultivator != null, "打死女巫时没有抽原版女巫掉落表");
             context.assertTrue(cultivator, "抽掉落时女巫的身体已经不在或不是真炁");
@@ -497,6 +517,24 @@ public final class BrewingPlayFixGameTest {
             }
         });
         listening = true;
+    }
+
+    private static synchronized void observeWitchHits() {
+        // 只记女巫挨的每一下：命中部位、原版剂量、进身体的剂量和剩下的部位总血。
+        if (observing) {
+            return;
+        }
+        VanillaDamageFabric.registerDamageObserver(event -> {
+            if (event.target() instanceof Witch witch) {
+                String part = event.input().hit().map(HealthTarget::getPartId).orElse("?");
+                double left = event.result().body().getPartStatesList().stream().mapToDouble(PartState::getHp).sum();
+                String line = String.format(Locale.ROOT, "%s 原版 %.0f → 身体 %.1f，剩 %.1f%s", part,
+                        event.input().rawDamage(), event.input().damageAfterEffects(), left,
+                        event.result().body().getVitality().getDead() ? "（死）" : "");
+                WITCH_HITS.computeIfAbsent(witch.getUUID(), ignored -> new CopyOnWriteArrayList<>()).add(line);
+            }
+        });
+        observing = true;
     }
 
     private record LootCount(int recipes, int scrolls) {

@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import dev.kizuna.meridian.brewing.server.BrewCauldron;
 import dev.kizuna.meridian.brewing.server.BrewProgress;
+import dev.kizuna.meridian.brewing.server.BrewQiTally;
 import dev.kizuna.meridian.brewing.server.BrewQuality;
 import dev.kizuna.meridian.brewing.server.BrewStructure;
 import dev.kizuna.meridian.brewing.server.BrewText;
@@ -50,11 +51,31 @@ final class BrewTexts {
     }
 
     /** 熬药式每推进一秒发给施放者的一行进度，只发给本人。 */
-    static void sendProgress(ServerPlayer caster, BrewProgress progress) {
+    static void sendProgress(ServerPlayer caster, BrewProgress progress, BrewQiTally qi) {
         if (caster.connection == null) {
             return;
         }
-        caster.sendOverlayMessage(progress(progress));
+        caster.sendOverlayMessage(progress(progress, qi));
+    }
+
+    /** 熬成时的一句话；这锅耗了元就带上总数和来源。 */
+    static BrewText brewed(BrewQiTally qi) {
+        if (qi.total() <= 0) {
+            return BrewText.message("cauldron.brewed");
+        }
+        return BrewText.message("cauldron.brewed_qi", BrewQiPayment.amount(qi.paid()),
+                BrewQiPayment.amount(qi.ambient()), BrewQiPayment.amount(qi.self()));
+    }
+
+    /** 进度行加上耗元，例如「… · 耗元 2.4/6.0（环境 1.8 · 自身 0.6）」；关掉耗元时不写这一段。 */
+    static MutableComponent progress(BrewProgress progress, BrewQiTally qi) {
+        MutableComponent line = progress(progress);
+        if (qi.total() > 0) {
+            appendPart(line, component(BrewText.message("progress.qi", BrewQiPayment.amount(qi.paid()),
+                    BrewQiPayment.amount(qi.total()), BrewQiPayment.amount(qi.ambient()),
+                    BrewQiPayment.amount(qi.self()))));
+        }
+        return line;
     }
 
     /** 例如「阳火 · 87° / 86–94° · 还剩 18 s · 辅料可下（还剩 3 s）」；温度按火候带上色。 */
