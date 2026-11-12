@@ -164,6 +164,12 @@ public final class BrewFireBlockEntity extends BlockEntity implements WorldlyCon
         stack.shrink(1);
     }
 
+    /** 对着釜用这件东西时该不该转给釜下的火：煤、木炭、铲子、沙子、灵魂沙、灵魂土；水桶留给釜注水。 */
+    static boolean tendsFire(ItemStack stack) {
+        return isFuel(stack) || stack.is(ItemTags.SHOVELS) || stack.is(Items.SAND)
+                || stack.is(Items.SOUL_SAND) || stack.is(Items.SOUL_SOIL);
+    }
+
     private static boolean isFuel(ItemStack stack) {
         return stack.is(Items.COAL) || stack.is(Items.CHARCOAL);
     }

@@ -12,6 +12,8 @@
     "BrewArmorTargetMixin",
     "BrewNauseaMixin",
     "BrewMilkResidueMixin",
-    "WitchHutChestMixin"
+    "WitchHutChestMixin",
+    "StructureTemplateAccessor",
+    "TowerLavaPickupMixin"
   ]
 }

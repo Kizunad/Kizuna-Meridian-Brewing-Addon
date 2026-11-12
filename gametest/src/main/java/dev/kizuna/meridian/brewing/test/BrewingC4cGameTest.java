@@ -41,9 +41,6 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.InteractionResult;
@@ -51,27 +48,22 @@ import net.minecraft.world.InteractionResult;
 /** 处理器的补充测试使用服务端玩家、视线、方块实体和药水物品。 */
 public final class BrewingC4cGameTest {
     private static final int MAX_TICKS = 160;
-    private static final int STRUCTURE_X = 2;
-    private static final int STRUCTURE_Y = 2;
-    private static final int STRUCTURE_Z = 2;
     private static final double TARGET_DISTANCE = 3.0;
     private static final String BLOCK_WORK_ID = "meridian_brewing:block_work";
     private static final String USE_BREW_ID = "meridian_brewing:use_brew";
     private static final double CENTER = 0.5;
     private static final double FAR_DISTANCE = 10;
-    private static final double STANDOFF_DISTANCE = 2;
     private static final long INTERVAL_MILLIS = 1_000;
     private static final long DURATION_MILLIS = 30_000;
 
-    @GameTest(maxTicks = MAX_TICKS)
+    @GameTest(maxTicks = MAX_TICKS, structure = BrewSites.LV2_SITE)
     public void blockWorkStartsAdvancesAndInterruptsThroughWorldTarget(GameTestHelper context) {
         // 直接处理器测试补充视线与幂等边界，正式施放另由服务流程用例覆盖。
         ServerLevel level = context.getLevel();
         ServerPlayer player = BrewingTestPlayers.create(context);
         player.setGameMode(GameType.SURVIVAL);
-        BlockPos cauldronPos = context.absolutePos(
-                new BlockPos(STRUCTURE_X, STRUCTURE_Y, STRUCTURE_Z));
-        BrewCauldronBlockEntity cauldron = placeCauldron(level, cauldronPos, player);
+        BrewCauldronBlockEntity cauldron = placeCauldron(context, player);
+        BlockPos cauldronPos = cauldron.getBlockPos();
         assertIncompleteStart(context, player, cauldronPos);
         prepareInputs(cauldron, player, level, cauldronPos);
         BrewingTestPlayers.readAllRecipes(player);
@@ -261,18 +253,12 @@ public final class BrewingC4cGameTest {
         context.assertTrue(wrongKind.getCount() == 1, "品质事实不匹配后仍消耗了物品");
     }
 
-    static BrewCauldronBlockEntity placeCauldron(ServerLevel level, BlockPos pos,
-                                                         ServerPlayer player) {
-        // 先放入巫釜、炉座和药苗，后续起手入口会自行扫描结构。
-        level.setBlockAndUpdate(pos, block("witch_cauldron").defaultBlockState());
-        level.setBlockAndUpdate(pos.below(), block("iron_stove").defaultBlockState());
-        for (Direction direction : Direction.Plane.HORIZONTAL) {
-            level.setBlockAndUpdate(pos.below().relative(direction), Blocks.STONE.defaultBlockState());
-        }
-        level.setBlockAndUpdate(pos.north(), Blocks.POTTED_RED_MUSHROOM.defaultBlockState());
-        player.setPos(pos.getX() + CENTER, pos.getY() + 1, pos.getZ() - STANDOFF_DISTANCE);
-        BlockEntity entity = level.getBlockEntity(pos);
-        return (BrewCauldronBlockEntity) entity;
+    static BrewCauldronBlockEntity placeCauldron(GameTestHelper context, ServerPlayer player) {
+        // 摆随包的二阶结构（巫釜 + 铁炉座），人站在釜北面两格的台上；起手入口自己去比结构。
+        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV2);
+        BlockPos stand = site.stand();
+        player.setPos(stand.getX() + CENTER, stand.getY(), stand.getZ() + CENTER);
+        return (BrewCauldronBlockEntity) context.getLevel().getBlockEntity(site.cauldron());
     }
 
     static void prepareInputs(BrewCauldronBlockEntity cauldron, ServerPlayer player,
@@ -351,12 +337,6 @@ public final class BrewingC4cGameTest {
     static void setLookingAt(ServerPlayer player, BlockPos pos) {
         // 服务器端视线直接对准方块中心，测试不依赖客户端 packet 到达时序。
         player.lookAt(EntityAnchorArgument.Anchor.EYES, Vec3.atCenterOf(pos));
-    }
-
-    private static Block block(String path) {
-        // 通过原版注册表取本模组实际注册的方块。
-        return BuiltInRegistries.BLOCK.getValue(Identifier.fromNamespaceAndPath(
-                "meridian_brewing", path));
     }
 
     private static Item item(String id) {

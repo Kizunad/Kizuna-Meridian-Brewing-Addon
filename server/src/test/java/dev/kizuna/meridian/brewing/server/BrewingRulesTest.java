@@ -15,11 +15,7 @@ public final class BrewingRulesTest {
     private static final DryingConditions SUNNY = new DryingConditions(
             DaylightPhase.DAY, DryWeather.CLEAR, true);
     private static final double CRATE_SUN_SECONDS = 1_200.0;
-    private static final BrewStructure STABLE_HEAT = new BrewStructure(
-            HeatSourceKind.SUN_BRAZIER_2,
-            BrewStructure.REQUIRED_HEARTH_STONES,
-            SmokeVentState.OPEN,
-            HerbState.PRESENT);
+    private static final BrewStructure STABLE_HEAT = BrewStructure.built(HeatSourceKind.SUN_BRAZIER_2);
 
     @Test
     public void freshnessReachesConfiguredFloor() {
@@ -123,13 +119,31 @@ public final class BrewingRulesTest {
                 IngredientBatch.raw("cobweb"));
         cauldron.tick(10.0, STABLE_HEAT);
         assertEquals(BrewCauldronState.BREWED, cauldron.state());
-        cauldron.tick(COLLECTION_COOLING_SECONDS, new BrewStructure(
-                HeatSourceKind.NONE, 0, SmokeVentState.OPEN, HerbState.PRESENT));
+        cauldron.tick(COLLECTION_COOLING_SECONDS, BrewStructure.built(HeatSourceKind.NONE));
         BrewCollectionResult result = cauldron.collectBottle(3);
         assertEquals(BrewCollectionKind.POTION, result.kind());
         assertEquals(Optional.of(BrewQuality.SUPERIOR), result.score().orElseThrow().quality());
         assertEquals(VesselKind.WITCH_CAULDRON.waterCapacity() - 1, result.remainingBottles());
         assertEquals("message.meridian_brewing.cauldron.collect.potion", result.message().key());
+    }
+
+    @Test
+    public void askingAboutAnIngredientChangesNothing() {
+        // 漏斗先问能不能放：问主料不能定下药方，问完釜还是只有水，真下料时才定。
+        BrewCauldron cauldron = new BrewCauldron(VesselKind.WITCH_CAULDRON, BrewForm.DRINK);
+        cauldron.addWater(3);
+        IngredientBatch primary = IngredientBatch.prepared("dry_moss", 0);
+        IngredientBatch base = IngredientBatch.raw("minecraft:glowstone_dust");
+        assertEquals(Optional.empty(), cauldron.ingredientProblem(IngredientSlot.PRIMARY, primary));
+        assertTrue(cauldron.recipe().isEmpty());
+        assertEquals(BrewCauldronState.WATER, cauldron.state());
+        assertEquals(Optional.of(BrewText.message("cauldron.start.no_recipe")),
+                cauldron.ingredientProblem(IngredientSlot.BASE, base));
+        assertTrue(cauldron.addIngredient(IngredientSlot.PRIMARY, primary).accepted());
+        assertEquals(Optional.empty(), cauldron.ingredientProblem(IngredientSlot.BASE, base));
+        assertEquals(BrewText.MESSAGE_PREFIX + "cauldron.ingredient.slot_taken",
+                cauldron.ingredientProblem(IngredientSlot.PRIMARY, primary).orElseThrow().key());
+        assertEquals(EnumSet.of(IngredientSlot.PRIMARY), cauldron.ingredients().keySet());
     }
 
     @Test
@@ -167,11 +181,7 @@ public final class BrewingRulesTest {
     }
 
     @Test
-    public void blockedStructureCapsTemperatureAndLowWaterScorches() {
-        BrewStructure blocked = new BrewStructure(
-                HeatSourceKind.SUN_BRAZIER_4, 3, SmokeVentState.OPEN, HerbState.PRESENT);
-        assertEquals(BrewStructure.BLOCKED_STRUCTURE_MAXIMUM, blocked.maximumTemperature(), 0.0001);
-
+    public void lowWaterScorches() {
         BrewCauldron cauldron = new BrewCauldron(VesselKind.WITCH_CAULDRON, BrewForm.SPLASH);
         cauldron.addWater(1);
         cauldron.addIngredient(IngredientSlot.PRIMARY,
@@ -179,46 +189,40 @@ public final class BrewingRulesTest {
         cauldron.addIngredient(IngredientSlot.BASE, IngredientBatch.raw("minecraft:glowstone_dust"));
         cauldron.addIngredient(IngredientSlot.PROPELLANT,
                 IngredientBatch.raw("minecraft:gunpowder"));
-        cauldron.startBrew(new BrewStructure(
-                HeatSourceKind.SOUL_CAMPFIRE,
-                BrewStructure.REQUIRED_HEARTH_STONES,
-                SmokeVentState.OPEN,
-                HerbState.PRESENT));
+        cauldron.startBrew(BrewStructure.built(HeatSourceKind.SOUL_CAMPFIRE));
         cauldron.addIngredient(IngredientSlot.ACCESSORY,
                 IngredientBatch.raw("fermented_spider_eye"));
         cauldron.addIngredient(IngredientSlot.CATALYST,
                 IngredientBatch.raw("wither_rose"));
-        cauldron.tick(21.0, new BrewStructure(
-                HeatSourceKind.SOUL_CAMPFIRE,
-                BrewStructure.REQUIRED_HEARTH_STONES,
-                SmokeVentState.OPEN,
-                HerbState.PRESENT));
+        cauldron.tick(21.0, BrewStructure.built(HeatSourceKind.SOUL_CAMPFIRE));
         assertTrue(cauldron.state() == BrewCauldronState.SCORCHED
                 || cauldron.scorchCount() > 0);
     }
 
     @Test
-    public void allFourHearthDirectionsAreRequired() {
-        for (BrewDirection missing : BrewDirection.values()) {
-            EnumSet<BrewDirection> present = EnumSet.allOf(BrewDirection.class);
-            present.remove(missing);
-            BrewStructure structure = BrewStructure.fromHearthDirections(
-                    HeatSourceKind.SUN_BRAZIER_4,
-                    present,
-                    SmokeVentState.OPEN,
-                    HerbState.PRESENT);
-            assertEquals(3, structure.hearthStoneCount());
-            assertEquals(BrewStructure.BLOCKED_STRUCTURE_MAXIMUM,
-                    structure.maximumTemperature(), 0.0001);
-        }
-        BrewStructure complete = BrewStructure.fromHearthDirections(
-                HeatSourceKind.SUN_BRAZIER_4,
-                EnumSet.allOf(BrewDirection.class),
-                SmokeVentState.OPEN,
-                HerbState.PRESENT);
-        assertTrue(complete.accepts(FireKind.SUN_FIRE));
-        assertEquals(BrewStructure.COMPLETE_STRUCTURE_MAXIMUM,
-                complete.maximumTemperature(), 0.0001);
+    public void structureMismatchBlocksStartBeforeFire() {
+        BrewCauldron cauldron = new BrewCauldron(VesselKind.WITCH_CAULDRON, BrewForm.DRINK);
+        cauldron.addWater(1);
+        cauldron.addIngredient(IngredientSlot.PRIMARY, IngredientBatch.prepared("dry_moss", 0));
+        cauldron.addIngredient(IngredientSlot.BASE, IngredientBatch.raw("minecraft:glowstone_dust"));
+        StructureMatch.Mismatch mismatch = new StructureMatch.Mismatch(
+                BrewText.message("structure.anchor.tier2"), 1, -1, 0,
+                BrewText.message("structure.frame.stone"), "minecraft:dirt");
+        BrewStructure broken = new BrewStructure(HeatSourceKind.NONE, StructureMatch.mismatch(mismatch));
+
+        BrewText problem = cauldron.startProblem(broken).orElseThrow();
+        assertEquals("message.meridian_brewing.structure.mismatch", problem.key());
+        BrewText offset = (BrewText) problem.args().get(1);
+        assertEquals("message.meridian_brewing.structure.offset.2", offset.key());
+        assertEquals("message.meridian_brewing.structure.dir.east", ((BrewText) offset.args().get(0)).key());
+        assertEquals("message.meridian_brewing.structure.dir.down", ((BrewText) offset.args().get(1)).key());
+        assertEquals(new BrewText.BlockName("minecraft:dirt"), problem.args().get(3));
+        assertEquals("message.meridian_brewing.structure.no_fire",
+                cauldron.startProblem(BrewStructure.built(HeatSourceKind.NONE)).orElseThrow().key());
+        assertEquals("message.meridian_brewing.structure.unloaded",
+                cauldron.startProblem(new BrewStructure(HeatSourceKind.SUN_BRAZIER_2, StructureMatch.unloaded()))
+                        .orElseThrow().key());
+        assertTrue(cauldron.startProblem(STABLE_HEAT).isEmpty());
     }
 
     @Test

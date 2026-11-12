@@ -1,6 +1,6 @@
 plugins { id 'net.fabricmc.fabric-loom' }
 
-description = '炼药的客户端表现：器具放置模型与枯木染色；不进服务端路径。'
+description = '炼药的客户端表现：器具放置模型、枯木染色与药塔窗口；不进服务端路径。'
 
 repositories {
     maven { url = 'https://maven.fabricmc.net/' }

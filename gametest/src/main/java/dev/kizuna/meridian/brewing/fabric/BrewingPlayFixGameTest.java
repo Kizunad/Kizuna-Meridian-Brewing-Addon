@@ -12,10 +12,8 @@ import dev.kizuna.meridian.brewing.server.BrewUse;
 import dev.kizuna.meridian.brewing.server.FireKind;
 import dev.kizuna.meridian.brewing.server.HeatSourceKind;
 import dev.kizuna.meridian.brewing.server.HerbCrateState;
-import dev.kizuna.meridian.brewing.server.HerbState;
 import dev.kizuna.meridian.brewing.server.IngredientPlan;
 import dev.kizuna.meridian.brewing.server.IngredientSlot;
-import dev.kizuna.meridian.brewing.server.SmokeVentState;
 import dev.kizuna.meridian.brewing.test.BrewingTestPlayers;
 import dev.kizuna.meridian.protocol.pb.BodyMessages.HealthTarget;
 import dev.kizuna.meridian.protocol.pb.BodyMessages.PartState;
@@ -101,8 +99,7 @@ public final class BrewingPlayFixGameTest {
     private static final String STOVE = "iron_stove";
     private static final String COPPER = "copper_cauldron";
     private static final String SCRAP_KEY = "message.meridian_brewing.cauldron.collect.scrap";
-    private static final BrewStructure COLD = new BrewStructure(
-            HeatSourceKind.NONE, 0, SmokeVentState.OPEN, HerbState.PRESENT);
+    private static final BrewStructure COLD = BrewStructure.built(HeatSourceKind.NONE);
     private static final Map<UUID, Boolean> CULTIVATOR_AT_DEATH = new HashMap<>();
     private static final Map<UUID, List<String>> WITCH_HITS = new ConcurrentHashMap<>();
     private static boolean listening;
@@ -454,7 +451,7 @@ public final class BrewingPlayFixGameTest {
         if (kind.fireKind() == FireKind.SUN_FIRE) {
             heat = HeatSourceKind.SUN_BRAZIER_4;
         }
-        return new BrewStructure(heat, BrewStructure.REQUIRED_HEARTH_STONES, SmokeVentState.OPEN, HerbState.PRESENT);
+        return BrewStructure.built(heat);
     }
 
     private static void use(BrewCauldronBlockEntity entity, ServerPlayer player, ItemStack stack) {

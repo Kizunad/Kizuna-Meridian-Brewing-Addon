@@ -5,7 +5,8 @@
 `verification/` 与 `gametest/`。器具的放置模型与枯木染色位于只在客户端加载的 `client/`，真实客户端截图验收位于
 `clienttest/`，见 [器具外观与客户端模块](docs/wiki/Client-Models.md)。
 
-玩家怎么做器具、搭灶、熬药和看品质，见 [怎么熬药](docs/wiki/How-To-Brew.md)。
+玩家怎么做器具、搭结构、熬药、用三阶药塔和看品质，见 [怎么熬药](docs/wiki/How-To-Brew.md)；三座结构 NBT 的来历和打包时改过的地方，
+见 [熬药结构的来源](docs/wiki/Structures.md)。
 
 状态效果图标、卷轴、阅读背景和熬药式图标的出图和后处理，见 [美术素材](docs/wiki/Art.md)。
 

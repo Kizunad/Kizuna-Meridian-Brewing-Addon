@@ -23,7 +23,8 @@ final class Stage {
     private static final double EYE_HEIGHT = 1.62;
     private static final int SETTLE_TICKS = 10;
     private static final int CLEAR_RADIUS = 16;
-    private static final int CLEAR_HEIGHT = 4;
+    // 三阶药塔 15 格高，清到 16 格才不留上一场的顶。
+    private static final int CLEAR_HEIGHT = 16;
     private static final boolean CLEAR_SENT_HISTORY = false;
     private static final String ONLY_PROPERTY = "meridian.brewing.clienttest.only";
     private static final String ALL_SCENES = "all";
@@ -94,6 +95,11 @@ final class Stage {
 
     void place(BlockPos offset, String state) {
         command("setblock " + coordinates(origin.offset(offset)) + " " + state);
+    }
+
+    void template(BlockPos offset, String id) {
+        // 原版 /place template：NBT 原点落在这一格，不转不镜像，和玩家在游戏里摆结构一样。
+        command("place template " + id + " " + coordinates(origin.offset(offset)));
     }
 
     void fill(BlockPos from, BlockPos to, String state) {

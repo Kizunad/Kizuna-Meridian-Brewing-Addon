@@ -7,6 +7,7 @@ import dev.kizuna.meridian.brewing.server.BrewActionResult;
 import dev.kizuna.meridian.brewing.server.BrewCauldronState;
 import dev.kizuna.meridian.brewing.server.BrewKind;
 import dev.kizuna.meridian.brewing.server.RecipeKnowledge;
+import dev.kizuna.meridian.brewing.test.BrewSites;
 import dev.kizuna.meridian.brewing.test.BrewingTestPlayers;
 import java.util.EnumSet;
 import java.util.List;
@@ -25,14 +26,12 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
 
 /** 学过药方才能熬：药方记在身体进度里，旧玩家存档并入一次，指令能列、能学、能忘。 */
 public final class BrewingRecipeGameTest {
     private static final int TIMEOUT = 100;
-    private static final BlockPos CAULDRON = new BlockPos(2, 2, 2);
     private static final int FUEL = 3;
     private static final int FILLING_BUCKETS = 2;
     private static final String NOT_LEARNED = "未学此方：聚气汤。先读药方羊皮纸";
@@ -42,7 +41,7 @@ public final class BrewingRecipeGameTest {
     private static final String LEGACY_PROGRESS = "addon_progress";
     private static final int OVERLAY_TICKS = 1;
 
-    @GameTest(maxTicks = TIMEOUT)
+    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV2_SITE)
     public void unlearnedRecipeRefusesToStartEvenInCreative(GameTestHelper context) {
         // 釜这边全齐，施法者没读过聚气汤药方：创造模式也起不了熬，读过羊皮纸才行。
         ServerPlayer player = BrewingTestPlayers.create(context);
@@ -178,15 +177,12 @@ public final class BrewingRecipeGameTest {
     }
 
     static BrewCauldronBlockEntity preparedQiGather(GameTestHelper context, ServerPlayer player) {
-        // 和世界熬药测试同一套：巫釜坐铁炉座、三块煤、两桶水、聚气汤主料和底料。
+        // 和世界熬药测试同一套：摆随包二阶结构（巫釜坐铁炉座），三块煤、两桶水、聚气汤主料和底料。
         ServerLevel level = context.getLevel();
-        BlockPos cauldronPos = context.absolutePos(CAULDRON);
-        level.setBlockAndUpdate(cauldronPos, BuiltInRegistries.BLOCK.getValue(
-                Identifier.parse("meridian_brewing:witch_cauldron")).defaultBlockState());
-        level.setBlockAndUpdate(cauldronPos.below(), BuiltInRegistries.BLOCK.getValue(
-                Identifier.parse("meridian_brewing:iron_stove")).defaultBlockState());
-        level.setBlockAndUpdate(cauldronPos.north(), Blocks.POTTED_RED_MUSHROOM.defaultBlockState());
-        player.setPos(cauldronPos.getX() + 0.5, cauldronPos.getY() + 1.0, cauldronPos.getZ() + 0.5);
+        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV2);
+        BlockPos cauldronPos = site.cauldron();
+        BlockPos stand = site.stand();
+        player.setPos(stand.getX() + 0.5, stand.getY(), stand.getZ() + 0.5);
         BrewFireBlockEntity fire = (BrewFireBlockEntity) level.getBlockEntity(cauldronPos.below());
         for (int fuel = 0; fuel < FUEL; fuel++) {
             player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.COAL));

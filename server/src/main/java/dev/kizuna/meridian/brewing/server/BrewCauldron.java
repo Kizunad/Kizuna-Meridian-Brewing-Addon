@@ -80,6 +80,16 @@ public final class BrewCauldron {
         return scorchCount;
     }
 
+    /** 已经泡够的秒数，满 {@link BrewScoring#SOAK_SECONDS} 就拿满浸泡分。 */
+    public double soakSeconds() {
+        return soakSeconds;
+    }
+
+    /** 熬成后还能舀几瓶；没熬成时是 0。 */
+    public int remainingBottles() {
+        return remainingBottles;
+    }
+
     public BrewActionResult waxCopper() {
         if (vessel != VesselKind.COPPER_CAULDRON) {
             return BrewActionResult.returned(BrewText.message("cauldron.wax.not_copper"));
@@ -176,22 +186,35 @@ public final class BrewCauldron {
         return BrewActionResult.accepted(BrewText.message("cauldron.scrub.done"));
     }
 
-    public BrewActionResult addIngredient(IngredientSlot slot, IngredientBatch batch) {
+    /**
+     * 这份料现在能不能下进 {@code slot}；能下返回空。只看不改：漏斗先问能不能放再真的放，
+     * 问的那一步不能定下药方。
+     */
+    public Optional<BrewText> ingredientProblem(IngredientSlot slot, IngredientBatch batch) {
+        // 阶段和占格先查；还没定药方时按主料推一张药方来比，但不记下。
         Optional<BrewActionResult> stageRejection = ingredientStageRejection(slot, batch);
         if (stageRejection.isPresent()) {
-            return stageRejection.orElseThrow();
+            return Optional.of(stageRejection.orElseThrow().message());
+        }
+        Optional<BrewRecipe> target = Optional.ofNullable(recipe);
+        if (slot == IngredientSlot.PRIMARY && target.isEmpty()) {
+            target = BrewRecipes.forPreparedPrimary(batch.itemId());
+            if (target.isEmpty()) {
+                return Optional.of(BrewText.message("cauldron.primary.unknown",
+                        new BrewText.ItemName(batch.itemId())));
+            }
+        }
+        return ingredientError(target, slot, batch.itemId());
+    }
+
+    public BrewActionResult addIngredient(IngredientSlot slot, IngredientBatch batch) {
+        // 能不能下和真的下用同一套判断；第一味主料下进去时才定药方。
+        Optional<BrewText> problem = ingredientProblem(slot, batch);
+        if (problem.isPresent()) {
+            return BrewActionResult.returned(problem.orElseThrow(), batch);
         }
         if (slot == IngredientSlot.PRIMARY && recipe == null) {
-            Optional<BrewRecipe> resolvedRecipe = BrewRecipes.forPreparedPrimary(batch.itemId());
-            if (resolvedRecipe.isEmpty()) {
-                BrewText unknown = BrewText.message("cauldron.primary.unknown", new BrewText.ItemName(batch.itemId()));
-                return BrewActionResult.returned(unknown, batch);
-            }
-            recipe = resolvedRecipe.orElseThrow();
-        }
-        Optional<BrewText> ingredientError = ingredientError(slot, batch.itemId());
-        if (ingredientError.isPresent()) {
-            return BrewActionResult.returned(ingredientError.orElseThrow(), batch);
+            recipe = BrewRecipes.forPreparedPrimary(batch.itemId()).orElseThrow();
         }
         if (slot == IngredientSlot.PROPELLANT) {
             form = BrewForm.SPLASH;
@@ -327,11 +350,12 @@ public final class BrewCauldron {
         return Optional.empty();
     }
 
-    private Optional<BrewText> ingredientError(IngredientSlot slot, String itemId) {
-        if (recipe == null && slot != IngredientSlot.PRIMARY) {
+    private Optional<BrewText> ingredientError(Optional<BrewRecipe> target, IngredientSlot slot, String itemId) {
+        if (target.isEmpty()) {
             return Optional.of(BrewText.message("cauldron.start.no_recipe"));
         }
-        IngredientPlan plan = recipe.ingredients();
+        BrewRecipe chosen = target.orElseThrow();
+        IngredientPlan plan = chosen.ingredients();
         String expected = switch (slot) {
             case PRIMARY -> plan.preparedPrimary();
             case ACCESSORY -> plan.accessory();
@@ -341,11 +365,11 @@ public final class BrewCauldron {
         };
         if (!BrewRecipes.sameItemId(expected, itemId)) {
             return Optional.of(BrewText.message("cauldron.ingredient.wrong",
-                    new BrewText.ItemName(itemId), recipeName(recipe.kind())));
+                    new BrewText.ItemName(itemId), recipeName(chosen.kind())));
         }
         if (slot == IngredientSlot.PROPELLANT && !recipe.kind().supports(BrewUse.SPLASH)) {
             return Optional.of(BrewText.message("cauldron.ingredient.drink_only",
-                    recipeName(recipe.kind())));
+                    recipeName(chosen.kind())));
         }
         return Optional.empty();
     }

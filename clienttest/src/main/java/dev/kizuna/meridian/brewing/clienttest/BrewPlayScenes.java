@@ -66,14 +66,15 @@ final class BrewPlayScenes {
     private static final List<String> EFFECTS = List.of("depletion", "armor_rot", "insect_lure", "qi_gather",
             "bitter_yellow", "charm_stagger", "charm_control");
     private static final int EFFECT_SECONDS = 300;
-    /** 铁炉座不要灶石，侧面露在外面，站在南边就能对着加炭、拨灰。 */
-    private static final BlockPos STOVE = BlockPos.ZERO;
+    /**
+     * 随包二阶结构：NBT 原点放在 (-5, 0, -5)，巫釜 (5,1,5) 正好落在 (0,1,0)、铁炉座在 (0,0,0)。
+     * 炉座四面围着外框，加炭、拨灰都对着釜点，转给釜下的炉座。人站在釜南面两格的台上。
+     */
+    private static final String LV2_TEMPLATE = BREWING + "potion-lv2";
+    private static final BlockPos LV2_ORIGIN = new BlockPos(-5, 0, -5);
     private static final BlockPos CAULDRON = new BlockPos(0, 1, 0);
-    private static final BlockPos POT_STAND = new BlockPos(1, 0, 0);
-    private static final BlockPos POT = new BlockPos(1, 1, 0);
-    private static final Vec3 STAND_EYE = new Vec3(0.5, 1.62, 2.8);
-    private static final Vec3 STOVE_FACE = new Vec3(0.5, 0.5, 1.0);
-    private static final Vec3 OVERVIEW_EYE = new Vec3(2.6, 2.6, 3.4);
+    private static final Vec3 STAND_EYE = new Vec3(0.5, 2.62, 2.5);
+    private static final Vec3 OVERVIEW_EYE = new Vec3(0.5, 4.5, 9.5);
     private static final BlockPos CRATE = BlockPos.ZERO;
     private static final Vec3 CRATE_EYE = new Vec3(0.5, 1.62, 2.3);
     /** 漏斗链：箱子、漏斗、晒药匾自上而下，底下的漏斗和出口箱子埋在地面里，旁边一块红石块先锁住底下的漏斗。 */
@@ -238,11 +239,10 @@ final class BrewPlayScenes {
     }
 
     private static void bitterYellow(ClientGameTestContext context, Stage stage) {
-        // 巫釜坐在铁炉座上，旁边一盆红蘑菇；先注水下料，一档火泡够 10 秒，再升二档开熬。
+        // 二阶结构里巫釜坐在铁炉座上；先注水下料，一档火泡够 10 秒，再升二档开熬。加炭、拨灰都对着釜点。
         buildStove(stage);
         Vec3 eye = stage.at(STAND_EYE);
         Vec3 cauldron = stage.center(CAULDRON);
-        Vec3 stove = stage.at(STOVE_FACE);
         overview(stage, "brew_01_setup");
         stage.look(eye, cauldron);
         useWith(stage, "minecraft:water_bucket", "brew_02_water_bucket");
@@ -250,12 +250,10 @@ final class BrewPlayScenes {
         // 主料定药方，底料要在主料之后下。
         useWith(stage, BREWING + "dry_moss", "brew_04_main");
         useWith(stage, "minecraft:glowstone_dust", "brew_05_base");
-        stage.look(eye, stove);
         useWith(stage, "minecraft:coal", "brew_06_fire_one");
         stage.pause(SOAK_TICKS);
         useWith(stage, "minecraft:coal", "brew_07_fire_two");
         stage.pause(HEAT_TICKS);
-        stage.look(eye, cauldron);
         cast(stage);
         progressShot(stage, STARTED_SECONDS, "brew_08_started");
         progressShot(stage, ACCESSORY_SECONDS, "brew_09_accessory_window");
@@ -272,11 +270,9 @@ final class BrewPlayScenes {
         stage.shoot("brew_14_brewed");
         // 熬成后熬药式还有 1 秒收势，这期间主手仍被锁住；等它收完再拨灰降回一档，釜温落到 79° 以下再舀，收药分拿满。
         stage.pause(RECOVERY_TICKS);
-        stage.look(eye, stove);
         useWith(stage, "minecraft:iron_shovel", "brew_15_fire_down");
         waitCauldron(stage, "釜温降到可舀", COOL_TIMEOUT_TICKS,
                 cauldronState -> cauldronState.temperature() < COLLECT_BELOW_DEGREES);
-        stage.look(eye, cauldron);
         useWith(stage, "minecraft:glass_bottle", "brew_16_collect_potion");
         potionTooltip(context, stage);
     }
@@ -291,7 +287,6 @@ final class BrewPlayScenes {
         useWith(stage, WATER_BOTTLE, "scrap_02_water_bottle");
         useWith(stage, BREWING + "dry_moss", "scrap_03_main");
         useWith(stage, "minecraft:glowstone_dust", "scrap_04_base");
-        stage.look(eye, stage.at(STOVE_FACE));
         for (int coal = 0; coal < SCORCH_COAL; coal++) {
             stage.hand(MAIN_HAND, "minecraft:coal");
             stage.use();
@@ -299,7 +294,6 @@ final class BrewPlayScenes {
         }
         stage.shoot("scrap_05_fire_four");
         stage.pause(HEAT_TICKS);
-        stage.look(eye, cauldron);
         cast(stage);
         progressShot(stage, ACCESSORY_SECONDS, "scrap_06_scorching");
         waitCauldron(stage, "熬糊的一锅结束", BREW_TIMEOUT_TICKS,
@@ -315,14 +309,11 @@ final class BrewPlayScenes {
         stage.clear();
         stage.play();
         stage.command("clear @a");
-        stage.place(STOVE, BREWING + "iron_stove[facing=south]");
-        stage.place(CAULDRON, BREWING + "witch_cauldron");
-        stage.place(POT_STAND, "minecraft:stone_bricks");
-        stage.place(POT, "minecraft:potted_red_mushroom");
+        stage.template(LV2_ORIGIN, LV2_TEMPLATE);
     }
 
     private static void overview(Stage stage, String name) {
-        // 斜上方看整套灶，不画手和快捷栏。
+        // 从南面高处看整套二阶结构，不画手和快捷栏。
         stage.hideHud();
         stage.look(stage.at(OVERVIEW_EYE), stage.center(CAULDRON));
         stage.shoot(name);
@@ -351,17 +342,14 @@ final class BrewPlayScenes {
     }
 
     private static void offHandAtFire(Stage stage, double seconds, String item, String shot) {
-        // 低头看釜正下方的炉座，副手右键一下，拍完看回釜；看着釜下的火也算看着这只釜，熬制不会断。
+        // 炉座围在外框里，副手拿炭或铲子对着釜右键一下，转给釜下的炉座；熬制不会断。
         waitCauldron(stage, "熬到第 " + seconds + " 秒", BREW_TIMEOUT_TICKS,
                 cauldronState -> cauldronState.brewElapsedSeconds() >= seconds);
-        Vec3 eye = stage.at(STAND_EYE);
-        stage.look(eye, stage.at(STOVE_FACE));
         stage.hand(OFF_HAND, item);
         stage.pause(POLL_TICKS);
         stage.use();
         stage.pause(POLL_TICKS);
         stage.shoot(shot);
-        stage.look(eye, stage.center(CAULDRON));
         log(stage, shot);
     }
 
@@ -423,7 +411,7 @@ final class BrewPlayScenes {
         return stage.computeOnServer(server -> {
             BrewCauldronBlockEntity entity = cauldronEntity(stage, server);
             BrewCauldron cauldron = entity.cauldron();
-            var fire = (BrewFireBlockEntity) server.overworld().getBlockEntity(stage.block(STOVE));
+            var fire = (BrewFireBlockEntity) server.overworld().getBlockEntity(stage.block(CAULDRON).below());
             String qi = entity.qiTally().map(BrewPlayScenes::describeQi).orElse("无");
             ServerPlayer player = server.getPlayerList().getPlayers().getFirst();
             return String.format(Locale.ROOT, "%s，%.1f°，%d 份水，熬了 %.1f 秒，料 %s，焦 %d 次；火 %d 档；耗元 %s；主手 %s，副手 %s",

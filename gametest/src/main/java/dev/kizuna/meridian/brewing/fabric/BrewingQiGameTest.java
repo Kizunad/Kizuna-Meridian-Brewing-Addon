@@ -7,6 +7,7 @@ import dev.kizuna.meridian.brewing.server.BrewKind;
 import dev.kizuna.meridian.brewing.server.BrewQiTally;
 import dev.kizuna.meridian.brewing.server.BrewSelfQi;
 import dev.kizuna.meridian.brewing.server.BrewText;
+import dev.kizuna.meridian.brewing.test.BrewSites;
 import dev.kizuna.meridian.brewing.test.BrewingTestPlayers;
 import dev.kizuna.meridian.human.protocol.pb.EnvironmentHostMessages.RegionView;
 import dev.kizuna.meridian.protocol.BodyProtobuf;
@@ -36,8 +37,8 @@ import net.minecraft.world.level.GameType;
 public final class BrewingQiGameTest {
     private static final String AMBIENT_BATCH = "meridian_brewing_test:qi_ambient";
     private static final String SATURATED_BATCH = "meridian_brewing_test:qi_saturated";
-    /** 和 {@link BrewingRecipeGameTest#preparedQiGather} 放釜的位置相同，占速率要占釜所在的区块。 */
-    private static final BlockPos CAULDRON = new BlockPos(2, 2, 2);
+    /** {@link BrewingRecipeGameTest#preparedQiGather} 摆的二阶结构里釜在场地哪一格；占速率要占釜所在的区块。 */
+    private static final BlockPos CAULDRON = BrewSites.anchorInSite(BrewSites.Shipped.LV2);
     private static final int TIMEOUT = 200;
     private static final int TICKS_PER_SECOND = 20;
     private static final int AMBIENT_STEPS = 6;
@@ -57,7 +58,7 @@ public final class BrewingQiGameTest {
     private static final double WITCH_BREW = 7.8;
     private static final String SHORT_AT_START = "真元不够起熬：这锅要 7.8 元，环境约能给 0.0，自身有 1.0，还缺 6.8";
 
-    @GameTest(environment = AMBIENT_BATCH, maxTicks = TIMEOUT)
+    @GameTest(environment = AMBIENT_BATCH, maxTicks = TIMEOUT, structure = BrewSites.LV2_SITE)
     public void ambientPaysWhileRegionHasRate(GameTestHelper context) {
         // 区域还有速率：每秒那一份从区域里取，区域库存正好少这么多，施法者身上一点不动。
         // 窗尾不满一秒的那一次 Human 只按剩下的时长给，差额由自身补，所以只要求大多数秒是纯环境付。
@@ -92,7 +93,7 @@ public final class BrewingQiGameTest {
         });
     }
 
-    @GameTest(environment = SATURATED_BATCH, maxTicks = TIMEOUT)
+    @GameTest(environment = SATURATED_BATCH, maxTicks = TIMEOUT, structure = BrewSites.LV2_SITE)
     public void selfPaysWhenRegionRateIsTaken(GameTestHelper context) {
         // 本区块这一秒的速率被占满：环境取到零，整份从施法者已开经脉里扣，身上正好少这么多。
         Hog hog = new Hog(context);
@@ -129,7 +130,7 @@ public final class BrewingQiGameTest {
         });
     }
 
-    @GameTest(environment = SATURATED_BATCH, maxTicks = TIMEOUT)
+    @GameTest(environment = SATURATED_BATCH, maxTicks = TIMEOUT, structure = BrewSites.LV2_SITE)
     public void startIsRefusedWhenAmbientAndSelfAreBothShort(GameTestHelper context) {
         // 环境这三十秒给不了（速率占满），身上只有 1 元：一锅巫釜要 7.8 元，起不了熬，釜保持生药。
         Hog hog = new Hog(context);
@@ -154,7 +155,7 @@ public final class BrewingQiGameTest {
         });
     }
 
-    @GameTest(environment = SATURATED_BATCH, maxTicks = TIMEOUT)
+    @GameTest(environment = SATURATED_BATCH, maxTicks = TIMEOUT, structure = BrewSites.LV2_SITE)
     public void owingWithinGraceKeepsBrewingButBeyondItInterrupts(GameTestHelper context) {
         // 起熬时身上灌满，熬了两秒后身上只剩 0.1 元、环境速率占满：下一秒扣光 0.1，欠 0.16，
         // 之后每秒再欠约一份（吐纳会往经脉里回一点，也是有多少扣多少）。欠付不超过 3 秒的份（0.78）时照熬，
@@ -215,7 +216,7 @@ public final class BrewingQiGameTest {
         });
     }
 
-    @GameTest(environment = SATURATED_BATCH, maxTicks = TIMEOUT)
+    @GameTest(environment = SATURATED_BATCH, maxTicks = TIMEOUT, structure = BrewSites.LV2_SITE)
     public void arrearsArePaidBackOnceQiReturns(GameTestHelper context) {
         // 环境速率占满、身上清零：两秒各欠约一份。第三秒身上灌满，这一秒连本带欠一起付，欠付清零，
         // 动作栏不再写真元不济，账上已付等于推进三秒应付的。

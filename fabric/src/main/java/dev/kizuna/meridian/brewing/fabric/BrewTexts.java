@@ -165,6 +165,7 @@ final class BrewTexts {
         return switch (arg) {
             case BrewText nested -> component(nested);
             case BrewText.ItemName item -> Component.translatable(descriptionId(item));
+            case BrewText.BlockName block -> Component.translatable(descriptionId(block));
             case BrewQuality quality -> quality(quality);
             case Number number -> number.toString();
             default -> throw new IllegalArgumentException("未知提示参数：" + arg);
@@ -176,6 +177,7 @@ final class BrewTexts {
             case BrewText nested -> chinese(nested);
             // 服务端没有原版物品的中文名，本仓以外的物品照旧显示物品 ID。
             case BrewText.ItemName item -> chineseTable().getOrDefault(descriptionId(item), item.itemId());
+            case BrewText.BlockName block -> chineseTable().getOrDefault(descriptionId(block), block.blockId());
             case BrewQuality quality -> chineseTable().get(qualityKey(quality));
             case Number number -> number.toString();
             default -> throw new IllegalArgumentException("未知提示参数：" + arg);
@@ -184,6 +186,10 @@ final class BrewTexts {
 
     private static String descriptionId(BrewText.ItemName item) {
         return BuiltInRegistries.ITEM.getValue(Identifier.parse(item.itemId())).getDescriptionId();
+    }
+
+    private static String descriptionId(BrewText.BlockName block) {
+        return BuiltInRegistries.BLOCK.getValue(Identifier.parse(block.blockId())).getDescriptionId();
     }
 
     private static synchronized Map<String, String> chineseTable() {

@@ -1,10 +1,12 @@
 package dev.kizuna.meridian.brewing.client;
 
 import dev.kizuna.backpack3d.client.PlacedModels;
+import dev.kizuna.meridian.brewing.fabric.BrewTowerMenu;
 import java.util.Map;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
+import net.minecraft.client.gui.screens.MenuScreens;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -14,7 +16,7 @@ import org.joml.Vector3fc;
 
 /**
  * 炼药客户端入口：铁火盆、铁炉座和药刀用 Bong 的 .bbmodel 经 BS3D 放置模型绘制，枯木按方块颜色压暗，
- * 本机换成药刀时当场播甩腕开刃。
+ * 本机换成药刀时当场播甩腕开刃，三阶药塔的窗口在这里登记。
  *
  * <p>放置模型与方块、物品同 ID；药刀开合由模型里的 open 剪辑按进度画。方块和方块实体类型都在 fabric 模块注册，
  * 这里只按注册 ID 查找。
@@ -43,6 +45,7 @@ public final class BrewingClient implements ClientModInitializer {
         DeadWoodTint.register();
         HerbKnifeDrawClient.register();
         BrewTooltips.register();
+        MenuScreens.register(BrewTowerMenu.type(), BrewTowerScreen::new);
     }
 
     static Identifier id(String path) {

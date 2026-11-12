@@ -1,43 +1,39 @@
 package dev.kizuna.meridian.brewing.server;
 
-import java.util.EnumSet;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.Set;
 
-/** 一次结构检查的纯数据快照。 */
-public record BrewStructure(
-        HeatSourceKind heatSource,
-        int hearthStoneCount,
-        SmokeVentState smokeVent,
-        HerbState herb) {
-    public static final int REQUIRED_HEARTH_STONES = 4;
-    public static final double COMPLETE_STRUCTURE_MAXIMUM = 100.0;
-    public static final double BLOCKED_STRUCTURE_MAXIMUM = 70.0;
-    private static final Set<BrewDirection> REQUIRED_DIRECTIONS =
-            Set.copyOf(EnumSet.allOf(BrewDirection.class));
+/**
+ * 一次结构检查的纯数据快照：釜下的火源，加上釜所在结构和 NBT 定义比对的结果。
+ *
+ * <p>结构不符就起不了锅，熬制中坏了就中断；不再有旧灶“缺灶石封顶 70°”的中间状态。</p>
+ */
+public record BrewStructure(HeatSourceKind heatSource, StructureMatch match) {
+    public static final double LIT_MAXIMUM = 100.0;
 
     public BrewStructure {
-        if (heatSource == null || smokeVent == null || herb == null
-                || hearthStoneCount < 0 || hearthStoneCount > REQUIRED_HEARTH_STONES) {
+        if (heatSource == null || match == null) {
             throw new IllegalArgumentException("结构快照不完整");
         }
     }
 
-    /** 按药方要的火种看这套灶缺什么；齐了返回空。 */
+    /** 结构有效、火源为 {@code heatSource} 的快照；规则单测和熬好的釜冷却时用。 */
+    public static BrewStructure built(HeatSourceKind heatSource) {
+        return new BrewStructure(heatSource, StructureMatch.valid());
+    }
+
+    /** 按药方要的火种看这套结构缺什么；齐了返回空。先报结构，再报火。 */
     public Optional<BrewText> problemFor(BrewKind kind, FireKind expectedFire) {
+        Optional<BrewText> structureProblem = match.problem();
+        if (structureProblem.isPresent()) {
+            return structureProblem;
+        }
         if (heatSource == HeatSourceKind.NONE) {
             return Optional.of(BrewText.message("structure.no_fire"));
         }
         if (heatSource.fireKind() != expectedFire) {
             return Optional.of(BrewText.message("structure.wrong_fire",
                     BrewCauldron.recipeName(kind), fireName(expectedFire)));
-        }
-        if (herb == HerbState.MISSING) {
-            return Optional.of(BrewText.message("structure.no_herb"));
-        }
-        if (!accepts(expectedFire)) {
-            return Optional.of(BrewText.message("structure.hearth"));
         }
         return Optional.empty();
     }
@@ -47,37 +43,11 @@ public record BrewStructure(
         return BrewText.message("fire." + fireKind.name().toLowerCase(Locale.ROOT));
     }
 
-    public boolean accepts(FireKind expectedFire) {
-        if (expectedFire == null || heatSource.fireKind() != expectedFire || herb == HerbState.MISSING) {
-            return false;
-        }
-        return !heatSource.needsHearthStones()
-                || (smokeVent == SmokeVentState.OPEN && hearthStoneCount == REQUIRED_HEARTH_STONES);
-    }
-
-    public static BrewStructure fromHearthDirections(HeatSourceKind heatSource,
-                                                     Set<BrewDirection> hearthDirections,
-                                                     SmokeVentState smokeVent,
-                                                     HerbState herb) {
-        if (hearthDirections == null) {
-            throw new IllegalArgumentException("灶石方向不能为空");
-        }
-        EnumSet<BrewDirection> directions = EnumSet.noneOf(BrewDirection.class);
-        directions.addAll(hearthDirections);
-        directions.retainAll(REQUIRED_DIRECTIONS);
-        return new BrewStructure(heatSource, directions.size(), smokeVent, herb);
-    }
-
+    /** 没火就是环境温度；有火时温度只受火源档位限制。 */
     public double maximumTemperature() {
-        boolean hearthMissing = heatSource.needsHearthStones()
-                && hearthStoneCount < REQUIRED_HEARTH_STONES;
-        boolean ventBlocked = smokeVent == SmokeVentState.BLOCKED;
         if (heatSource == HeatSourceKind.NONE) {
             return heatSource.equilibriumTemperature();
         }
-        if (hearthMissing || ventBlocked) {
-            return BLOCKED_STRUCTURE_MAXIMUM;
-        }
-        return COMPLETE_STRUCTURE_MAXIMUM;
+        return LIT_MAXIMUM;
     }
 }

@@ -1,0 +1,9 @@
+{
+  "replace": false,
+  "values": [
+    "minecraft:coal_block",
+    "#minecraft:logs_that_burn",
+    "minecraft:lava",
+    "minecraft:fire"
+  ]
+}

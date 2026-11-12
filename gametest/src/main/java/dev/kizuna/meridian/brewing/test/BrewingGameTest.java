@@ -21,11 +21,9 @@ import dev.kizuna.meridian.brewing.server.CopperExposure;
 import dev.kizuna.meridian.brewing.server.CopperOxidation;
 import dev.kizuna.meridian.brewing.server.FireKind;
 import dev.kizuna.meridian.brewing.server.HeatSourceKind;
-import dev.kizuna.meridian.brewing.server.HerbState;
 import dev.kizuna.meridian.brewing.server.HerbCrateState;
 import dev.kizuna.meridian.brewing.server.IngredientBatch;
 import dev.kizuna.meridian.brewing.server.IngredientSlot;
-import dev.kizuna.meridian.brewing.server.SmokeVentState;
 import dev.kizuna.meridian.brewing.server.VesselKind;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -55,7 +53,6 @@ import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.CampfireBlock;
 import net.minecraft.world.level.block.entity.BrewingStandBlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -177,48 +174,31 @@ public final class BrewingGameTest {
         context.succeed();
     }
 
-    @GameTest(maxTicks = DEFAULT_TIMEOUT)
-    public void worldCauldronRecognizesFourHearthDirections(GameTestHelper context) {
-        // 实际世界方块搭出营火、四向灶石、药苗和烟口，验证方块实体
-        // 扫描出的完整结构。
+    @GameTest(maxTicks = DEFAULT_TIMEOUT, structure = BrewSites.LV2_SITE)
+    public void worldCauldronRecognizesShippedStructure(GameTestHelper context) {
+        // 摆随包二阶结构，方块实体第一次 tick 就拿世界方块和 NBT 定义比；炉座还没加炭，结构有效但缺火。
         ServerLevel level = context.getLevel();
-        BlockPos cauldronPos = context.absolutePos(
-                new BlockPos(STRUCTURE_X, STRUCTURE_Y, STRUCTURE_Z));
-        level.setBlockAndUpdate(cauldronPos,
-                BuiltInRegistries.BLOCK.getValue(id("witch_cauldron")).defaultBlockState());
-        BlockPos firePos = cauldronPos.below();
-        level.setBlockAndUpdate(firePos,
-                Blocks.CAMPFIRE.defaultBlockState().setValue(CampfireBlock.LIT, true));
-        for (Direction direction : Direction.Plane.HORIZONTAL) {
-            BlockPos hearthPos = firePos.relative(direction);
-            level.setBlockAndUpdate(hearthPos, Blocks.STONE.defaultBlockState());
-        }
-        level.setBlockAndUpdate(cauldronPos.north(), Blocks.POTTED_RED_MUSHROOM.defaultBlockState());
+        BlockPos cauldronPos = BrewSites.place(context, BrewSites.Shipped.LV2).cauldron();
         context.runAfterDelay(OBSERVE_TICKS, () -> {
             BlockEntity entity = level.getBlockEntity(cauldronPos);
             context.assertTrue(entity instanceof BrewCauldronBlockEntity, "巫釜方块实体未创建");
-            BrewCauldronBlockEntity cauldron = (BrewCauldronBlockEntity) entity;
-            context.assertTrue(cauldron.structure().hearthStoneCount() == 4,
-                    "四向灶石未被完整识别：" + cauldron.structure());
-            context.assertTrue(cauldron.structure().maximumTemperature() == 100.0,
-                    "完整结构最高温度错误：" + cauldron.structure());
-            context.assertTrue(cauldron.structure().accepts(FireKind.SUN_FIRE),
-                    "完整阳火结构没有通过验收");
+            BrewStructure structure = ((BrewCauldronBlockEntity) entity).structure();
+            context.assertTrue(structure.match().isValid(), "随包二阶结构没有被认出来：" + structure);
+            context.assertTrue(structure.problemFor(BrewKind.QI_GATHER, FireKind.SUN_FIRE).orElseThrow().key()
+                            .equals("message.meridian_brewing.structure.no_fire"),
+                    "结构对了以后应该只缺火：" + structure);
             context.succeed();
         });
     }
 
-    @GameTest(maxTicks = COMPLETE_BREW_TIMEOUT)
+    @GameTest(maxTicks = COMPLETE_BREW_TIMEOUT, structure = BrewSites.LV2_SITE)
     public void worldCauldronStartsThroughBlockEntityAndCollectsPotion(GameTestHelper context) {
         ServerLevel level = context.getLevel();
         ServerPlayer player = BrewingTestPlayers.create(context);
-        BlockPos cauldronPos = context.absolutePos(new BlockPos(STRUCTURE_X, STRUCTURE_Y, STRUCTURE_Z));
-        level.setBlockAndUpdate(cauldronPos,
-                BuiltInRegistries.BLOCK.getValue(id("witch_cauldron")).defaultBlockState());
-        level.setBlockAndUpdate(cauldronPos.below(),
-                BuiltInRegistries.BLOCK.getValue(id("iron_stove")).defaultBlockState());
-        level.setBlockAndUpdate(cauldronPos.north(), Blocks.POTTED_RED_MUSHROOM.defaultBlockState());
-        player.setPos(cauldronPos.getX() + 0.5, cauldronPos.getY() + 1.0, cauldronPos.getZ() + 0.5);
+        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV2);
+        BlockPos cauldronPos = site.cauldron();
+        BlockPos stand = site.stand();
+        player.setPos(stand.getX() + 0.5, stand.getY(), stand.getZ() + 0.5);
 
         BrewFireBlockEntity fire = (BrewFireBlockEntity) level.getBlockEntity(cauldronPos.below());
         for (int fuel = 0; fuel < 3; fuel++) {
@@ -457,11 +437,7 @@ public final class BrewingGameTest {
         cauldron.addIngredient(IngredientSlot.PRIMARY, IngredientBatch.prepared("dry_moss", 0));
         cauldron.addIngredient(IngredientSlot.BASE,
                 IngredientBatch.raw("minecraft:glowstone_dust"));
-        BrewStructure structure = new BrewStructure(
-                HeatSourceKind.SUN_BRAZIER_2,
-                BrewStructure.REQUIRED_HEARTH_STONES,
-                SmokeVentState.OPEN,
-                HerbState.PRESENT);
+        BrewStructure structure = BrewStructure.built(HeatSourceKind.SUN_BRAZIER_2);
         context.assertTrue(cauldron.startBrew(structure).accepted(), "合法药方没有开始熬制");
         double initialTemperature = cauldron.temperature();
         cauldron.tick(HEAT_OBSERVE_SECONDS, structure);
@@ -479,11 +455,7 @@ public final class BrewingGameTest {
                 IngredientBatch.prepared("dry_moss", 0));
         cauldron.addIngredient(IngredientSlot.BASE,
                 IngredientBatch.raw("minecraft:glowstone_dust"));
-        BrewStructure stableHeat = new BrewStructure(
-                HeatSourceKind.SUN_BRAZIER_2,
-                BrewStructure.REQUIRED_HEARTH_STONES,
-                SmokeVentState.OPEN,
-                HerbState.PRESENT);
+        BrewStructure stableHeat = BrewStructure.built(HeatSourceKind.SUN_BRAZIER_2);
         cauldron.startBrew(stableHeat);
         cauldron.tick(8.0, stableHeat);
         cauldron.addIngredient(IngredientSlot.ACCESSORY,
@@ -492,8 +464,7 @@ public final class BrewingGameTest {
         cauldron.addIngredient(IngredientSlot.CATALYST,
                 IngredientBatch.raw("cobweb"));
         cauldron.tick(10.0, stableHeat);
-        cauldron.tick(COLLECTION_COOLING_SECONDS, new BrewStructure(
-                HeatSourceKind.NONE, 0, SmokeVentState.OPEN, HerbState.PRESENT));
+        cauldron.tick(COLLECTION_COOLING_SECONDS, BrewStructure.built(HeatSourceKind.NONE));
         var collection = cauldron.collectBottle(CURRENT_GAME_DAY);
         context.assertTrue(collection.kind() == BrewCollectionKind.POTION,
                 "高分熬制没有产出药水");
@@ -508,11 +479,7 @@ public final class BrewingGameTest {
                 IngredientBatch.raw("minecraft:glowstone_dust"));
         scorched.addIngredient(IngredientSlot.PROPELLANT,
                 IngredientBatch.raw("minecraft:gunpowder"));
-        BrewStructure soulHeat = new BrewStructure(
-                HeatSourceKind.SOUL_CAMPFIRE,
-                BrewStructure.REQUIRED_HEARTH_STONES,
-                SmokeVentState.OPEN,
-                HerbState.PRESENT);
+        BrewStructure soulHeat = BrewStructure.built(HeatSourceKind.SOUL_CAMPFIRE);
         scorched.startBrew(soulHeat);
         scorched.addIngredient(IngredientSlot.ACCESSORY,
                 IngredientBatch.raw("fermented_spider_eye"));

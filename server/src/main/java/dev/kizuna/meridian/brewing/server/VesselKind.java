@@ -1,9 +1,14 @@
 package dev.kizuna.meridian.brewing.server;
 
-/** 一阶铜釜和二阶巫釜的容量、导热及添水参数；铜釜的导热另随氧化变化。 */
+/**
+ * 一阶铜釜、二阶巫釜和三阶药塔虚拟釜的容量、导热、添水降温及耗元系数；铜釜的导热另随氧化变化。
+ *
+ * <p>药塔一批出 8 瓶、用两套料，耗元按两锅巫釜算；塔自己控火，不往釜里续冷水，降温项为 0。</p>
+ */
 public enum VesselKind {
     COPPER_CAULDRON(3, 0.12, 15.0, 1.0),
-    WITCH_CAULDRON(4, 0.20, 10.0, 1.3);
+    WITCH_CAULDRON(4, 0.20, 10.0, 1.3),
+    TOWER(8, 0.20, 0.0, 2.6);
 
     private final int waterCapacity;
     private final double convergencePerSecond;

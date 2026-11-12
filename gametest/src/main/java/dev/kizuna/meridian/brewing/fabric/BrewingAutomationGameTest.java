@@ -10,9 +10,11 @@ import dev.kizuna.meridian.brewing.server.BrewStructure;
 import dev.kizuna.meridian.brewing.server.FireKind;
 import dev.kizuna.meridian.brewing.server.HeatSourceKind;
 import dev.kizuna.meridian.brewing.server.HerbCrateState;
-import dev.kizuna.meridian.brewing.server.HerbState;
-import dev.kizuna.meridian.brewing.server.SmokeVentState;
+import dev.kizuna.meridian.brewing.server.IngredientSlot;
+import dev.kizuna.meridian.brewing.test.BrewSites;
 import dev.kizuna.meridian.brewing.test.BrewingTestPlayers;
+import java.util.EnumSet;
+import java.util.Set;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -59,9 +61,10 @@ public final class BrewingAutomationGameTest {
     private static final long PREPARED_DAY = 4L;
     private static final String CAULDRON = "witch_cauldron";
     private static final String BRAZIER = "iron_brazier";
-    private static final BrewStructure COLD = new BrewStructure(
-            HeatSourceKind.NONE, 0, SmokeVentState.OPEN, HerbState.PRESENT);
+    private static final BrewStructure COLD = BrewStructure.built(HeatSourceKind.NONE);
     private static final int LAST_SLOT = HerbCrateState.SLOT_COUNT - 1;
+    private static final Set<IngredientSlot> PRIMARY_AND_BASE =
+            EnumSet.of(IngredientSlot.PRIMARY, IngredientSlot.BASE);
 
     @GameTest(maxTicks = TIMEOUT)
     public void hoppersAndDroppersFeedRawHerbsAndOnlyDriedOnesLeaveFromBelow(GameTestHelper context) {
@@ -231,6 +234,91 @@ public final class BrewingAutomationGameTest {
         });
     }
 
+    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV1_SITE)
+    public void hopperNorthOfLv1CopperCauldronFeedsPrimaryAndBase(GameTestHelper context) {
+        // 一阶铜釜北边那格 NBT 里是空气，放个漏斗朝南对着釜：主料、底料一件一件下锅，结构照样认。
+        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV1);
+        ServerPlayer player = BrewingTestPlayers.create(context);
+        BrewCauldronBlockEntity entity = cauldronAt(context, site);
+        use(entity, player, new ItemStack(Items.WATER_BUCKET));
+        BrewRecipe recipe = BrewRecipes.require(BrewKind.QI_GATHER);
+        Container hopper = hopper(context, inTest(context, site.world(2, 2, 1)), Direction.SOUTH);
+        hopper.setItem(0, new ItemStack(BrewingItems.item(recipe.ingredients().preparedPrimary())));
+        hopper.setItem(1, new ItemStack(Items.GLOWSTONE_DUST));
+        context.runAfterDelay(HOPPER_TICKS, () -> {
+            context.assertTrue(entity.cauldron().ingredients().keySet().equals(PRIMARY_AND_BASE),
+                    "漏斗没把主料、底料送进铜釜：" + entity.cauldron().ingredients().keySet());
+            context.assertTrue(hopper.isEmpty(), "漏斗里还剩东西");
+            context.assertTrue(entity.structure().match().isValid(),
+                    "北边放了漏斗，一阶结构就不认了：" + entity.structure().match());
+            BrewingTestPlayers.close(player);
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV2_SITE)
+    public void lv2SideHopperAndDropperFeedStartIngredientsButKeepTheAccessory(GameTestHelper context) {
+        // P2：巫釜北边那格外框换成漏斗、西边那格换成投掷器，结构照样认。漏斗里的主料、底料下锅，
+        // 辅料留在漏斗里；投掷器一个脉冲投一份火药。
+        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV2);
+        ServerPlayer player = BrewingTestPlayers.create(context);
+        BrewCauldronBlockEntity entity = cauldronAt(context, site);
+        use(entity, player, new ItemStack(Items.WATER_BUCKET));
+        BrewRecipe recipe = BrewRecipes.require(BrewKind.INSECT_LURE);
+        Item accessory = vanillaItem(recipe.ingredients().accessory());
+        Container hopper = hopper(context, inTest(context, site.world(5, 1, 4)), Direction.SOUTH);
+        hopper.setItem(0, new ItemStack(BrewingItems.item(recipe.ingredients().preparedPrimary())));
+        hopper.setItem(1, new ItemStack(accessory));
+        hopper.setItem(2, new ItemStack(Items.GLOWSTONE_DUST));
+        BlockPos dropperPos = inTest(context, site.world(4, 1, 5));
+        Container dropper = facing(context, dropperPos, Blocks.DROPPER, Direction.EAST);
+        dropper.setItem(0, new ItemStack(Items.GUNPOWDER));
+        // 火药要等主料定下药方才收，所以漏斗送完再给投掷器脉冲；红石块放在投掷器上面那格空气里。
+        context.runAfterDelay(HOPPER_TICKS, () -> context.pulseRedstone(dropperPos.above(), PULSE_TICKS));
+        context.runAfterDelay(HOPPER_TICKS + DISPENSE_TICKS, () -> {
+            Set<IngredientSlot> expected = EnumSet.of(IngredientSlot.PRIMARY, IngredientSlot.BASE,
+                    IngredientSlot.PROPELLANT);
+            context.assertTrue(entity.cauldron().ingredients().keySet().equals(expected),
+                    "漏斗、投掷器没把开熬前的三样送进巫釜：" + entity.cauldron().ingredients().keySet());
+            context.assertTrue(count(hopper, accessory) == 1, "辅料不该从漏斗里送进去");
+            context.assertTrue(dropper.isEmpty(), "投掷器里的火药没投进去");
+            context.assertTrue(droppedItems(context, inTest(context, site.cauldron())) == 0,
+                    "有东西被吐到了地上");
+            context.assertTrue(entity.structure().match().isValid(),
+                    "侧格换成漏斗、投掷器，二阶结构就不认了：" + entity.structure().match());
+            BrewingTestPlayers.close(player);
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV1_SITE)
+    public void brewingCauldronTakesNothingFromTheHopper(GameTestHelper context) {
+        // 熬制中漏斗什么都送不进去，连时窗里手动能下的辅料、引药也不收。
+        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV1);
+        ServerPlayer player = BrewingTestPlayers.create(context);
+        BrewCauldronBlockEntity entity = cauldronAt(context, site);
+        use(entity, player, new ItemStack(Items.WATER_BUCKET));
+        BrewRecipe recipe = BrewRecipes.require(BrewKind.QI_GATHER);
+        use(entity, player, new ItemStack(BrewingItems.item(recipe.ingredients().preparedPrimary())));
+        use(entity, player, new ItemStack(Items.GLOWSTONE_DUST));
+        context.assertTrue(entity.cauldron().startBrew(fired(BrewKind.QI_GATHER)).accepted(), "生药没有起熬");
+        Item accessory = vanillaItem(recipe.ingredients().accessory());
+        Item catalyst = vanillaItem(recipe.ingredients().catalyst());
+        Container hopper = hopper(context, inTest(context, site.world(2, 2, 1)), Direction.SOUTH);
+        hopper.setItem(0, new ItemStack(accessory));
+        hopper.setItem(1, new ItemStack(catalyst));
+        context.runAfterDelay(HOPPER_TICKS, () -> {
+            context.assertTrue(entity.cauldron().state() == BrewCauldronState.BREWING,
+                    "三秒就不在熬了：" + entity.cauldron().state());
+            context.assertTrue(entity.cauldron().ingredients().keySet().equals(PRIMARY_AND_BASE),
+                    "熬制中漏斗还送进了东西：" + entity.cauldron().ingredients().keySet());
+            context.assertTrue(count(hopper, accessory) == 1 && count(hopper, catalyst) == 1,
+                    "辅料、引药该留在漏斗里");
+            BrewingTestPlayers.close(player);
+            context.succeed();
+        });
+    }
+
     /** 下主料和底料，起熬后冷熬 30 秒：火候一直不在带里，熬成的是一锅药渣。 */
     private static void brewCold(BrewCauldronBlockEntity entity, ServerPlayer player, BrewKind kind) {
         BrewRecipe recipe = BrewRecipes.require(kind);
@@ -243,18 +331,31 @@ public final class BrewingAutomationGameTest {
         cauldron.tick(BrewCauldron.BREW_SECONDS, COLD);
     }
 
-    /** 火种对得上这味药的整套结构，起熬的结构检查能过。 */
+    /** 火种对得上这味药、结构有效的快照，起熬的结构检查能过。 */
     private static BrewStructure fired(BrewKind kind) {
         HeatSourceKind heat = HeatSourceKind.SOUL_BRAZIER_4;
         if (kind.fireKind() == FireKind.SUN_FIRE) {
             heat = HeatSourceKind.SUN_BRAZIER_4;
         }
-        return new BrewStructure(heat, BrewStructure.REQUIRED_HEARTH_STONES, SmokeVentState.OPEN, HerbState.PRESENT);
+        return BrewStructure.built(heat);
     }
 
     private static void use(BrewCauldronBlockEntity entity, ServerPlayer player, ItemStack stack) {
         player.setItemInHand(InteractionHand.MAIN_HAND, stack);
         entity.use(player, InteractionHand.MAIN_HAND);
+    }
+
+    private static BrewCauldronBlockEntity cauldronAt(GameTestHelper context, BrewSites.Site site) {
+        return (BrewCauldronBlockEntity) context.getLevel().getBlockEntity(site.cauldron());
+    }
+
+    private static Item vanillaItem(String id) {
+        // 药方里辅料、引药写的是原版物品 ID，查不到时直接报错，免得拿空气去比。
+        Item item = BuiltInRegistries.ITEM.getValue(Identifier.parse(id));
+        if (item == Items.AIR) {
+            throw new IllegalStateException("没有这种物品：" + id);
+        }
+        return item;
     }
 
     private static <T extends BlockEntity> T place(GameTestHelper context, BlockPos pos, BlockState state,
@@ -266,6 +367,14 @@ public final class BrewingAutomationGameTest {
     private static BlockState block(String path) {
         return BuiltInRegistries.BLOCK.getValue(Identifier.fromNamespaceAndPath(BrewingFabric.MOD_ID, path))
                 .defaultBlockState();
+    }
+
+    /**
+     * 世界坐标换回测试里的相对坐标。原版 26.2 的 {@code relativePos} 多转了 180°，和 {@code absolutePos}
+     * 不互逆，会把方块放到结构外面；这里的测试都不转，直接减测试原点。
+     */
+    private static BlockPos inTest(GameTestHelper context, BlockPos absolute) {
+        return absolute.subtract(context.absolutePos(BlockPos.ZERO));
     }
 
     private static Container hopper(GameTestHelper context, BlockPos pos, Direction facing) {

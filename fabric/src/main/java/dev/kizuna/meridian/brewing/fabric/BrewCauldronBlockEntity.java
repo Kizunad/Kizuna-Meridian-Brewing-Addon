@@ -4,7 +4,6 @@ import dev.kizuna.meridian.brewing.server.BrewActionResult;
 import dev.kizuna.meridian.brewing.server.BrewCauldron;
 import dev.kizuna.meridian.brewing.server.BrewCauldronState;
 import dev.kizuna.meridian.brewing.server.BrewCollectionKind;
-import dev.kizuna.meridian.brewing.server.BrewDirection;
 import dev.kizuna.meridian.brewing.server.BrewForm;
 import dev.kizuna.meridian.brewing.server.BrewKind;
 import dev.kizuna.meridian.brewing.server.BrewProgress;
@@ -14,32 +13,33 @@ import dev.kizuna.meridian.brewing.server.BrewStructure;
 import dev.kizuna.meridian.brewing.server.BrewText;
 import dev.kizuna.meridian.brewing.server.BrewUse;
 import dev.kizuna.meridian.brewing.server.CopperExposure;
-import dev.kizuna.meridian.brewing.server.CopperCauldronState;
 import dev.kizuna.meridian.brewing.server.CopperOxidation;
 import dev.kizuna.meridian.brewing.server.FireKind;
 import dev.kizuna.meridian.brewing.server.HeatSourceKind;
-import dev.kizuna.meridian.brewing.server.HerbState;
 import dev.kizuna.meridian.brewing.server.IngredientBatch;
 import dev.kizuna.meridian.brewing.server.IngredientSlot;
 import dev.kizuna.meridian.brewing.server.PreparationKind;
-import dev.kizuna.meridian.brewing.server.SmokeVentState;
 import dev.kizuna.meridian.brewing.server.VesselKind;
-import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.NonNullList;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.Container;
+import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.Containers;
+import net.minecraft.world.WorldlyContainer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -58,8 +58,13 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 
-/** 巫釜方块实体：扫描四向结构、推进规则状态并处理服务端右键。 */
-public final class BrewCauldronBlockEntity extends BlockEntity {
+/**
+ * 釜的方块实体：查釜所在的熬药结构和釜下的火、推进规则状态并处理服务端右键。
+ *
+ * <p>对漏斗、投掷器是一个只放 1 件的暂存格：开熬前的主料、底料、火药能放，下一 tick 下锅；
+ * 别的东西放不进来，留在漏斗、投掷器里。什么都抽不出来。</p>
+ */
+public final class BrewCauldronBlockEntity extends BlockEntity implements WorldlyContainer {
     private static final double SECONDS_PER_TICK = 0.05;
     private static final double TECHNIQUE_MAX_DISTANCE = 3.0;
     private static final double TECHNIQUE_MAX_DISTANCE_SQUARED =
@@ -70,19 +75,28 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
     private static final long COPPER_OXIDATION_INTERVAL_TICKS = 24_000L;
     private static final int WATER_BUCKET_UNITS = 3;
     private static final int WATER_BOTTLE_UNITS = 1;
+    private static final int STRUCTURE_CHECK_TICKS = 20;
+    private static final int[] STAGING_SLOT = {0};
+    private static final Set<IngredientSlot> AUTOMATED_SLOTS =
+            EnumSet.of(IngredientSlot.PRIMARY, IngredientSlot.BASE, IngredientSlot.PROPELLANT);
+    private static final double ABOVE_RIM = 1.0;
 
     private final VesselKind vessel;
     private final BrewCauldron cauldron;
     private BrewStructure structure;
+    private BrewStructureMatcher.Result layout;
+    private int structureCheckCountdown;
     private long copperOxidationTicks;
     private UUID techniqueCaster;
     private BrewQiTally qiTally;
+    private final NonNullList<ItemStack> staged = NonNullList.withSize(1, ItemStack.EMPTY);
 
     public BrewCauldronBlockEntity(BlockPos pos, BlockState state, VesselKind vessel) {
         super(BrewingBlocks.BREW_CAULDRON_ENTITY, pos, state);
         this.vessel = vessel;
         this.cauldron = new BrewCauldron(vessel, BrewForm.DRINK);
-        this.structure = emptyStructure();
+        this.layout = BrewStructureMatcher.unchecked();
+        this.structure = new BrewStructure(HeatSourceKind.NONE, layout.match());
         if (vessel == VesselKind.COPPER_CAULDRON) {
             // 用 /setblock 或结构放下的铜釜带着外观氧化级，规则状态从它起算。
             cauldron.restoreCopperOxidation(CopperCauldronBlock.oxidation(state));
@@ -116,6 +130,11 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
         }
         boolean controlledByCaster = techniqueControlledBy(player);
         ItemStack stack = player.getItemInHand(hand);
+        // 煤、铲子、沙子是给火的：二阶的铁炉座四面埋在砖里够不着，对着釜用就转给釜下的火源（P1 甲）。
+        if (BrewFireBlockEntity.tendsFire(stack)
+                && level.getBlockEntity(worldPosition.below()) instanceof BrewFireBlockEntity fire) {
+            return fire.use(player, hand);
+        }
         BrewActionResult result;
         if (controlledByCaster) {
             result = tryUseTechniqueOffHand(stack);
@@ -139,8 +158,12 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
         if (caster == null || !level.mayInteract(caster, worldPosition)) {
             return BrewActionResult.returned(BrewText.message("no_permission"));
         }
-        structure = scanStructure();
+        rematchStructure();
         Optional<BrewText> problem = cauldron.startProblem(structure);
+        if (problem.isPresent() && problem.equals(layout.match().problem())) {
+            // 卡在结构上才在不符那格发标记；缺料、缺火不发。
+            BrewStructureMarkers.show(caster, layout);
+        }
         if (problem.isEmpty()) {
             problem = casterProblem(caster, cauldron.recipe().orElseThrow().kind());
         }
@@ -197,10 +220,11 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
             techniqueCaster = null;
             return BrewActionResult.accepted(BrewText.message("cauldron.brewed"));
         }
-        structure = scanStructure();
+        rematchStructure();
         BrewRecipe recipe = cauldron.recipe().orElseThrow(() -> new IllegalStateException("熬制中的釜没有药方"));
         Optional<BrewText> structureProblem = structure.problemFor(recipe.kind(), recipe.fireKind());
         if (structureProblem.isPresent()) {
+            BrewStructureMarkers.show(caster, layout);
             return interruptTechnique(BrewText.message("technique.interrupted", structureProblem.orElseThrow()));
         }
         BrewQiTally paid = BrewQiPayment.paySecond(caster, level, worldPosition, drawId, qiTally);
@@ -245,10 +269,18 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
 
     private void tick(Level currentLevel) {
         // 熬药式接管期间只刷新结构与铜釜状态，规则推进交给周期效果，避免重复计时。
+        // 火每 tick 读一格；整座结构每 20 tick 查一次就够，晚一秒发现结构坏了无所谓。
         if (currentLevel.isClientSide()) {
             return;
         }
-        structure = scanStructure();
+        structureCheckCountdown--;
+        if (structureCheckCountdown <= 0) {
+            structureCheckCountdown = STRUCTURE_CHECK_TICKS;
+            rematchStructure();
+        } else {
+            refreshHeatSource();
+        }
+        addStagedIngredient();
         if (!techniqueControlled()) {
             tickCauldron(SECONDS_PER_TICK);
         }
@@ -302,7 +334,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
 
     private BrewActionResult tryUseItem(Player player, ItemStack stack) {
         if (stack.isEmpty()) {
-            return describeState();
+            return describeState(player);
         }
         if (stack.is(Items.WATER_BUCKET)) {
             return useWaterBucket();
@@ -451,15 +483,25 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
     private record Collected(BrewActionResult result, ItemStack output) {
     }
 
-    private BrewActionResult describeState() {
+    private BrewActionResult describeState(Player player) {
+        // 空手右键看釜：现查一次结构，不符时在不符那格发标记，并在状态后面接上哪一格不对。
+        rematchStructure();
         BrewText recipeName = BrewText.message("cauldron.no_recipe");
         if (cauldron.recipe().isPresent()) {
             recipeName = BrewCauldron.recipeName(cauldron.recipe().orElseThrow().kind());
         }
         BrewText stateName = BrewText.message("state." + cauldron.state().name().toLowerCase(Locale.ROOT));
         int temperature = (int) Math.round(cauldron.temperature());
-        return BrewActionResult.accepted(BrewText.message("cauldron.describe", recipeName, stateName,
-                cauldron.waterUnits(), vessel.waterCapacity(), temperature));
+        BrewText described = BrewText.message("cauldron.describe", recipeName, stateName,
+                cauldron.waterUnits(), vessel.waterCapacity(), temperature);
+        Optional<BrewText> structureProblem = structure.match().problem();
+        if (structureProblem.isEmpty()) {
+            return BrewActionResult.accepted(described);
+        }
+        if (player instanceof ServerPlayer serverPlayer) {
+            BrewStructureMarkers.show(serverPlayer, layout);
+        }
+        return BrewActionResult.accepted(BrewText.message("joined", described, structureProblem.orElseThrow()));
     }
 
     private BrewActionResult addIngredient(ItemStack stack) {
@@ -475,6 +517,98 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
             BrewSounds.atBlock(level, worldPosition, BrewSounds.CAULDRON_ADD);
         }
         return added;
+    }
+
+    private void addStagedIngredient() {
+        // 漏斗、投掷器上一 tick 放进来的那一件这时下锅；同一 tick 里釜变了下不进去，就从釜口弹出来，不吞。
+        ItemStack stagedStack = staged.getFirst();
+        if (stagedStack.isEmpty()) {
+            return;
+        }
+        staged.set(0, ItemStack.EMPTY);
+        if (!addIngredient(stagedStack).accepted()) {
+            Containers.dropItemStack(level, worldPosition.getX(), worldPosition.getY() + ABOVE_RIM,
+                    worldPosition.getZ(), stagedStack);
+        }
+    }
+
+    private boolean automatable(ItemStack stack) {
+        // 和手动下料同一套判断，只是辅料、引药不收：它们在熬药式的时窗里下，算「时」的分。
+        String itemId = itemId(stack.getItem());
+        Optional<IngredientSlot> slot = ingredientSlot(itemId);
+        if (slot.isEmpty() || !AUTOMATED_SLOTS.contains(slot.orElseThrow())) {
+            return false;
+        }
+        IngredientSlot selectedSlot = slot.orElseThrow();
+        return cauldron.ingredientProblem(selectedSlot, ingredientBatch(stack, selectedSlot, itemId)).isEmpty();
+    }
+
+    @Override
+    public int[] getSlotsForFace(Direction side) {
+        return STAGING_SLOT;
+    }
+
+    @Override
+    public boolean canPlaceItem(int slot, ItemStack stack) {
+        return staged.getFirst().isEmpty() && automatable(stack);
+    }
+
+    @Override
+    public boolean canPlaceItemThroughFace(int slot, ItemStack stack, Direction side) {
+        return canPlaceItem(slot, stack);
+    }
+
+    @Override
+    public boolean canTakeItemThroughFace(int slot, ItemStack stack, Direction side) {
+        return false;
+    }
+
+    @Override
+    public int getMaxStackSize() {
+        return 1;
+    }
+
+    @Override
+    public int getContainerSize() {
+        return staged.size();
+    }
+
+    @Override
+    public boolean isEmpty() {
+        return staged.getFirst().isEmpty();
+    }
+
+    @Override
+    public ItemStack getItem(int slot) {
+        return staged.get(slot);
+    }
+
+    @Override
+    public ItemStack removeItem(int slot, int count) {
+        ItemStack taken = ContainerHelper.removeItem(staged, slot, count);
+        setChanged();
+        return taken;
+    }
+
+    @Override
+    public ItemStack removeItemNoUpdate(int slot) {
+        return ContainerHelper.takeItem(staged, slot);
+    }
+
+    @Override
+    public void setItem(int slot, ItemStack stack) {
+        staged.set(slot, stack);
+        setChanged();
+    }
+
+    @Override
+    public boolean stillValid(Player player) {
+        return Container.stillValidBlockEntity(this, player);
+    }
+
+    @Override
+    public void clearContent() {
+        staged.clear();
     }
 
     private BrewText notAnIngredient(String itemId) {
@@ -504,12 +638,15 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
         return cauldron.ingredientSlotFor(itemId);
     }
 
-    private BrewStructure scanStructure() {
-        HeatSourceKind heatSource = scanHeatSource();
-        EnumSet<BrewDirection> hearthDirections = scanHearthDirections();
-        SmokeVentState smokeVent = scanSmokeVent();
-        HerbState herb = scanHerbs();
-        return BrewStructure.fromHearthDirections(heatSource, hearthDirections, smokeVent, herb);
+    private void rematchStructure() {
+        // 现比对一次整座结构，结果留着给显示和标记用，再顺手读火。
+        layout = BrewStructureMatcher.matchCauldron((ServerLevel) level, worldPosition, getBlockState().getBlock());
+        refreshHeatSource();
+    }
+
+    private void refreshHeatSource() {
+        // 火源每次都现读，结构沿用上次比对的结果。
+        structure = new BrewStructure(scanHeatSource(), layout.match());
     }
 
     private HeatSourceKind scanHeatSource() {
@@ -526,43 +663,6 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
             return fire.heatSource();
         }
         return HeatSourceKind.NONE;
-    }
-
-    private EnumSet<BrewDirection> scanHearthDirections() {
-        EnumSet<BrewDirection> directions = EnumSet.noneOf(BrewDirection.class);
-        addHearthDirection(directions, BrewDirection.NORTH, worldPosition.north().below());
-        addHearthDirection(directions, BrewDirection.EAST, worldPosition.east().below());
-        addHearthDirection(directions, BrewDirection.SOUTH, worldPosition.south().below());
-        addHearthDirection(directions, BrewDirection.WEST, worldPosition.west().below());
-        return directions;
-    }
-
-    private void addHearthDirection(EnumSet<BrewDirection> directions, BrewDirection direction,
-                                    BlockPos pos) {
-        if (level.getBlockState(pos).is(BrewingTags.HEARTH_STONES)) {
-            directions.add(direction);
-        }
-    }
-
-    private SmokeVentState scanSmokeVent() {
-        boolean open = level.getBlockState(worldPosition.above()).isAir()
-                && level.getBlockState(worldPosition.above(2)).isAir();
-        return open ? SmokeVentState.OPEN : SmokeVentState.BLOCKED;
-    }
-
-    private HerbState scanHerbs() {
-        for (int x = -1; x <= 1; x++) {
-            for (int z = -1; z <= 1; z++) {
-                if (x == 0 && z == 0) {
-                    continue;
-                }
-                BlockState state = level.getBlockState(worldPosition.offset(x, 0, z));
-                if (state.is(BrewingTags.POTTED_HERBS) || state.is(BrewingTags.POTTED_FUNGI)) {
-                    return HerbState.PRESENT;
-                }
-            }
-        }
-        return HerbState.MISSING;
     }
 
     private void tickCopperOxidation() {
@@ -611,148 +711,17 @@ public final class BrewCauldronBlockEntity extends BlockEntity {
     @Override
     protected void loadAdditional(ValueInput input) {
         super.loadAdditional(input);
-        cauldron.restore(readCauldronSnapshot(input, cauldron.copperState()));
+        cauldron.restore(BrewCauldronSnapshots.read(input, cauldron.copperState()));
         copperOxidationTicks = input.getLongOr("copper_oxidation_ticks", 0L);
+        staged.clear();
+        ContainerHelper.loadAllItems(input, staged);
     }
 
     @Override
     protected void saveAdditional(ValueOutput output) {
         super.saveAdditional(output);
-        BrewCauldron.Snapshot snapshot = cauldron.snapshot();
-        output.putString("state", snapshot.state().name());
-        output.putString("form", snapshot.form().name());
-        output.putString("recipe_kind", enumName(snapshot.recipeKind()));
-        output.putInt("water_units", snapshot.waterUnits());
-        output.putDouble("temperature", snapshot.temperature());
-        output.putDouble("soak_seconds", snapshot.soakSeconds());
-        output.putDouble("brew_elapsed_seconds", snapshot.brewElapsedSeconds());
-        output.putDouble("in_band_seconds", snapshot.inBandSeconds());
-        output.putDouble("overheat_seconds", snapshot.overheatSeconds());
-        output.putDouble("evaporation_seconds", snapshot.evaporationSeconds());
-        output.putDouble("heat_phase_seconds", snapshot.heatPhaseSeconds());
-        output.putInt("scorch_count", snapshot.scorchCount());
-        output.putInt("remaining_bottles", snapshot.remainingBottles());
-        output.putString("copper_oxidation", snapshot.copperState().oxidation().name());
-        output.putBoolean("copper_waxed", snapshot.copperState().waxed());
-        writeIngredients(output, snapshot.ingredients());
-        writeIngredientTimes(output, snapshot.ingredientTimes());
+        BrewCauldronSnapshots.write(output, cauldron.snapshot());
         output.putLong("copper_oxidation_ticks", copperOxidationTicks);
-    }
-
-    private static BrewCauldron.Snapshot readCauldronSnapshot(ValueInput input, CopperCauldronState placed) {
-        BrewCauldronState state = enumValue(input.getStringOr("state", "EMPTY"),
-                BrewCauldronState.EMPTY);
-        BrewForm form = enumValue(input.getStringOr("form", "DRINK"), BrewForm.DRINK);
-        BrewKind recipeKind = enumValueOrNull(input.getStringOr("recipe_kind", ""), BrewKind.class);
-        // 没写铜釜字段的数据（如手写 NBT）沿用放置时按方块外观得到的氧化级。
-        CopperCauldronState copperState = new CopperCauldronState(
-                enumValue(input.getStringOr("copper_oxidation", ""), placed.oxidation()),
-                input.getBooleanOr("copper_waxed", placed.waxed()));
-        Map<IngredientSlot, IngredientBatch> ingredients = readIngredients(input);
-        Map<IngredientSlot, Double> ingredientTimes = readIngredientTimes(input);
-        return new BrewCauldron.Snapshot(state, form, recipeKind, ingredients, ingredientTimes,
-                input.getIntOr("water_units", 0), input.getDoubleOr("temperature", 0.0),
-                input.getDoubleOr("soak_seconds", 0.0),
-                input.getDoubleOr("brew_elapsed_seconds", 0.0),
-                input.getDoubleOr("in_band_seconds", 0.0),
-                input.getDoubleOr("overheat_seconds", 0.0),
-                input.getDoubleOr("evaporation_seconds", 0.0),
-                input.getDoubleOr("heat_phase_seconds", 0.0),
-                input.getIntOr("scorch_count", 0), input.getIntOr("remaining_bottles", 0),
-                copperState);
-    }
-
-    private static Map<IngredientSlot, IngredientBatch> readIngredients(ValueInput input) {
-        Map<IngredientSlot, IngredientBatch> ingredients = new EnumMap<>(IngredientSlot.class);
-        for (ValueInput child : input.childrenListOrEmpty("ingredients")) {
-            IngredientSlot slot = enumValueOrNull(child.getStringOr("slot", ""), IngredientSlot.class);
-            if (slot != null) {
-                ingredients.put(slot, readBatch(child));
-            }
-        }
-        return ingredients;
-    }
-
-    private static Map<IngredientSlot, Double> readIngredientTimes(ValueInput input) {
-        Map<IngredientSlot, Double> times = new EnumMap<>(IngredientSlot.class);
-        for (ValueInput child : input.childrenListOrEmpty("ingredient_times")) {
-            IngredientSlot slot = enumValueOrNull(child.getStringOr("slot", ""), IngredientSlot.class);
-            if (slot != null) {
-                times.put(slot, child.getDoubleOr("seconds", 0.0));
-            }
-        }
-        return times;
-    }
-
-    private static IngredientBatch readBatch(ValueInput input) {
-        String itemId = input.getStringOr("item_id", "");
-        PreparationKind preparation = enumValue(input.getStringOr("preparation", "RAW"),
-                PreparationKind.RAW);
-        long preparedDay = input.getLongOr("prepared_game_day", -1L);
-        int count = input.getIntOr("count", 1);
-        return new IngredientBatch(itemId, preparation, preparedDay, count);
-    }
-
-    private static void writeIngredients(ValueOutput output,
-                                         Map<IngredientSlot, IngredientBatch> ingredients) {
-        ValueOutput.ValueOutputList list = output.childrenList("ingredients");
-        for (IngredientSlot slot : IngredientSlot.values()) {
-            IngredientBatch batch = ingredients.get(slot);
-            if (batch == null) {
-                continue;
-            }
-            ValueOutput child = list.addChild();
-            child.putString("slot", slot.name());
-            writeBatch(child, batch);
-        }
-    }
-
-    private static void writeIngredientTimes(ValueOutput output,
-                                             Map<IngredientSlot, Double> ingredientTimes) {
-        ValueOutput.ValueOutputList list = output.childrenList("ingredient_times");
-        for (IngredientSlot slot : IngredientSlot.values()) {
-            Double seconds = ingredientTimes.get(slot);
-            if (seconds == null) {
-                continue;
-            }
-            ValueOutput child = list.addChild();
-            child.putString("slot", slot.name());
-            child.putDouble("seconds", seconds);
-        }
-    }
-
-    private static void writeBatch(ValueOutput output, IngredientBatch batch) {
-        output.putString("item_id", batch.itemId());
-        output.putString("preparation", batch.preparation().name());
-        output.putLong("prepared_game_day", batch.preparedGameDay());
-        output.putInt("count", batch.count());
-    }
-
-    private static String enumName(Enum<?> value) {
-        if (value == null) {
-            return "";
-        }
-        return value.name();
-    }
-
-    private static <T extends Enum<T>> T enumValue(String name, T fallback) {
-        T value = enumValueOrNull(name, fallback.getDeclaringClass());
-        return value == null ? fallback : value;
-    }
-
-    private static <T extends Enum<T>> T enumValueOrNull(String name, Class<T> type) {
-        if (name == null || name.isBlank()) {
-            return null;
-        }
-        try {
-            return Enum.valueOf(type, name);
-        } catch (IllegalArgumentException exception) {
-            return null;
-        }
-    }
-
-    private static BrewStructure emptyStructure() {
-        return BrewStructure.fromHearthDirections(HeatSourceKind.NONE,
-                EnumSet.noneOf(BrewDirection.class), SmokeVentState.OPEN, HerbState.MISSING);
+        ContainerHelper.saveAllItems(output, staged);
     }
 }

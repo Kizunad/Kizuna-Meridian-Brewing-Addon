@@ -29,6 +29,8 @@ import net.minecraft.world.level.GameType;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.network.protocol.common.ClientboundKeepAlivePacket;
 import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
 import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.network.chat.Component;
@@ -53,6 +55,7 @@ public final class BrewingTestPlayers {
     private static final Map<UUID, List<SoundPlayed>> SOUNDS = new HashMap<>();
     private static final Map<UUID, List<AnimationSent>> ANIMATIONS = new HashMap<>();
     private static final Map<UUID, List<OverlaySent>> OVERLAYS = new HashMap<>();
+    private static final Map<UUID, Integer> MARKER_PARTICLES = new HashMap<>();
     private static final List<Identifier> CHANNELS = List.of(
             Identifier.parse("meridian:body_view"),
             Identifier.parse("meridian:gathering_response"),
@@ -128,6 +131,10 @@ public final class BrewingTestPlayers {
             if (packet instanceof ClientboundCustomPayloadPacket custom
                     && custom.payload() instanceof AnimationPackets.Payload payload) {
                 recordAnimation(listener.player, payload);
+            }
+            if (packet instanceof ClientboundLevelParticlesPacket particles
+                    && particles.getParticle().getType() == ParticleTypes.BLOCK_MARKER) {
+                MARKER_PARTICLES.merge(listener.player.getUUID(), 1, Integer::sum);
             }
             if (packet instanceof ClientboundSystemChatPacket chat && chat.overlay()) {
                 OVERLAYS.get(listener.player.getUUID()).add(new OverlaySent(
@@ -208,6 +215,12 @@ public final class BrewingTestPlayers {
 
     /** 发到动作栏的一行字，{@code tick} 是服务器发包时的游戏时间。 */
     public record OverlaySent(long tick, Component text) { }
+
+    /** 发给这个玩家的方块标记粒子包有几个；熬药结构标出不符那格用的就是它。 */
+    public static int markerParticles(ServerPlayer player) {
+        // 发到这个人连接上的方块标记粒子包数，没收过就是 0。
+        return MARKER_PARTICLES.getOrDefault(player.getUUID(), 0);
+    }
 
     public static List<OverlaySent> overlays(ServerPlayer player) {
         // 捕获真正发给客户端的动作栏包，核对发给谁、多久一次、用的哪些语言键。
@@ -306,5 +319,6 @@ public final class BrewingTestPlayers {
         SOUNDS.remove(player.getUUID());
         ANIMATIONS.remove(player.getUUID());
         OVERLAYS.remove(player.getUUID());
+        MARKER_PARTICLES.remove(player.getUUID());
     }
 }

@@ -6,6 +6,8 @@ import dev.kizuna.meridian.brewing.server.BrewUse;
 import java.util.Map;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -13,10 +15,23 @@ import net.minecraft.world.item.alchemy.Potion;
 import net.minecraft.world.item.alchemy.PotionContents;
 import net.minecraft.world.item.component.TooltipDisplay;
 
-/** 品质药水的创建和服务端解析 API。 */
+/** 品质药水的创建和服务端解析 API，以及药方里写的料名换成物品 ID。 */
 public final class BrewItemStacks {
     private BrewItemStacks() {
         // 物品组件访问只通过静态方法。
+    }
+
+    /** 药方里的料名换成物品 ID：写全了就照写；只写路径的先找本仓物品，再按原版物品。 */
+    public static Identifier recipeItemId(String recipeItem) {
+        // 药方的料名是规则层的字符串，不带注册表；本仓有同名物品时以本仓为准。
+        if (recipeItem.indexOf(':') >= 0) {
+            return Identifier.parse(recipeItem);
+        }
+        Identifier own = Identifier.fromNamespaceAndPath(BrewingFabric.MOD_ID, recipeItem);
+        if (BuiltInRegistries.ITEM.containsKey(own)) {
+            return own;
+        }
+        return Identifier.withDefaultNamespace(recipeItem);
     }
 
     public static ItemStack create(BrewKind kind, BrewQuality quality, BrewUse use) {

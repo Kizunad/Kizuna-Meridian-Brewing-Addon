@@ -1,5 +1,8 @@
 package dev.kizuna.meridian.brewing.fabric;
 
+import dev.kizuna.meridian.brewing.server.FrameClass;
+import java.util.EnumMap;
+import java.util.Map;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.tags.TagKey;
@@ -7,11 +10,15 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 
-/** 炼药结构扫描使用的方块标签。 */
+/** 炼药用到的方块、物品、实体标签。 */
 final class BrewingTags {
-    static final TagKey<Block> HEARTH_STONES = blockTag("hearth_stones");
-    static final TagKey<Block> POTTED_HERBS = blockTag("potted_herbs");
-    static final TagKey<Block> POTTED_FUNGI = blockTag("potted_fungi");
+    static final Map<FrameClass, TagKey<Block>> FRAMES = frameTags();
+    static final TagKey<Block> COPPER_BULBS = blockTag("copper_bulbs");
+    static final TagKey<Block> TOWER_FUEL = blockTag("tower_fuel");
+    /** 原版有这个方块标签，但 {@code BlockTags} 里没有常量；药塔认火室里的原木用。 */
+    static final TagKey<Block> LOGS_THAT_BURN =
+            TagKey.create(Registries.BLOCK, Identifier.withDefaultNamespace("logs_that_burn"));
+    static final TagKey<Block> STRUCTURE_AUTOMATION = blockTag("structure_automation");
     static final TagKey<Block> BREW_CAULDRONS = blockTag("brew_cauldrons");
     static final TagKey<Block> BREW_FIRES = blockTag("brew_fires");
     static final TagKey<Item> STIRRERS = itemTag("stirrers");
@@ -26,6 +33,15 @@ final class BrewingTags {
 
     private BrewingTags() {
         // 标签只作为注册身份，不保存运行时状态。
+    }
+
+    private static Map<FrameClass, TagKey<Block>> frameTags() {
+        // 五个外框材料类各一个标签，例如 meridian_brewing:frame/stone。
+        Map<FrameClass, TagKey<Block>> tags = new EnumMap<>(FrameClass.class);
+        for (FrameClass frame : FrameClass.values()) {
+            tags.put(frame, blockTag(frame.tagPath()));
+        }
+        return Map.copyOf(tags);
     }
 
     private static TagKey<Block> blockTag(String path) {
