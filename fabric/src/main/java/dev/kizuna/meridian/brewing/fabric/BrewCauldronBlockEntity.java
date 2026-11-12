@@ -9,9 +9,11 @@ import dev.kizuna.meridian.brewing.server.BrewKind;
 import dev.kizuna.meridian.brewing.server.BrewProgress;
 import dev.kizuna.meridian.brewing.server.BrewQiTally;
 import dev.kizuna.meridian.brewing.server.BrewRecipe;
+import dev.kizuna.meridian.brewing.server.BrewSaveMarks;
 import dev.kizuna.meridian.brewing.server.BrewStructure;
 import dev.kizuna.meridian.brewing.server.BrewText;
 import dev.kizuna.meridian.brewing.server.BrewUse;
+import dev.kizuna.meridian.brewing.server.CopperCauldronState;
 import dev.kizuna.meridian.brewing.server.CopperExposure;
 import dev.kizuna.meridian.brewing.server.CopperOxidation;
 import dev.kizuna.meridian.brewing.server.FireKind;
@@ -63,6 +65,10 @@ import net.minecraft.world.level.storage.ValueOutput;
  *
  * <p>对漏斗、投掷器是一个只放 1 件的暂存格：开熬前的主料、底料、火药能放，下一 tick 下锅；
  * 别的东西放不进来，留在漏斗、投掷器里。什么都抽不出来。</p>
+ *
+ * <p>存档：料、水、状态、暂存格这类离散内容一变当 tick 标脏；浸泡、熬制计时每秒最多标一次；温度和火苗相位
+ * 不单独标，跟着别的变化一起存，区块卸载后回来是上次存档那一刻的温度；铜釜老化计数按分钟标
+ * （{@link BrewSaveMarks}）。</p>
  */
 public final class BrewCauldronBlockEntity extends BlockEntity implements WorldlyContainer {
     private static final double SECONDS_PER_TICK = 0.05;
@@ -73,6 +79,8 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
     private static final double BLOCK_CENTER = 0.5;
     private static final long DAY_TICKS = 24_000L;
     private static final long COPPER_OXIDATION_INTERVAL_TICKS = 24_000L;
+    private static final long COPPER_SAVE_TICKS = 1_200L;
+    private static final long COPPER_NOT_AGING = -1L;
     private static final int WATER_BUCKET_UNITS = 3;
     private static final int WATER_BOTTLE_UNITS = 1;
     private static final int STRUCTURE_CHECK_TICKS = 20;
@@ -90,6 +98,8 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
     private UUID techniqueCaster;
     private BrewQiTally qiTally;
     private final NonNullList<ItemStack> staged = NonNullList.withSize(1, ItemStack.EMPTY);
+    private final BrewSaveMarks<SaveContent, SaveProgress> saveMarks = new BrewSaveMarks<>();
+    private long ticks;
 
     public BrewCauldronBlockEntity(BlockPos pos, BlockState state, VesselKind vessel) {
         super(BrewingBlocks.BREW_CAULDRON_ENTITY, pos, state);
@@ -273,6 +283,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
         if (currentLevel.isClientSide()) {
             return;
         }
+        ticks++;
         structureCheckCountdown--;
         if (structureCheckCountdown <= 0) {
             structureCheckCountdown = STRUCTURE_CHECK_TICKS;
@@ -288,7 +299,64 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
             tickCopperOxidation();
             showCopperOxidation();
         }
-        setChanged();
+        markIfChanged();
+    }
+
+    @Override
+    public void setChanged() {
+        // 右键、漏斗、熬药式哪个入口标的脏都记下这一刻的存档内容，tick 末只和它比，不为同一处变化再标一次。
+        super.setChanged();
+        rememberSaved();
+    }
+
+    private void rememberSaved() {
+        // 记下此刻会写进存档的内容；读档后也记一次，刚读进来、什么都没变就不用再存。
+        BrewCauldron.Snapshot snapshot = cauldron.snapshot();
+        saveMarks.marked(saveContent(snapshot), saveProgress(snapshot), ticks);
+    }
+
+    private void markIfChanged() {
+        // 离散内容一变当 tick 标，比较器跟着更新；计时在走时最多每秒标一次；釜里没动静就不碰区块。
+        BrewCauldron.Snapshot snapshot = cauldron.snapshot();
+        if (saveMarks.due(saveContent(snapshot), saveProgress(snapshot), ticks)) {
+            setChanged();
+        }
+    }
+
+    private SaveContent saveContent(BrewCauldron.Snapshot snapshot) {
+        // 状态、料、水、剩几瓶、铜釜状态，加上暂存格里那一件。
+        ItemStack stagedStack = staged.getFirst();
+        String stagedItem = "";
+        if (!stagedStack.isEmpty()) {
+            stagedItem = itemId(stagedStack.getItem());
+        }
+        return new SaveContent(snapshot.withoutProgress(), stagedItem);
+    }
+
+    private SaveProgress saveProgress(BrewCauldron.Snapshot snapshot) {
+        // 浸泡、熬制这几段计时，加上铜釜老化计数走到第几分钟。
+        return new SaveProgress(snapshot.progress(), copperSaveStep());
+    }
+
+    private long copperSaveStep() {
+        // 只有还会老化的铜釜才存计数：上了蜡、已经锈到头、或者不是铜釜，计数走不走都不影响什么。
+        if (vessel != VesselKind.COPPER_CAULDRON) {
+            return COPPER_NOT_AGING;
+        }
+        CopperCauldronState copper = cauldron.copperState();
+        CopperOxidation oxidation = copper.oxidation();
+        if (copper.waxed() || oxidation.next() == oxidation) {
+            return COPPER_NOT_AGING;
+        }
+        return copperOxidationTicks / COPPER_SAVE_TICKS;
+    }
+
+    /** 存档里一变就要存的那部分。 */
+    private record SaveContent(BrewCauldron.Snapshot settled, String stagedItem) {
+    }
+
+    /** 存档里一直在走、每秒最多存一次的那部分。 */
+    private record SaveProgress(BrewCauldron.Progress brewing, long copperStep) {
     }
 
     /** 推进一段时间；熬成和糊锅那一刻在釜上出声。 */
@@ -715,6 +783,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
         copperOxidationTicks = input.getLongOr("copper_oxidation_ticks", 0L);
         staged.clear();
         ContainerHelper.loadAllItems(input, staged);
+        rememberSaved();
     }
 
     @Override

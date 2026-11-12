@@ -40,6 +40,17 @@ public enum BrewQuality {
         return displayName;
     }
 
+    /** 物品组件里的这个值是不是某一档品质；不认得的值不算巫药，见 {@link #fromComponentValue}。 */
+    public static boolean isComponentValue(int value) {
+        // 和 fromComponentValue 查同一张表，只是不认得时返回 false 而不抛。
+        for (BrewQuality quality : values()) {
+            if (quality.componentValue == value) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static BrewQuality fromComponentValue(int value) {
         // 非法组件值不能静默降级为某一档。
         for (BrewQuality quality : values()) {

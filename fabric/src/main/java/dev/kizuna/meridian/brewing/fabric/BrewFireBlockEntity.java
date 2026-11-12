@@ -3,6 +3,7 @@ package dev.kizuna.meridian.brewing.fabric;
 import dev.kizuna.meridian.brewing.server.BrewActionResult;
 import dev.kizuna.meridian.brewing.server.BrewFireSource;
 import dev.kizuna.meridian.brewing.server.BrewFireState;
+import dev.kizuna.meridian.brewing.server.BrewSaveMarks;
 import dev.kizuna.meridian.brewing.server.BrewText;
 import dev.kizuna.meridian.brewing.server.FireKind;
 import dev.kizuna.meridian.brewing.server.HeatSourceKind;
@@ -34,12 +35,17 @@ import net.minecraft.world.level.storage.ValueOutput;
  *
  * <p>漏斗、投掷器从任意一面往里送煤炭或木炭：先放进一格待烧，下一 tick 照手动加炭的规则升一档、加 60 秒。
  * 已经四档或者这一格还没烧掉时不收，炭留在漏斗里；这一格不往外出东西。</p>
+ *
+ * <p>存档：火源、火种、档位、待烧那格一变当 tick 标脏（比较器读档位）；燃着时剩余秒数每秒最多标一次，
+ * 熄着、营火不标（{@link BrewSaveMarks}）。</p>
  */
 public final class BrewFireBlockEntity extends BlockEntity implements WorldlyContainer {
     private static final double SECONDS_PER_TICK = 0.05;
     private static final int[] FUEL_SLOT = {0};
     private final BrewFireState fire;
     private final NonNullList<ItemStack> pendingFuel = NonNullList.withSize(1, ItemStack.EMPTY);
+    private final BrewSaveMarks<SaveContent, Double> saveMarks = new BrewSaveMarks<>();
+    private long ticks;
 
     public BrewFireBlockEntity(BlockPos pos, BlockState state, BrewFireSource source) {
         super(BrewingBlocks.BREW_FIRE_ENTITY, pos, state);
@@ -176,10 +182,47 @@ public final class BrewFireBlockEntity extends BlockEntity implements WorldlyCon
 
     private void tick(Level currentLevel) {
         if (!currentLevel.isClientSide()) {
+            ticks++;
             burnPendingFuel();
             fire.tick(SECONDS_PER_TICK);
+            markIfChanged();
+        }
+    }
+
+    @Override
+    public void setChanged() {
+        // 右键、漏斗哪个入口标的脏都记下这一刻的存档内容，tick 末只和它比。
+        super.setChanged();
+        rememberSaved();
+    }
+
+    private void rememberSaved() {
+        // 记下此刻会写进存档的内容；读档后也记一次，刚读进来、什么都没变就不用再存。
+        BrewFireState.Snapshot snapshot = fire.snapshot();
+        saveMarks.marked(saveContent(snapshot), snapshot.fuelSeconds(), ticks);
+    }
+
+    private void markIfChanged() {
+        // 档位、火种、待烧那格一变当 tick 标；只是燃料秒数在走，最多每秒标一次。
+        BrewFireState.Snapshot snapshot = fire.snapshot();
+        if (saveMarks.due(saveContent(snapshot), snapshot.fuelSeconds(), ticks)) {
             setChanged();
         }
+    }
+
+    private SaveContent saveContent(BrewFireState.Snapshot snapshot) {
+        // 燃料秒数以外的存档内容，加上待烧那格的物品和数量。
+        ItemStack fuel = pendingFuel.getFirst();
+        String fuelItem = "";
+        if (!fuel.isEmpty()) {
+            fuelItem = BuiltInRegistries.ITEM.getKey(fuel.getItem()).toString();
+        }
+        return new SaveContent(snapshot.source(), snapshot.fireKind(), snapshot.level(), fuelItem, fuel.getCount());
+    }
+
+    /** 存档里一变就要存的那部分。 */
+    private record SaveContent(BrewFireSource source, FireKind fireKind, int level, String pendingItem,
+                               int pendingCount) {
     }
 
     private void burnPendingFuel() {
@@ -274,6 +317,7 @@ public final class BrewFireBlockEntity extends BlockEntity implements WorldlyCon
                 input.getDoubleOr("fuel_seconds", fire.fuelSeconds())));
         pendingFuel.clear();
         ContainerHelper.loadAllItems(input, pendingFuel);
+        rememberSaved();
     }
 
     @Override

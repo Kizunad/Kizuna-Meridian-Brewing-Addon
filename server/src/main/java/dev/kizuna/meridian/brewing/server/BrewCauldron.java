@@ -600,5 +600,26 @@ public final class BrewCauldron {
             ingredients = Map.copyOf(ingredients);
             ingredientTimes = Map.copyOf(ingredientTimes);
         }
+
+        /**
+         * 去掉温度、火苗相位和各段计时以后的内容：状态、剂型、药方、料和下料时刻、水、糊锅次数、剩几瓶、铜釜状态。
+         * 方块实体拿它判断釜里有没有离散的变化，有就当 tick 存。
+         */
+        public Snapshot withoutProgress() {
+            // 连续量一律记成 0，剩下的字段原样比相等。
+            return new Snapshot(state, form, recipeKind, ingredients, ingredientTimes, waterUnits, 0.0, 0.0, 0.0,
+                    0.0, 0.0, 0.0, 0.0, scorchCount, remainingBottles, copperState);
+        }
+
+        /** 影响分数、要按秒存的那几段计时；温度和火苗相位只跟着别的变化一起存。 */
+        public Progress progress() {
+            // 只取会改分的计时，温度一直在火苗起伏里变，不当成要存的变化。
+            return new Progress(soakSeconds, brewElapsedSeconds, inBandSeconds, overheatSeconds, evaporationSeconds);
+        }
+    }
+
+    /** 浸泡、熬制、火候内、过火、蒸发各走了多少秒。 */
+    public record Progress(double soakSeconds, double brewElapsedSeconds, double inBandSeconds,
+                           double overheatSeconds, double evaporationSeconds) {
     }
 }

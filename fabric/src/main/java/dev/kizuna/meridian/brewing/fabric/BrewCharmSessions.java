@@ -25,13 +25,20 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.LivingEntity;
 
-/** 唯一负责醒的规则与时钟；控制器仅执行当前会话，不另开药效计时器。 */
+/**
+ * 唯一负责醒的规则与时钟；控制器仅执行当前会话，不另开药效计时器。
+ *
+ * <p>选敌每 {@link #SELECT_TICKS} 个 tick 一次；有人挨打、有活物死了，下一 tick 就重选。对手换了才向控制器发
+ * UPDATE，挨打缩时照旧当场发。</p>
+ */
 public final class BrewCharmSessions {
     private static final long TICKS_PER_SECOND = 20;
+    private static final long SELECT_TICKS = 5;
     private static final long IMMUNITY_MILLIS = 10_000;
     private static final Identifier STOP_PHASE = Identifier.parse("meridian_brewing:end_control");
     private static final Map<UUID, Active> active = new HashMap<>();
     private static CharmController controller;
+    private static boolean opponentsStale;
 
     private BrewCharmSessions() {
         // 活动会话不持久化，下线或卸载即结束。
@@ -58,10 +65,15 @@ public final class BrewCharmSessions {
             if (taken > 0 && VanillaDamageFabric.inspectBody(target).isEmpty()
                     && source.getEntity() instanceof LivingEntity attacker) {
                 BrewCharmTargets.hit(target, attacker);
+                opponentsStale = true;
             }
         });
         ServerTickEvents.START_SERVER_TICK.register(BrewCharmSessions::tick);
-        ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> leave(entity, CharmEndReason.SUBJECT_DIED));
+        ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
+            // 死的可能正是谁的对手，下一 tick 重选。
+            opponentsStale = true;
+            leave(entity, CharmEndReason.SUBJECT_DIED);
+        });
         ServerEntityEvents.ENTITY_UNLOAD.register((entity, level) -> {
             if (entity instanceof LivingEntity living) {
                 leave(living, CharmEndReason.UNLOADED);
@@ -97,7 +109,7 @@ public final class BrewCharmSessions {
                 .build();
         var updated = withOpponent(session, subject, caster);
         send(CharmCommand.Action.START, updated, CharmEndReason.CHARM_END_UNSPECIFIED);
-        active.put(subjectId, new Active(subject, caster, updated));
+        active.put(subjectId, new Active(subject, caster, updated, tick));
         BrewBodyEffects.addStatus(subject, BrewingEffects.CHARM_CONTROL, seconds, quality);
     }
 
@@ -107,21 +119,32 @@ public final class BrewCharmSessions {
     }
 
     private static void tick(MinecraftServer server) {
-        // 输入与 AI 运行前先终止无效会话，再发送这一个 tick 的施药者目标。
+        // 输入与 AI 运行前先终止无效会话；到了选敌的点（或刚有人挨打、死了）再重选，对手换了才发给控制器。
         long tick = server.overworld().getGameTime();
         BrewCharmTargets.prune(tick);
+        boolean hitOrDeath = opponentsStale;
+        opponentsStale = false;
         for (Active value : List.copyOf(active.values())) {
             LivingEntity subject = value.subject();
-            LivingEntity caster = value.caster();
             CharmEndReason reason = ended(value, tick);
             if (reason != CharmEndReason.CHARM_END_UNSPECIFIED) {
                 end(subject, reason);
-            } else {
-                CharmSession next = withOpponent(value.session(), subject, caster);
-                send(CharmCommand.Action.UPDATE, next, CharmEndReason.CHARM_END_UNSPECIFIED);
-                active.put(subject.getUUID(), new Active(subject, caster, next));
+            } else if (hitOrDeath || tick - value.selectedTick() >= SELECT_TICKS) {
+                reselect(value, tick);
             }
         }
+    }
+
+    private static void reselect(Active value, long tick) {
+        // 四步选敌照旧；选出来和当前一样就只记下选过的时刻，不发 UPDATE。
+        LivingEntity subject = value.subject();
+        LivingEntity caster = value.caster();
+        CharmSession current = value.session();
+        CharmSession next = withOpponent(current, subject, caster);
+        if (!next.getOpponentUuid().equals(current.getOpponentUuid())) {
+            send(CharmCommand.Action.UPDATE, next, CharmEndReason.CHARM_END_UNSPECIFIED);
+        }
+        active.put(subject.getUUID(), new Active(subject, caster, next, tick));
     }
 
     private static CharmEndReason ended(Active value, long tick) {
@@ -163,6 +186,7 @@ public final class BrewCharmSessions {
         LivingEntity attacker = event.attacker();
         UUID targetId = target.getUUID();
         BrewCharmTargets.hit(target, attacker);
+        opponentsStale = true;
         Active value = active.get(targetId);
         if (value == null) {
             return;
@@ -175,7 +199,7 @@ public final class BrewCharmSessions {
         CharmSession previous = value.session();
         long shortened = previous.getEndsTick() - TICKS_PER_SECOND;
         var session = previous.toBuilder().setEndsTick(shortened).build();
-        active.put(targetId, new Active(value.subject(), caster, session));
+        active.put(targetId, new Active(value.subject(), caster, session, value.selectedTick()));
         long tick = target.level().getServer().overworld().getGameTime();
         if (shortened <= tick) {
             end(target, CharmEndReason.EXPIRED);
@@ -252,5 +276,5 @@ public final class BrewCharmSessions {
         }
     }
 
-    private record Active(LivingEntity subject, LivingEntity caster, CharmSession session) { }
+    private record Active(LivingEntity subject, LivingEntity caster, CharmSession session, long selectedTick) { }
 }

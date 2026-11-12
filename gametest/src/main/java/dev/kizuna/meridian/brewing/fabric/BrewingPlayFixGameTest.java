@@ -5,6 +5,7 @@ import dev.kizuna.backpack3d.item.ItemMetadata;
 import dev.kizuna.meridian.brewing.server.BrewCauldron;
 import dev.kizuna.meridian.brewing.server.BrewCauldronState;
 import dev.kizuna.meridian.brewing.server.BrewKind;
+import dev.kizuna.meridian.brewing.server.BrewQuality;
 import dev.kizuna.meridian.brewing.server.BrewRecipe;
 import dev.kizuna.meridian.brewing.server.BrewRecipes;
 import dev.kizuna.meridian.brewing.server.BrewStructure;
@@ -94,6 +95,8 @@ public final class BrewingPlayFixGameTest {
     private static final float LETHAL_DAMAGE = 1_000.0F;
     private static final int QUALITY_BREWS = 28;
     private static final int WEIGHED_ITEMS = 32;
+    /** 四档品质的组件值是 0–3，99 谁也不是。 */
+    private static final int UNKNOWN_QUALITY = 99;
     private static final double INSIDE_WINDOW = 0.5;
     private static final String CAULDRON = "witch_cauldron";
     private static final String STOVE = "iron_stove";
@@ -365,6 +368,30 @@ public final class BrewingPlayFixGameTest {
                 .toList();
         List<String> everyKind = Arrays.stream(BrewKind.values()).map(BrewKind::path).toList();
         context.assertTrue(recipeKinds.equals(everyKind), "炼药页没有按药方各列一张：" + recipeKinds);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void brewRecognitionNeedsOwnPotionAndKnownQuality(GameTestHelper context) {
+        // 认巫药只看组件：本仓的 Potion 加认得的品质才算；缺一样、品质值认不得、原版药水、空物品都不算，也不抛异常。
+        ItemStack brew = BrewItemStacks.create(BrewKind.ARMOR_ROT, BrewQuality.COMMON, BrewUse.SPLASH);
+        context.assertTrue(BrewItemStacks.isBrew(brew), "本仓的寻常蚀甲药没认出来");
+        ItemStack qualityless = brew.copy();
+        qualityless.remove(BrewingComponents.QUALITY);
+        ItemStack unknownQuality = brew.copy();
+        unknownQuality.set(BrewingComponents.QUALITY, UNKNOWN_QUALITY);
+        ItemStack vanilla = PotionContents.createItemStack(Items.POTION, Potions.HEALING);
+        ItemStack vanillaWithQuality = vanilla.copy();
+        vanillaWithQuality.set(BrewingComponents.QUALITY, BrewQuality.FINE.componentValue());
+        Map<String, ItemStack> strangers = Map.of(
+                "去掉品质的巫药", qualityless,
+                "品质值认不得的巫药", unknownQuality,
+                "原版治疗药水", vanilla,
+                "带品质的原版药水", vanillaWithQuality,
+                "玻璃瓶", new ItemStack(Items.GLASS_BOTTLE),
+                "空物品", ItemStack.EMPTY);
+        strangers.forEach((name, stack) ->
+                context.assertTrue(!BrewItemStacks.isBrew(stack), name + "被当成了巫药"));
         context.succeed();
     }
 

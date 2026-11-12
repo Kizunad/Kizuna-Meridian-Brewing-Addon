@@ -14,6 +14,7 @@ import dev.kizuna.meridian.brewing.server.BrewUse;
 import dev.kizuna.meridian.technique.fabric.TechniqueFabric;
 import dev.kizuna.meridian.technique.protocol.pb.TechniqueMessages.BrewTechniqueParameters;
 import dev.kizuna.meridian.technique.protocol.pb.TechniqueMessages.BrewPartGroup;
+import dev.kizuna.meridian.technique.protocol.pb.TechniqueMessages.CastRequest;
 import dev.kizuna.meridian.technique.protocol.pb.TechniqueMessages.Category;
 import dev.kizuna.meridian.technique.server.TechniqueState;
 import dev.kizuna.meridian.protocol.BodyProtobuf;
@@ -21,6 +22,7 @@ import java.util.HashMap;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -34,7 +36,13 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 
-/** 世界只提供当前身体事实；剂量、覆盖与指数衰减复用纯规则存储。 */
+/**
+ * 世界只提供当前身体事实；剂量、覆盖与指数衰减复用纯规则存储。
+ *
+ * <p>每个目标的肾脏档和「正在施放恢复类功法」一秒读一次身体，不是每 tick、每条残药都读。目标起式（过了功法
+ * 的扣费前检查）或收式（施放结束通知）时立即作废，下一 tick 重读，所以恢复类施放的起止当 tick 就算进衰减；
+ * 肾脏档的变化最多晚一秒。下引时总是现读。</p>
+ */
 public final class BrewResidues {
     public interface Triggered {
         void onTriggered(LivingEntity source, BrewKind kind, int targets);
@@ -47,8 +55,10 @@ public final class BrewResidues {
                 }
             });
     private static final double SECONDS_PER_TICK = 0.05;
+    private static final long CONDITIONS_TICKS = 20;
     private static ResidueStore store = new ResidueStore();
     private static final Map<UUID, LivingEntity> targets = new HashMap<>();
+    private static final Map<UUID, BodyConditions> conditionsByTarget = new HashMap<>();
     private static BrewThresholds thresholds;
 
     private BrewResidues() {
@@ -64,8 +74,17 @@ public final class BrewResidues {
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> clear(entity.getUUID()));
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
             targets.clear();
+            conditionsByTarget.clear();
             store = new ResidueStore();
         });
+        TechniqueFabric.SERVICE_STARTED.register(service -> service.addCastCheck(BrewResidues::castStarting));
+        TechniqueFabric.CAST_ENDED.register(event -> conditionsByTarget.remove(event.entityUuid()));
+    }
+
+    private static Optional<String> castStarting(UUID entity, CastRequest request) {
+        // 只借功法的扣费前检查知道「这个目标要起式了」：作废它的身体条件，下一 tick 重读；从不拒绝施放。
+        conditionsByTarget.remove(entity);
+        return Optional.empty();
     }
 
     static void seed(LivingEntity target, BrewBodyEffects.Application application, List<String> parts,
@@ -76,7 +95,8 @@ public final class BrewResidues {
         }
         var key = new ResidueKey(source.getUUID(), target.getUUID(), application.kind(), "");
         targets.put(target.getUUID(), target);
-        if (conditions(key).kidneyMultiplier() == 0) {
+        conditionsByTarget.remove(target.getUUID());
+        if (conditions(key, target.level().getServer().getTickCount()).kidneyMultiplier() == 0) {
             return;
         }
         for (String part : parts) {
@@ -153,27 +173,40 @@ public final class BrewResidues {
         // 牛奶即使没有可见状态，也清除尚未消散的残药。
         store.clearTarget(target);
         targets.remove(target);
+        conditionsByTarget.remove(target);
     }
 
     private static void tick(MinecraftServer server) {
-        // 身体恢复与肾脏每 tick 重读，不能把下引时的状态永久缓存。
-        store.tick(SECONDS_PER_TICK, BrewResidues::conditions);
+        // 衰减每 tick 照算；身体条件按目标一秒读一次，起式、收式时作废重读，不能把下引时的状态永久缓存。
+        long tick = server.getTickCount();
+        store.tick(SECONDS_PER_TICK, key -> conditions(key, tick));
         var retained = store.snapshots().stream().map(snapshot -> snapshot.key().target()).collect(Collectors.toSet());
         targets.keySet().removeIf(id -> !retained.contains(id));
+        conditionsByTarget.keySet().removeIf(id -> !retained.contains(id));
     }
 
-    private static ResidueStore.Decay conditions(ResidueKey key) {
-        // 只有枯竭看肾脏；任意恢复类施放均加快消散，不依赖具体基础功法 ID。身体被宿主暂停时按原速消散。
-        LivingEntity target = targets.get(key.target());
-        var found = BrewBodyHost.observe(target).found();
-        if (found.isEmpty()) {
-            return new ResidueStore.Decay(1, RecoveryState.INACTIVE);
+    private static ResidueStore.Decay conditions(ResidueKey key, long tick) {
+        // 只有枯竭看肾脏；任意恢复类施放均加快消散，不依赖具体基础功法 ID。
+        BodyConditions cached = conditionsByTarget.get(key.target());
+        if (cached == null || tick - cached.readTick() >= CONDITIONS_TICKS) {
+            cached = read(targets.get(key.target()), tick);
+            conditionsByTarget.put(key.target(), cached);
         }
-        var body = found.get().body();
         double kidney = 1;
         if (key.kind() == BrewKind.DEPLETION) {
-            kidney = BrewBodyFacts.detox(body, thresholds).tier().durationMultiplier();
+            kidney = cached.kidneyMultiplier();
         }
+        return new ResidueStore.Decay(kidney, cached.recovery());
+    }
+
+    private static BodyConditions read(LivingEntity target, long tick) {
+        // 读一次目标身体：肾脏排毒档的时长倍数，和当前施放是不是恢复类。身体被宿主暂停时按原速消散。
+        var found = BrewBodyHost.observe(target).found();
+        if (found.isEmpty()) {
+            return new BodyConditions(1, RecoveryState.INACTIVE, tick);
+        }
+        var body = found.get().body();
+        double kidney = BrewBodyFacts.detox(body, thresholds).tier().durationMultiplier();
         var progress = TechniqueState.read(BodyProtobuf.fromMessage(body));
         RecoveryState recovery = RecoveryState.INACTIVE;
         if (progress.hasActiveCast()) {
@@ -183,6 +216,10 @@ public final class BrewResidues {
                 recovery = RecoveryState.ACTIVE;
             }
         }
-        return new ResidueStore.Decay(kidney, recovery);
+        return new BodyConditions(kidney, recovery, tick);
+    }
+
+    /** 某个目标在 {@code readTick} 读到的身体条件。 */
+    private record BodyConditions(double kidneyMultiplier, RecoveryState recovery, long readTick) {
     }
 }

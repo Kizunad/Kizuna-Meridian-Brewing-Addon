@@ -41,6 +41,18 @@ public final class HerbCrateState {
         slots.set(slot, new SlotState(itemId, count, seconds));
     }
 
+    /** 九格都空着。 */
+    public boolean empty() {
+        // 空格的物品 ID 是空串，见 observe。
+        return slots.stream().allMatch(state -> state.itemId().isEmpty());
+    }
+
+    /** 有没有哪一格放着要晒的生药；没有就不用查天气、推进计时。 */
+    public boolean hasRawHerbs() {
+        // 和 tick 推进用同一条判断：物品有晒制配方。
+        return slots.stream().anyMatch(state -> sunDryRecipe(state.itemId()).isPresent());
+    }
+
     /** 白天、不下雨时，每格要晒的生药各自加时间。 */
     public void tick(double seconds, DryingConditions conditions) {
         if (!Double.isFinite(seconds) || seconds < 0.0 || conditions == null) {

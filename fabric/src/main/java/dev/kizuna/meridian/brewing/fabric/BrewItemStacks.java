@@ -4,6 +4,7 @@ import dev.kizuna.meridian.brewing.server.BrewKind;
 import dev.kizuna.meridian.brewing.server.BrewQuality;
 import dev.kizuna.meridian.brewing.server.BrewUse;
 import java.util.Map;
+import java.util.Optional;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -62,32 +63,47 @@ public final class BrewItemStacks {
     }
 
     public static BrewKind kind(ItemStack stack) {
-        PotionContents contents = null;
-        if (stack != null) {
-            contents = stack.get(DataComponents.POTION_CONTENTS);
-        }
-        if (contents == null || contents.potion().isEmpty()) {
+        // 没有 Potion 内容和有内容但不是本仓的药，各自报清楚。
+        Optional<Holder<Potion>> potion = potion(stack);
+        if (potion.isEmpty()) {
             throw new IllegalArgumentException("物品没有巫药 Potion 内容");
         }
-        Holder<Potion> potion = contents.potion().orElseThrow();
-        for (Map.Entry<BrewKind, Holder.Reference<Potion>> entry : BrewingPotions.all().entrySet()) {
-            if (potion.equals(entry.getValue())) {
-                return entry.getKey();
-            }
-        }
-        throw new IllegalArgumentException("不是本仓登记的巫药");
+        return registeredKind(potion.orElseThrow())
+                .orElseThrow(() -> new IllegalArgumentException("不是本仓登记的巫药"));
     }
 
+    /** 是不是本仓的品质巫药：本仓登记的 Potion，加上认得的品质值。只看组件，不靠抛异常判断。 */
     public static boolean isBrew(ItemStack stack) {
+        // 提示框每帧、酿造台放料、手持物事实都会问，非巫药最常见，先看最便宜的品质组件。
         if (stack == null || stack.isEmpty()) {
             return false;
         }
-        try {
-            kind(stack);
-            quality(stack);
-            return true;
-        } catch (IllegalArgumentException ignored) {
+        Integer quality = stack.get(BrewingComponents.QUALITY);
+        if (quality == null || !BrewQuality.isComponentValue(quality)) {
             return false;
         }
+        return potion(stack).flatMap(BrewItemStacks::registeredKind).isPresent();
+    }
+
+    private static Optional<Holder<Potion>> potion(ItemStack stack) {
+        // 物品上的 Potion 内容；没有组件或者是空药水都算没有。
+        if (stack == null) {
+            return Optional.empty();
+        }
+        PotionContents contents = stack.get(DataComponents.POTION_CONTENTS);
+        if (contents == null) {
+            return Optional.empty();
+        }
+        return contents.potion();
+    }
+
+    private static Optional<BrewKind> registeredKind(Holder<Potion> potion) {
+        // 和本仓登记的每一种巫药 Potion 逐个比。
+        for (Map.Entry<BrewKind, Holder.Reference<Potion>> entry : BrewingPotions.all().entrySet()) {
+            if (potion.equals(entry.getValue())) {
+                return Optional.of(entry.getKey());
+            }
+        }
+        return Optional.empty();
     }
 }

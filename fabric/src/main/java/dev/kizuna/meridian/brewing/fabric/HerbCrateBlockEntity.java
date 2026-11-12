@@ -1,5 +1,6 @@
 package dev.kizuna.meridian.brewing.fabric;
 
+import dev.kizuna.meridian.brewing.server.BrewSaveMarks;
 import dev.kizuna.meridian.brewing.server.DaylightPhase;
 import dev.kizuna.meridian.brewing.server.DryWeather;
 import dev.kizuna.meridian.brewing.server.DryingConditions;
@@ -37,6 +38,9 @@ import net.minecraft.world.level.storage.ValueOutput;
  * 晒药匾的九格晒料容器：每格各自计时，晴天白天且露天时才推进，晒够了原地换成干药。
  *
  * <p>漏斗和投掷器从任意一面只送要晒的生药进来；漏斗只能从底下抽走晒好的干药，生药抽不走。</p>
+ *
+ * <p>空匾每 tick 直接返回；没有要晒的生药就不查天气。存档：哪格放了什么、几个一变当 tick 标脏（比较器读干药格数）；
+ * 晒制秒数在走时每秒最多标一次（{@link BrewSaveMarks}）。</p>
  */
 public final class HerbCrateBlockEntity extends BaseContainerBlockEntity implements WorldlyContainer {
     private static final double SECONDS_PER_TICK = 0.05;
@@ -49,6 +53,8 @@ public final class HerbCrateBlockEntity extends BaseContainerBlockEntity impleme
     private final NonNullList<ItemStack> items = NonNullList.withSize(
             HerbCrateState.SLOT_COUNT, ItemStack.EMPTY);
     private final HerbCrateState crate = new HerbCrateState();
+    private final BrewSaveMarks<List<SlotItem>, List<Double>> saveMarks = new BrewSaveMarks<>();
+    private long ticks;
 
     public HerbCrateBlockEntity(BlockPos pos, BlockState state) {
         super(BrewingBlocks.HERB_CRATE_ENTITY, pos, state);
@@ -146,13 +152,61 @@ public final class HerbCrateBlockEntity extends BaseContainerBlockEntity impleme
     }
 
     private void tick(Level currentLevel) {
+        // 空匾不比物品、不查天气；格子刚被拿空的那一 tick 还要走一遍，把记着的格子状态清掉。
         if (currentLevel.isClientSide()) {
             return;
         }
+        ticks++;
+        if (isEmpty() && crate.empty()) {
+            return;
+        }
         observeItems();
-        crate.tick(SECONDS_PER_TICK, dryingConditions());
-        prepareReadyItems();
-        setChanged();
+        if (crate.hasRawHerbs()) {
+            crate.tick(SECONDS_PER_TICK, dryingConditions());
+            prepareReadyItems();
+        }
+        markIfChanged();
+    }
+
+    @Override
+    public void setChanged() {
+        // 界面、漏斗哪个入口标的脏都记下这一刻的存档内容，tick 末只和它比。
+        super.setChanged();
+        rememberSaved();
+    }
+
+    private void rememberSaved() {
+        // 记下此刻会写进存档的内容；读档后也记一次，刚读进来、什么都没变就不用再存。
+        saveMarks.marked(slotItems(), dryingSeconds(), ticks);
+    }
+
+    private void markIfChanged() {
+        // 物品或数量一变当 tick 标；只是晒制秒数在走，最多每秒标一次。
+        if (saveMarks.due(slotItems(), dryingSeconds(), ticks)) {
+            setChanged();
+        }
+    }
+
+    private List<SlotItem> slotItems() {
+        // 直接读物品格，不读晒制状态：漏斗放进来、tick 还没比过的时候也要算对。
+        List<SlotItem> slotItems = new ArrayList<>();
+        for (ItemStack stack : items) {
+            slotItems.add(new SlotItem(itemId(stack), stack.getCount()));
+        }
+        return slotItems;
+    }
+
+    private List<Double> dryingSeconds() {
+        // 每格已经晒了多少秒，和存档里的 drying 列表一一对应。
+        List<Double> seconds = new ArrayList<>();
+        for (int slot = 0; slot < items.size(); slot++) {
+            seconds.add(crate.dryingSeconds(slot));
+        }
+        return seconds;
+    }
+
+    /** 一格放的什么、几个；空格是空串和 0。 */
+    private record SlotItem(String itemId, int count) {
     }
 
     private DryingConditions dryingConditions() {
@@ -217,6 +271,7 @@ public final class HerbCrateBlockEntity extends BaseContainerBlockEntity impleme
             slots.add(new HerbCrateState.SlotState(itemId(stack), stack.getCount(), seconds[slot]));
         }
         crate.restore(slots);
+        rememberSaved();
     }
 
     /**

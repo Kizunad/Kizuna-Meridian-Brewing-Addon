@@ -150,17 +150,7 @@ public final class WitchResidueGameTest {
             fan(context, source, BrewKind.ARMOR_ROT);
             context.runAfterDelay(FAN_EFFECT, () -> {
                 double before = dose(source, target);
-                TechniqueFabric.service().learn(target.getUUID(), "meridian_basic_techniques:breath_volume");
-                var reference = TechniqueReference.newBuilder()
-                        .setId("meridian_basic_techniques:breath")
-                        .setVersion(1)
-                        .build();
-                var request = CastRequest.newBuilder()
-                        .setBodyId(target.getStringUUID())
-                        .setCastId(UUID.randomUUID().toString())
-                        .setTechnique(reference)
-                        .build();
-                context.assertTrue(TechniqueFabric.service().cast(target.getUUID(), request).hasBinding(), "调息起手失败");
+                breathe(context, target);
                 context.runAfterDelay(RECOVERY_OBSERVATION, () -> {
                     assertDecay(context, dose(source, target) / before,
                             HALF_LIFE_SECONDS / RECOVERY_DIVISOR, RECOVERY_OBSERVATION);
@@ -169,6 +159,43 @@ public final class WitchResidueGameTest {
                 });
             });
         }));
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void recoveryCastEndRestoresOrdinaryDecayAtOnce(GameTestHelper context) {
+        // 身体条件一秒才读一次，但调息一收势就作废重读：收势后的二十 tick 照原半衰期衰减，不再按三倍。
+        WitchBrewGameTest.ready(context, source -> WitchBrewGameTest.ready(context, target -> {
+            target.setPos(source.getX(), source.getY(), source.getZ() + TARGET_DISTANCE);
+            fan(context, source, BrewKind.ARMOR_ROT);
+            context.runAfterDelay(FAN_EFFECT, () -> {
+                breathe(context, target);
+                context.runAfterDelay(RECOVERY_OBSERVATION, () -> {
+                    context.assertTrue(TechniqueFabric.service().cancelOnDeath(target.getUUID()).isPresent(),
+                            "调息没有在施放中，收不了势");
+                    double before = dose(source, target);
+                    context.runAfterDelay(RECOVERY_OBSERVATION, () -> {
+                        assertDecay(context, dose(source, target) / before, HALF_LIFE_SECONDS, RECOVERY_OBSERVATION);
+                        BrewingTestPlayers.close(target);
+                        WitchBrewGameTest.finish(context, source);
+                    });
+                });
+            });
+        }));
+    }
+
+    private static void breathe(GameTestHelper context, ServerPlayer target) {
+        // 目标亲自学调息并经正式服务起手。
+        TechniqueFabric.service().learn(target.getUUID(), "meridian_basic_techniques:breath_volume");
+        var reference = TechniqueReference.newBuilder()
+                .setId("meridian_basic_techniques:breath")
+                .setVersion(1)
+                .build();
+        var request = CastRequest.newBuilder()
+                .setBodyId(target.getStringUUID())
+                .setCastId(UUID.randomUUID().toString())
+                .setTechnique(reference)
+                .build();
+        context.assertTrue(TechniqueFabric.service().cast(target.getUUID(), request).hasBinding(), "调息起手失败");
     }
 
     private static void weakenKidneys(LivingEntity target) {

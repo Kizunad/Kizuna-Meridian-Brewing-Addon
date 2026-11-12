@@ -92,6 +92,26 @@ public final class BrewingCharmGameTest {
     }
 
     @GameTest(maxTicks = TIMEOUT)
+    public void hitOnCasterRetargetsSubjectNextTick(GameTestHelper context) {
+        // 选敌隔几 tick 才跑一次，但有人打了施药者，受惑者下一 tick 就改打他，不等下一次例行选敌。
+        ServerPlayer caster = BrewingTestPlayers.create(context);
+        Villager subject = villager(context, 2);
+        Villager attacker = villager(context, 3);
+        charm(subject, caster);
+        context.assertTrue(BrewCharmSessions.controlled(subject.getUUID()), "弱档未开始控制");
+        context.assertTrue(subject.getTarget() == null, "没人动手时受惑者不该有目标：" + subject.getTarget());
+        context.runAfterDelay(1, () -> {
+            hit(caster, attacker);
+            context.runAfterDelay(1, () -> {
+                context.assertTrue(subject.getTarget() == attacker,
+                        "施药者挨打后下一 tick，受惑者没有改打动手的人：" + subject.getTarget());
+                close(caster, List.of(subject, attacker));
+                context.succeed();
+            });
+        });
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
     public void allyHitWakesAndStartsTenSecondImmunity(GameTestHelper context) {
         // 施药者亲手命中立即结束控制，提前醒按此刻重新写十秒免疫。
         ServerPlayer caster = BrewingTestPlayers.create(context);
