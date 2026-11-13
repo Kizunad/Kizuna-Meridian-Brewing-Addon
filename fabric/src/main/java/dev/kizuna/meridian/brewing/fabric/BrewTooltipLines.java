@@ -10,6 +10,7 @@ import dev.kizuna.meridian.brewing.server.BrewQuality;
 import dev.kizuna.meridian.brewing.server.BrewUse;
 import dev.kizuna.meridian.brewing.server.CharmProfile;
 import dev.kizuna.meridian.brewing.server.DepletionProfile;
+import dev.kizuna.meridian.brewing.server.IngredientFreshness;
 import dev.kizuna.meridian.brewing.server.InsectLureProfile;
 import dev.kizuna.meridian.brewing.server.QiGatherProfile;
 import java.math.BigDecimal;
@@ -28,7 +29,7 @@ import net.minecraft.world.item.Items;
 /**
  * 巫药物品提示：品质一行，再写这一档的药效。数字都从 {@link BrewEffectProfiles} 取，语言文件里只有句式。
  * 药方羊皮纸写它记的是哪一味药；釜和火写它属于哪一座药炉，铁火盆写它只是铁炉座的料；
- * 铜釜另写氧化和上蜡，晒药匾写什么时候才晒。
+ * 铜釜另写氧化和上蜡，晒药匾写什么时候才晒。炮制药材写炮制了几天、药性还剩多少。
  *
  * <p>原版那行「(0:01)」是登记用的显示效果，巫药物品已经用 {@code tooltip_display} 藏掉。</p>
  */
@@ -73,6 +74,34 @@ public final class BrewTooltipLines {
             lines.add(line.withStyle(ChatFormatting.GRAY));
         }
         return List.copyOf(lines);
+    }
+
+    /**
+     * 炮制药材写这是炮制的第几天、药性还剩多少，再写一行药性怎么退。
+     * 不是炮制药材、还没记上炮制日，或者日期对不上（时钟被往回调过）时返回空表。
+     */
+    public static List<Component> preparedLines(ItemStack stack, long currentGameDay) {
+        Long preparedDay = stack.get(BrewingComponents.PREPARED_DAY);
+        if (!(stack.getItem() instanceof PreparedIngredientItem) || preparedDay == null
+                || preparedDay < 0 || currentGameDay < preparedDay) {
+            return List.of();
+        }
+        long age = IngredientFreshness.ageDays(preparedDay, currentGameDay);
+        long percent = Math.round(IngredientFreshness.multiplier(preparedDay, currentGameDay) * PERCENT);
+        long lowestDay = IngredientFreshness.DECAY_END_DAY - 1;
+        MutableComponent day;
+        if (age == 0) {
+            day = Component.translatable(PREFIX + "prepared.today");
+        } else if (age <= IngredientFreshness.FULL_DAYS) {
+            day = Component.translatable(PREFIX + "prepared.fresh", age);
+        } else if (age < lowestDay) {
+            day = Component.translatable(PREFIX + "prepared.fading", age, percent);
+        } else {
+            day = Component.translatable(PREFIX + "prepared.spent", age, percent);
+        }
+        MutableComponent rule = Component.translatable(PREFIX + "prepared.rule", IngredientFreshness.FULL_DAYS,
+                lowestDay, Math.round(IngredientFreshness.MINIMUM_MULTIPLIER * PERCENT));
+        return List.of(day.withStyle(ChatFormatting.GRAY), rule.withStyle(ChatFormatting.DARK_GRAY));
     }
 
     private static MutableComponent recipeLine(ItemStack stack) {

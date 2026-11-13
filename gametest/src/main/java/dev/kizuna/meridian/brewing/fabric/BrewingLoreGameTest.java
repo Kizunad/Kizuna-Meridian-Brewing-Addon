@@ -17,6 +17,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -36,6 +37,7 @@ import net.minecraft.world.level.block.Block;
  * <p>翻没翻开看服务端真正发给客户端的翻书包，客户端怎么排页由截图场景看。</p>
  */
 public final class BrewingLoreGameTest {
+    private static final long PREPARED_ON = 10;
     private static final int TIMEOUT = 40;
     private static final int PACKET_TICKS = 1;
     private static final String LEARNED_KEY = "message.meridian_brewing.recipe.learned";
@@ -190,6 +192,42 @@ public final class BrewingLoreGameTest {
         ItemStack result = found.orElseThrow().value().assemble(input);
         context.assertTrue(result.is(BrewingItems.item("brew_manual")) && result.getCount() == 1,
                 "书加萤石粉合出来的不是一本熬药总纲：" + result);
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void preparedHerbTooltipTellsItsDayAndPotency(GameTestHelper context) {
+        // 炮制药材写炮制了几天、药性还剩几成，再写一行怎么退；数字照药性曲线来。
+        ItemStack moss = new ItemStack(BrewingItems.item("dry_moss"));
+        moss.set(BrewingComponents.PREPARED_DAY, PREPARED_ON);
+        assertPrepared(context, moss, 0, "prepared.today", List.of());
+        assertPrepared(context, moss, 2, "prepared.fresh", List.of(2L));
+        assertPrepared(context, moss, 3, "prepared.fresh", List.of(3L));
+        assertPrepared(context, moss, 5, "prepared.fading", List.of(5L, 87L));
+        assertPrepared(context, moss, 9, "prepared.spent", List.of(9L, 60L));
+        assertPrepared(context, moss, 20, "prepared.spent", List.of(20L, 60L));
+        List<Component> rule = BrewTooltipLines.preparedLines(moss, PREPARED_ON);
+        var ruleText = (TranslatableContents) rule.get(1).getContents();
+        context.assertTrue(ruleText.getKey().equals("tooltip.meridian_brewing.prepared.rule")
+                && List.of(ruleText.getArgs()).equals(List.of(3L, 9L, 60L)), "药性怎么退那一行不对：" + ruleText);
+
+        // 还没记上炮制日的、日期对不上的、不是炮制药材的，都不写。
+        context.assertTrue(BrewTooltipLines.preparedLines(new ItemStack(BrewingItems.item("dry_moss")), PREPARED_ON)
+                .isEmpty(), "没有炮制日的药材写了天数");
+        context.assertTrue(BrewTooltipLines.preparedLines(moss, PREPARED_ON - 1).isEmpty(), "炮制日在今天之后还写了天数");
+        ItemStack stick = new ItemStack(Items.STICK);
+        stick.set(BrewingComponents.PREPARED_DAY, PREPARED_ON);
+        context.assertTrue(BrewTooltipLines.preparedLines(stick, PREPARED_ON).isEmpty(), "不是炮制药材的物品写了天数");
+        context.succeed();
+    }
+
+    private static void assertPrepared(GameTestHelper context, ItemStack stack, long age, String suffix,
+                                       List<Long> arguments) {
+        // 第一行是天数和药性，语言键和参数都要对。
+        List<Component> lines = BrewTooltipLines.preparedLines(stack, PREPARED_ON + age);
+        context.assertTrue(lines.size() == 2, "第 " + age + " 天的提示不是两行：" + lines);
+        var day = (TranslatableContents) lines.get(0).getContents();
+        context.assertTrue(day.getKey().equals("tooltip.meridian_brewing." + suffix)
+                && List.of(day.getArgs()).equals(arguments), "第 " + age + " 天的提示不对：" + day);
     }
 
     private static void assertTooltip(GameTestHelper context, Block block, List<String> suffixes) {
