@@ -9,7 +9,8 @@
       "dev.kizuna.meridian.brewing.clienttest.BrewingModelsClientTest",
       "dev.kizuna.meridian.brewing.clienttest.WitchHutClientTest",
       "dev.kizuna.meridian.brewing.clienttest.BrewStructureClientTest",
-      "dev.kizuna.meridian.brewing.clienttest.BrewLoreClientTest"
+      "dev.kizuna.meridian.brewing.clienttest.BrewLoreClientTest",
+      "dev.kizuna.meridian.brewing.clienttest.WitchCastClientTest"
     ]
   },
   "depends": {"fabric-api": "*", "meridian_brewing": "*", "meridian_brewing_client": "*"}

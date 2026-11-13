@@ -515,7 +515,8 @@ public final class BrewingPlayFixGameTest {
     }
 
     /** 走类人仓的正式生成命令，按档位生出有身体的女巫。 */
-    private static Witch spawnWitch(GameTestHelper context, String tier, BlockPos relative) {
+    static Witch spawnWitch(GameTestHelper context, String tier, BlockPos relative) {
+        // 走正式生成命令按档位生出一只女巫并关掉它自己的 AI，用例自己决定它什么时候放什么。
         ServerLevel level = context.getLevel();
         Vec3 position = context.absoluteVec(Vec3.atBottomCenterOf(relative));
         CommandSourceStack source = level.getServer().createCommandSourceStack()

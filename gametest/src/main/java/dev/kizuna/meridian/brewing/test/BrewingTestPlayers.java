@@ -19,6 +19,7 @@ import dev.kizuna.meridian.brewing.fabric.BrewLore;
 import dev.kizuna.meridian.brewing.server.BrewKind;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.util.ARGB;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -30,6 +31,7 @@ import net.minecraft.world.level.GameType;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.network.protocol.common.ClientboundKeepAlivePacket;
 import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
+import net.minecraft.core.particles.ColorParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
 import net.minecraft.network.protocol.game.ClientboundSoundPacket;
@@ -45,6 +47,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.Map;
 import java.util.UUID;
+import net.minecraft.world.phys.Vec3;
 
 /** 真实玩家登录与身体绑定，只用内存连接替代网络传输。 */
 public final class BrewingTestPlayers {
@@ -58,6 +61,8 @@ public final class BrewingTestPlayers {
     private static final Map<UUID, List<OverlaySent>> OVERLAYS = new HashMap<>();
     private static final Map<UUID, List<String>> LORE_OPENED = new HashMap<>();
     private static final Map<UUID, Integer> MARKER_PARTICLES = new HashMap<>();
+    private static final Map<UUID, List<PotionParticleSent>> POTION_PARTICLES = new HashMap<>();
+    private static final float CHANNEL_MAX = 255;
     private static final List<Identifier> CHANNELS = List.of(
             Identifier.parse("meridian:body_view"),
             Identifier.parse("meridian:gathering_response"),
@@ -96,6 +101,7 @@ public final class BrewingTestPlayers {
         ANIMATIONS.put(profile.id(), new ArrayList<>());
         OVERLAYS.put(profile.id(), new ArrayList<>());
         LORE_OPENED.put(profile.id(), new ArrayList<>());
+        POTION_PARTICLES.put(profile.id(), new ArrayList<>());
         TestPlayers.logIn(player, connection);
         BlockPos position = context.absolutePos(new BlockPos(1, HEIGHT, 1));
         player.setPos(position.getX(), position.getY(), position.getZ());
@@ -139,6 +145,11 @@ public final class BrewingTestPlayers {
             if (packet instanceof ClientboundLevelParticlesPacket particles
                     && particles.getParticle().getType() == ParticleTypes.BLOCK_MARKER) {
                 MARKER_PARTICLES.merge(listener.player.getUUID(), 1, Integer::sum);
+            }
+            if (packet instanceof ClientboundLevelParticlesPacket particles
+                    && particles.getParticle() instanceof ColorParticleOption color
+                    && color.getType() == ParticleTypes.ENTITY_EFFECT) {
+                POTION_PARTICLES.get(listener.player.getUUID()).add(potionParticle(listener.player, particles, color));
             }
             if (packet instanceof ClientboundSystemChatPacket chat && chat.overlay()) {
                 OVERLAYS.get(listener.player.getUUID()).add(new OverlaySent(
@@ -230,6 +241,25 @@ public final class BrewingTestPlayers {
         return MARKER_PARTICLES.getOrDefault(player.getUUID(), 0);
     }
 
+    /** 发给这个玩家的一个药水色粒子包：哪个 tick、什么颜色（0xRRGGBB）、多透明、几颗、在哪。 */
+    public record PotionParticleSent(long tick, int rgb, float alpha, int count, Vec3 position) { }
+
+    public static List<PotionParticleSent> potionParticles(ServerPlayer player) {
+        // 捕获真正发给客户端的原版药水粒子包，颜色按客户端解出的通道还原。
+        return List.copyOf(POTION_PARTICLES.getOrDefault(player.getUUID(), List.of()));
+    }
+
+    private static PotionParticleSent potionParticle(ServerPlayer viewer, ClientboundLevelParticlesPacket packet,
+                                                     ColorParticleOption color) {
+        // 通道是 0–1 的浮点，四舍五入回 8 位再拼成不带透明度的 RGB，和药种的颜色常量直接比。
+        int red = Math.round(color.getRed() * CHANNEL_MAX);
+        int green = Math.round(color.getGreen() * CHANNEL_MAX);
+        int blue = Math.round(color.getBlue() * CHANNEL_MAX);
+        int rgb = ARGB.transparent(ARGB.color(red, green, blue));
+        var position = new Vec3(packet.getX(), packet.getY(), packet.getZ());
+        return new PotionParticleSent(viewer.level().getGameTime(), rgb, color.getAlpha(), packet.getCount(), position);
+    }
+
     public static List<OverlaySent> overlays(ServerPlayer player) {
         // 捕获真正发给客户端的动作栏包，核对发给谁、多久一次、用的哪些语言键。
         return List.copyOf(OVERLAYS.getOrDefault(player.getUUID(), List.of()));
@@ -278,6 +308,23 @@ public final class BrewingTestPlayers {
         // 其他场地的假玩家也可能在追踪范围内，按动作所属玩家筛出这一位的包。
         return ANIMATIONS.getOrDefault(viewer.getUUID(), List.of()).stream()
                 .filter(sent -> sent.playerUuid().equals(target.getStringUUID())).toList();
+    }
+
+    public static List<Boolean> playsAndStops(ServerPlayer player, String clip) {
+        // 这个玩家收到的、关于自己这一段的 PA 包按发包先后排：播放记 true、停止记 false。
+        return animations(player).stream()
+                .filter(sent -> sent.animationId().equals(clip))
+                .map(AnimationSent::play)
+                .toList();
+    }
+
+    public static void assertPlayedOnceThenStopped(GameTestHelper context, ServerPlayer player, String clip) {
+        // 只在开头播过一次，之后至少一个停止、不再重播。剪辑长度等于施放全长，PA 播完自然到期和
+        // 目录收势结束各发一个 STOP，同一 tick 里谁先谁后不固定，所以停止可能是一个也可能是两个。
+        List<Boolean> actions = playsAndStops(player, clip);
+        boolean playedOnlyFirst = actions.lastIndexOf(Boolean.TRUE) == 0;
+        boolean stoppedAfter = actions.size() > 1;
+        context.assertTrue(playedOnlyFirst && stoppedAfter, clip + " 没有播一次后停下：" + actions);
     }
 
     private static void recordAnimation(ServerPlayer viewer, AnimationPackets.Payload payload) {
@@ -335,5 +382,6 @@ public final class BrewingTestPlayers {
         OVERLAYS.remove(player.getUUID());
         LORE_OPENED.remove(player.getUUID());
         MARKER_PARTICLES.remove(player.getUUID());
+        POTION_PARTICLES.remove(player.getUUID());
     }
 }

@@ -22,6 +22,8 @@ dependencies {
     implementation 'dev.kizuna.meridian:fabric'
     // 切药、开刃测试解析真实发出的 PA 播放包。
     implementation 'dev.kizuna:kizuna-players-animation'
+    // 女巫施放的动作测试读 PA 生物附属里登记着的播放。
+    implementation 'dev.kizuna:kizuna-players-animation-mobs-addon'
     // 重量测试读 BS3D 的物品元数据。
     implementation 'dev.kizuna.backpack3d:server'
 }

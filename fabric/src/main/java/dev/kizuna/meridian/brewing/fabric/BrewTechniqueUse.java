@@ -29,6 +29,7 @@ import net.minecraft.world.phys.Vec3;
 /** 功法用药只在效果边界消耗真实药瓶，准备声音不改变库存。 */
 final class BrewTechniqueUse {
     private static final String PROCESSOR = "meridian_brewing:use_brew";
+    private static final String ANOINT_START = "meridian_brewing:anoint_start";
     private static final double HALF_ANGLE = 2;
     private static final Set<EffectKey> handled = new HashSet<>();
     private static final Map<CastKey, BrewPartGroup> anointGroups = new HashMap<>();
@@ -43,6 +44,9 @@ final class BrewTechniqueUse {
         UseBrew use = intent.getUseBrew();
         if (intent.hasLaunchProjectile()) {
             use = intent.getLaunchProjectile().getProjectile().getBrew();
+        }
+        if (ANOINT_START.equals(use.getProcessorId())) {
+            return startAnoint(server, event);
         }
         if (!PROCESSOR.equals(use.getProcessorId()) || !use.hasTechnique()) {
             return EffectHandling.notApplicable();
@@ -65,6 +69,27 @@ final class BrewTechniqueUse {
             handled.add(key);
         }
         return result;
+    }
+
+    private static EffectHandling startAnoint(MinecraftServer server, TechniqueEffectEvent event) {
+        // 敷药起手这一刻按伤势定组，播两臂或两腿那段动作；后面的揉搓声和药效都照这一组走。
+        LivingEntity actor = actor(server, event.entityUuid());
+        if (actor == null) {
+            return EffectHandling.rejected("施药者不在当前服务器");
+        }
+        var cast = new CastKey(event.entityUuid(), event.intent().getCastId());
+        if (anointGroups.containsKey(cast)) {
+            return EffectHandling.handled();
+        }
+        BrewPartGroup group = anointGroup(actor);
+        anointGroups.put(cast, group);
+        BrewCastAnimations.startAnoint(actor, group, event.intent());
+        return EffectHandling.handled();
+    }
+
+    private static BrewPartGroup anointGroup(LivingEntity actor) {
+        // 两臂、两腿哪组伤得重就敷哪组。
+        return BrewPartSelection.anointGroup(BrewBodyHost.inspect(actor).orElseThrow().body());
     }
 
     private static String validate(ItemStack stack, LivingEntity actor, UseBrew use, TechniqueEffectEvent event) {
@@ -101,11 +126,10 @@ final class BrewTechniqueUse {
 
     private static EffectHandling execute(LivingEntity actor, ItemStack stack, UseBrew use,
                                            TechniqueEffectEvent event, CastKey cast) {
-        // 敷药动作先固定伤势分组，后续声音与药封使用同一组。
+        // 敷药分组通常在起手已定；目录没写起手那条时在这里补定，后续声音与药封使用同一组。
         BrewUseMethod method = use.getTechnique().getMethod();
         if (method == BrewUseMethod.ANOINT) {
-            anointGroups.computeIfAbsent(cast,
-                    ignored -> BrewPartSelection.anointGroup(BrewBodyHost.inspect(actor).orElseThrow().body()));
+            anointGroups.computeIfAbsent(cast, ignored -> anointGroup(actor));
         }
         if (use.hasPreparationSound()) {
             if (anointGroups.get(cast) == use.getSoundGroup()) {
@@ -124,8 +148,21 @@ final class BrewTechniqueUse {
                     event.intent().getTargetId());
             default -> { return EffectHandling.rejected("不支持的功法用药方式"); }
         }
+        particles(actor, kind, use);
         consume(actor, stack, method);
         return EffectHandling.handled();
+    }
+
+    private static void particles(LivingEntity actor, BrewKind kind, UseBrew use) {
+        // 药真正用出去这一刻冒本色粒子：服、敷身上一圈，泼一片扇面，噀一道药雾，掷在出手处。
+        var parameters = use.getTechnique();
+        switch (parameters.getMethod()) {
+            case DRINK, ANOINT -> BrewCastParticles.ring(actor, kind);
+            case FAN -> BrewCastParticles.fan(actor, kind, parameters.getRange().getValue(),
+                    parameters.getFanAngle().getValue());
+            case MIST -> BrewCastParticles.mist(actor, kind);
+            case THROW -> BrewCastParticles.release(actor, kind);
+        }
     }
 
     private static void self(LivingEntity actor, SelfDose dose, BrewUseMethod method, CastKey cast) {
@@ -224,17 +261,23 @@ final class BrewTechniqueUse {
         return null;
     }
 
-    static void end(UUID actor, String castId) {
-        // 结束只清施放幂等，已射出药瓶与已下残药继续按各自生命周期运行。
-        var cast = new CastKey(actor, castId);
+    static void end(MinecraftServer server, UUID actorId, String castId) {
+        // 结束清施放幂等、停掉起手播的敷药动作；已射出药瓶与已下残药继续按各自生命周期运行。
+        var cast = new CastKey(actorId, castId);
         handled.removeIf(key -> key.cast().equals(cast));
         anointGroups.remove(cast);
+        LivingEntity actor = null;
+        if (server != null) {
+            actor = actor(server, actorId);
+        }
+        BrewCastAnimations.end(actor, actorId, castId);
     }
 
     static void clear() {
         // 停服释放未结束动作缓存。
         handled.clear();
         anointGroups.clear();
+        BrewCastAnimations.clear();
     }
 
     private record CastKey(UUID actor, String cast) { }

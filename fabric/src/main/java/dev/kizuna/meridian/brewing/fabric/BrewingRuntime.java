@@ -132,7 +132,7 @@ public final class BrewingRuntime {
             active.cauldron().interruptTechniqueBrew();
         }
         handledEffects.remove(key);
-        BrewTechniqueUse.end(event.entityUuid(), event.castId());
+        BrewTechniqueUse.end(activeServer, event.entityUuid(), event.castId());
     }
 
     private static void tickSounds() {

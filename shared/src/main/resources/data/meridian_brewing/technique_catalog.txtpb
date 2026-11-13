@@ -25,6 +25,8 @@ definitions {
   allow_off_hand_use_while_casting: true
   off_hand_use_block_tags: "meridian_brewing:brew_cauldrons"
   off_hand_use_block_tags: "meridian_brewing:brew_fires"
+  # 熬药整段 32 秒的动作；熬的时候副手每下一次料，炼药另叠一段左臂的下料动作。
+  effects { at_millis: 0 presentation { id: "meridian_brewing:witch_brew" duration: UNTIL_RECOVERY_END start_millis: 0 } }
   effects {
     at_millis: 1000
     block_work {

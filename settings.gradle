@@ -33,6 +33,8 @@ kizunaWorkspace.includeSource('bs3d', [
 ])
 // 药刀开刃、切药经 PA 播放，药刀物品定义用 PA 的 item_state 数值属性；Human 也组合 PA，坐标相同。
 kizunaWorkspace.includeSource('players-animation', ['': 'dev.kizuna:kizuna-players-animation'])
+// 女巫敷药按选中的部位组播两臂或两腿那段，生物这边经 PA 的生物附属同步。
+kizunaWorkspace.includeSource('players-animation-mobs', ['': 'dev.kizuna:kizuna-players-animation-mobs-addon'])
 kizunaWorkspace.includeSource('human', [
         fabric: 'dev.kizuna.meridian.human:fabric',
         server: 'dev.kizuna.meridian.human:server',

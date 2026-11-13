@@ -156,6 +156,9 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
             return InteractionResult.SUCCESS;
         }
         applyAcceptedUse(player, hand, stack);
+        if (controlledByCaster && player instanceof ServerPlayer caster) {
+            BrewCastAnimations.feedOffHand(caster);
+        }
         BrewTexts.sendOverlay(player, result.message());
         setChanged();
         return InteractionResult.SUCCESS;

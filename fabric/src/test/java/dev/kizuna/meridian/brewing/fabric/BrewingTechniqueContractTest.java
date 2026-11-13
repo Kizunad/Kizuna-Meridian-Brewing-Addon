@@ -20,8 +20,7 @@ public class BrewingTechniqueContractTest {
         // 加载实际资源而非复制其时长，证明启动检查覆盖目录与规则之间的重复声明。
         TechniqueDefinition definition = definition();
         BrewingTechniqueContract.validate(definition);
-        TechniqueEffect effect = definition.getEffects(0);
-        BlockWork work = effect.getBlockWork();
+        BlockWork work = definition.getEffects(blockWorkIndex(definition)).getBlockWork();
         BlockWork wrongDuration = work.toBuilder().setDurationMillis(work.getDurationMillis() - 1).build();
         BlockWork wrongInterval = work.toBuilder().setIntervalMillis(work.getIntervalMillis() + 1).build();
         assertThrows(IllegalArgumentException.class,
@@ -35,8 +34,19 @@ public class BrewingTechniqueContractTest {
 
     private static TechniqueDefinition withWork(TechniqueDefinition definition, BlockWork work) {
         // 保留其余生产声明，只改变一项周期契约。
-        TechniqueEffect effect = definition.getEffects(0).toBuilder().setBlockWork(work).build();
-        return definition.toBuilder().setEffects(0, effect).build();
+        int index = blockWorkIndex(definition);
+        TechniqueEffect effect = definition.getEffects(index).toBuilder().setBlockWork(work).build();
+        return definition.toBuilder().setEffects(index, effect).build();
+    }
+
+    private static int blockWorkIndex(TechniqueDefinition definition) {
+        // 目录里第一条是熬药动作的表现效果，搅药周期按类型找，不按位置猜。
+        for (int index = 0; index < definition.getEffectsCount(); index++) {
+            if (definition.getEffects(index).hasBlockWork()) {
+                return index;
+            }
+        }
+        throw new AssertionError("熬药式没有 block_work 声明");
     }
 
     private static TechniqueDefinition definition() throws Exception {

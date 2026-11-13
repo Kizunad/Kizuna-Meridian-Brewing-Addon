@@ -67,6 +67,10 @@ public final class BrewingCastGameTest {
     private static final String MESSAGE = "message.meridian_brewing.";
     private static final String PROGRESS_LINE_KEY = MESSAGE + "progress.remaining";
     private static final double QI_DELTA = 1e-6;
+    private static final String BREW_CLIP = "witch_brew";
+    private static final String FEED_CLIP = "witch_brew_feed_off";
+    // 副手往釜里投一次料、给火加一次炭、拨一次灰，三下都成功。
+    private static final long OFF_HAND_FEEDS = 3;
 
     @GameTest(maxTicks = SHORT_TIMEOUT, structure = BrewSites.LV2_SITE)
     public void realCastRejectsIncompleteStructureWithReason(GameTestHelper context) {
@@ -94,11 +98,17 @@ public final class BrewingCastGameTest {
         cast(context, fixture);
         context.runAfterDelay(STARTED_TICK, () -> {
             assertBrewing(context, fixture);
+            assertClip(context, fixture.player(), BREW_CLIP, List.of(Boolean.TRUE));
             BrewingC4cGameTest.assertOffHandOperations(context, fixture.player(), fixture.cauldron(),
                     context.getLevel(), fixture.pos());
             fixture.player().setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.STICK));
         });
         context.runAfterDelay(BREWED_TICK, () -> {
+            // 假玩家下一 tick 开头才把收到的包记下来，副手三下叠的下料动作到这时一定都进了记录。
+            long feeds = BrewingTestPlayers.playsAndStops(fixture.player(), FEED_CLIP).stream()
+                    .filter(Boolean.TRUE::equals)
+                    .count();
+            context.assertTrue(feeds == OFF_HAND_FEEDS, "副手每成功一下该叠一段下料动作：" + feeds);
             context.assertTrue(fixture.cauldron().cauldron().state() == BrewCauldronState.BREWED,
                     "31 秒时巫釜没有熬成");
             context.assertTrue(fixture.cauldron().cauldron().brewElapsedSeconds() == BrewCauldron.BREW_SECONDS,
@@ -110,6 +120,7 @@ public final class BrewingCastGameTest {
         });
         context.runAfterDelay(FINISHED_TICK, () -> {
             ended(context, fixture, TechniqueCastEndReason.COMPLETED);
+            BrewingTestPlayers.assertPlayedOnceThenStopped(context, fixture.player(), BREW_CLIP);
             Set<String> brewedKeys = new HashSet<>();
             BrewingTestPlayers.overlays(fixture.player())
                     .forEach(line -> brewedKeys.addAll(BrewingTestPlayers.translationKeys(line.text())));
@@ -341,6 +352,12 @@ public final class BrewingCastGameTest {
         CastOutcome outcome = TechniqueFabric.service().cast(player.getUUID(), request);
         context.assertTrue(outcome.getFailure() == TechniqueFailure.TECHNIQUE_FAILURE_UNSPECIFIED,
                 "正式起手失败：" + outcome.getReason());
+    }
+
+    private static void assertClip(GameTestHelper context, ServerPlayer player, String clip, List<Boolean> expected) {
+        // 播放记 true、停止记 false：熬药那段起手就播，熬的途中不停也不重播。
+        List<Boolean> actions = BrewingTestPlayers.playsAndStops(player, clip);
+        context.assertTrue(actions.equals(expected), clip + " 的播停序列不符：期望 " + expected + "，收到 " + actions);
     }
 
     private static void assertBrewing(GameTestHelper context, Fixture fixture) {

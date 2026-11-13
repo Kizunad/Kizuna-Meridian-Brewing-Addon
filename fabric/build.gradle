@@ -16,8 +16,10 @@ dependencies {
     implementation 'dev.kizuna.meridian.technique:fabric'
     implementation 'dev.kizuna.meridian.technique:server'
     implementation 'dev.kizuna.meridian.technique:shared'
-    // 药刀开刃、切药由服务端经 PA 播放；PA 是硬依赖。
+    // 药刀开刃、切药、敷药、副手下料由服务端经 PA 播放；PA 是硬依赖。
     implementation 'dev.kizuna:kizuna-players-animation'
+    // 女巫敷药的动作经 PA 的生物附属播放；生物附属是硬依赖。
+    implementation 'dev.kizuna:kizuna-players-animation-mobs-addon'
     // 物品重量登记在 BS3D 的物品元数据里，由负重附属读取；BS3D 是硬依赖。
     implementation 'dev.kizuna.backpack3d:server'
     include project(':server')

@@ -241,6 +241,11 @@ final class Stage {
         settle();
     }
 
+    void cameraNow(CameraType type) {
+        // 只换镜头不等 tick：同一 tick 里从两个角度各拍一张，动作和粒子都停在同一时刻。
+        context.runOnClient(client -> client.options.setCameraType(type));
+    }
+
     int fov(int degrees) {
         // 返回原视野，拍完换回。
         int previous = context.computeOnClient(client -> client.options.fov().get());

@@ -74,7 +74,7 @@ public final class BrewFireBlockEntity extends BlockEntity implements WorldlyCon
     }
 
     public InteractionResult use(Player player, InteractionHand hand) {
-        // 活动熬药先走受限副手入口，普通交互只在规则接受后消费物品。
+        // 活动熬药先走受限副手入口，成功一次叠一段副手下料动作；普通交互只在规则接受后消费物品。
         if (level == null || level.isClientSide()) {
             return InteractionResult.SUCCESS;
         }
@@ -83,7 +83,9 @@ public final class BrewFireBlockEntity extends BlockEntity implements WorldlyCon
                     serverPlayer, hand, worldPosition);
             if (techniqueResult.isPresent()) {
                 BrewActionResult result = techniqueResult.orElseThrow();
-                if (!result.accepted()) {
+                if (result.accepted()) {
+                    BrewCastAnimations.feedOffHand(serverPlayer);
+                } else {
                     BrewTexts.sendOverlay(player, result.message());
                 }
                 return InteractionResult.SUCCESS;

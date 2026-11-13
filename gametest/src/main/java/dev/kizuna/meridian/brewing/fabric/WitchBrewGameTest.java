@@ -29,6 +29,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -377,10 +378,10 @@ public final class WitchBrewGameTest {
         player.setItemInHand(InteractionHand.MAIN_HAND, BrewItemStacks.create(kind, quality, use));
     }
 
-    private static void wound(ServerPlayer player, String part) {
-        // 真实身体伤势用于比较敷药部位和治疗量。
-        VanillaDamageFabric.damageDirect(new VanillaDamageFabric.DirectDamage(player,
-                player.damageSources().generic(), part, WOUND)).orElseThrow();
+    static void wound(LivingEntity entity, String part) {
+        // 真实身体伤势用于比较敷药部位和治疗量；玩家和女巫走同一个伤害入口。
+        VanillaDamageFabric.damageDirect(new VanillaDamageFabric.DirectDamage(entity,
+                entity.damageSources().generic(), part, WOUND)).orElseThrow();
     }
 
     static Villager target(GameTestHelper context, ServerPlayer player, double x, double z) {
