@@ -24,6 +24,8 @@ dependencies {
     compileOnly project(':fabric')
     compileOnly project(':server')
     testImplementation libs.junit4
+    // 窗口取数逻辑的测试要用服务端的药方表和药塔开工清单。
+    testImplementation project(':server')
 }
 test {
     useJUnit()

@@ -156,11 +156,36 @@ public final class BrewStructureClientTest implements FabricClientGameTest {
         context.getInput().setCursorPos(0, 0);
         stage.settle();
         windowShot(context, stage, "struct_06_lv3_window_needs");
+        mixedTable(context, stage);
         Vec2 unlearned = tileCursor(context, BrewKind.INSECT_LURE);
         context.getInput().setCursorPos(unlearned.x, unlearned.y);
         stage.settle();
         windowShot(context, stage, "struct_07_lv3_unlearned_tooltip");
         context.getInput().setCursorPos(0, 0);
+    }
+
+    private static void mixedTable(ClientGameTestContext context, Stage stage) {
+        // 整数表逐项同步，新旧会混着到：缺料掩码全亮（含上一张泼型药方才有的「缺火药」）、选中的换成只能喝的聚气汤，
+        // 窗口照样得画出来（2026-11-13 试玩时在这里崩过）。拍完把两项放回去，后面的截图不受影响。
+        int allNeeds = (1 << TowerNeed.values().length) - 1;
+        int[] synced = context.computeOnClient(client -> {
+            var menu = (BrewTowerMenu) ((AbstractContainerScreen<?>) client.gui.screen()).getMenu();
+            int[] before = {menu.data(BrewTowerMenu.DATA_NEEDS), menu.data(BrewTowerMenu.DATA_SELECTED)};
+            menu.setData(BrewTowerMenu.DATA_NEEDS, allNeeds);
+            menu.setData(BrewTowerMenu.DATA_SELECTED, BrewKind.QI_GATHER.ordinal());
+            return before;
+        });
+        stage.settle();
+        windowShot(context, stage, "struct_06b_lv3_window_mixed_table");
+        context.runOnClient(client -> {
+            if (!towerOpen(client)) {
+                throw new AssertionError("整数表新旧混着时药塔窗口没撑住");
+            }
+            var menu = (BrewTowerMenu) ((AbstractContainerScreen<?>) client.gui.screen()).getMenu();
+            menu.setData(BrewTowerMenu.DATA_NEEDS, synced[0]);
+            menu.setData(BrewTowerMenu.DATA_SELECTED, synced[1]);
+        });
+        stage.settle();
     }
 
     private static void towerBrewing(ClientGameTestContext context, Stage stage) {

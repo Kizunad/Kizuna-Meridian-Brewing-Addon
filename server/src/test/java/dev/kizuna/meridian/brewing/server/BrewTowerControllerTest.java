@@ -255,6 +255,46 @@ public final class BrewTowerControllerTest {
     }
 
     /** 假塔：木桶是一张物品表，铜箱子只数格子；环境真元估计有 {@code ambientStock}，每次最多给 {@code rate}。 */
+    @Test
+    public void changingTheRecipeDropsNeedsCheckedForThePreviousOne() {
+        // 泼型的枯竭药水缺火药；换成只能喝的聚气汤后，窗口当场读到的缺料不能还挂着火药（2026-11-13 窗口崩溃）。
+        var world = FakeTower.stockedFor(BrewKind.QI_GATHER, 1);
+        var tower = new BrewTowerController(FINE_CAP, QI);
+        tower.select(BrewKind.DEPLETION, CHOOSER);
+        tower.second(world);
+        assertTrue(tower.needs().containsKey(TowerNeed.PROPELLANT));
+        tower.select(BrewKind.QI_GATHER, CHOOSER);
+        assertNeedsBelongToTheSelection(tower);
+        tower.second(world);
+        assertEquals("聚气汤的料齐了该开工", TowerPhase.SOAKING, tower.phase());
+    }
+
+    @Test
+    public void changingTheFormDropsNeedsCheckedForThePreviousOne() {
+        // 苦黄膏喝、泼都行：选泼缺火药，改成喝以后不再要火药。
+        var world = FakeTower.stockedFor(BrewKind.BITTER_YELLOW, 1);
+        var tower = new BrewTowerController(FINE_CAP, QI);
+        tower.chooseForm(BrewForm.SPLASH);
+        tower.select(BrewKind.BITTER_YELLOW, CHOOSER);
+        tower.second(world);
+        assertEquals(Set.of(TowerNeed.PROPELLANT), tower.needs().keySet());
+        tower.chooseForm(BrewForm.DRINK);
+        assertNeedsBelongToTheSelection(tower);
+    }
+
+    private static void assertNeedsBelongToTheSelection(BrewTowerController tower) {
+        // 没开工时在等的料，每一样都得在现在这张药方、这个形态的开工清单里。
+        BrewRecipe recipe = BrewRecipes.require(tower.selected().orElseThrow());
+        Set<TowerNeed> listed = new HashSet<>(Set.of(TowerNeed.CHEST, TowerNeed.FUEL, TowerNeed.FIRE_STARTER,
+                TowerNeed.AMBIENT_QI));
+        for (BrewTowerController.Requirement requirement : BrewTowerController.requirements(recipe, tower.form())) {
+            listed.add(requirement.need());
+        }
+        for (TowerNeed need : tower.needs().keySet()) {
+            assertTrue("还挂着上一张药方的缺料：" + need, listed.contains(need));
+        }
+    }
+
     private static final class FakeTower implements TowerWorld {
         private final Map<String, Integer> stock = new LinkedHashMap<>();
         private final List<Delivered> potions = new ArrayList<>();

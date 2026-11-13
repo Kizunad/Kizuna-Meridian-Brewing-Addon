@@ -27,6 +27,9 @@ public final class BrewTowerController {
     public static final int SETS_PER_BATCH = 2;
     public static final String GLASS_BOTTLE_ID = "minecraft:glass_bottle";
     private static final int BOTTLES = VesselKind.TOWER.waterCapacity();
+    /** 开工前要在木桶里查的料，按查的顺序。 */
+    private static final List<TowerNeed> STOCKED_NEEDS = List.of(TowerNeed.PRIMARY, TowerNeed.BASE,
+            TowerNeed.PROPELLANT, TowerNeed.ACCESSORY, TowerNeed.GLASS);
     private static final List<String> SOUL_STARTERS = List.of("minecraft:soul_sand", "minecraft:soul_soil");
     private static final List<String> SUN_STARTERS = List.of("minecraft:sand");
     /** 开熬以后才下锅的两味：取的时候容器已经还了，所以退料时算用掉，不退（复审第 5 条）。 */
@@ -109,6 +112,9 @@ public final class BrewTowerController {
         if (kind == null || chooser == null) {
             throw new IllegalArgumentException("选药方要给药方和选的人");
         }
+        if (kind != selected) {
+            dropStartNeeds();
+        }
         selected = kind;
         this.chooser = chooser;
         armed = true;
@@ -119,7 +125,18 @@ public final class BrewTowerController {
         if (chosen == null) {
             throw new IllegalArgumentException("形态不能为空");
         }
+        if (chosen != form) {
+            dropStartNeeds();
+        }
         form = chosen;
+    }
+
+    private void dropStartNeeds() {
+        // 没开工时在等的料是按上一张药方、上一个形态查的，换了就不作数，下一秒按新的重查；
+        // 窗口这一秒里不能还读到上一张药方的缺料。开了工以后等的是这一批的燃料、真元、箱子和瓶子，和选什么无关。
+        if (phase == TowerPhase.IDLE) {
+            needs.clear();
+        }
     }
 
     /** 收完一批接着开下一批。 */
@@ -347,20 +364,33 @@ public final class BrewTowerController {
         ambientProblem(world).ifPresent(problem -> needs.put(TowerNeed.AMBIENT_QI, problem));
     }
 
-    /** 开工时木桶里要有的东西；{@code chosen} 是窗口里选的形态，只能喝或只能泼的药方不看它。窗口显示缺料也用这张表。 */
+    /** 开工时木桶里要有的东西；{@code chosen} 是窗口里选的形态，只能喝或只能泼的药方不看它。 */
     public static List<Requirement> requirements(BrewRecipe recipe, BrewForm chosen) {
         // 两套主料、底料、泼型的火药、辅料，以及收药用的玻璃瓶；引药缺了照熬，只是少分。
-        IngredientPlan plan = recipe.ingredients();
+        boolean splash = formFor(recipe.kind(), chosen) == BrewForm.SPLASH;
         var required = new ArrayList<Requirement>();
-        required.add(new Requirement(TowerNeed.PRIMARY, plan.preparedPrimary(), SETS_PER_BATCH));
-        required.add(new Requirement(TowerNeed.BASE, BrewCauldron.BASE_INGREDIENT_ID, SETS_PER_BATCH));
-        if (formFor(recipe.kind(), chosen) == BrewForm.SPLASH) {
-            required.add(new Requirement(TowerNeed.PROPELLANT, BrewCauldron.PROPELLANT_INGREDIENT_ID,
-                    SETS_PER_BATCH));
+        for (TowerNeed need : STOCKED_NEEDS) {
+            if (need != TowerNeed.PROPELLANT || splash) {
+                required.add(stocked(recipe, need).orElseThrow());
+            }
         }
-        required.add(new Requirement(TowerNeed.ACCESSORY, plan.accessory(), SETS_PER_BATCH));
-        required.add(new Requirement(TowerNeed.GLASS, GLASS_BOTTLE_ID, BOTTLES));
         return required;
+    }
+
+    /**
+     * 木桶里的这一样料是什么、一批要几件，不看形态；不是木桶里的料（箱子、燃料、火种、真元）返回空。
+     * 窗口画缺料图标用这张表：缺料掩码和选中的药方、形态是分开同步的，可能对不上，所以每一样都要单独查得到。
+     */
+    public static Optional<Requirement> stocked(BrewRecipe recipe, TowerNeed need) {
+        IngredientPlan plan = recipe.ingredients();
+        return switch (need) {
+            case PRIMARY -> Optional.of(new Requirement(need, plan.preparedPrimary(), SETS_PER_BATCH));
+            case BASE -> Optional.of(new Requirement(need, BrewCauldron.BASE_INGREDIENT_ID, SETS_PER_BATCH));
+            case PROPELLANT -> Optional.of(new Requirement(need, BrewCauldron.PROPELLANT_INGREDIENT_ID, SETS_PER_BATCH));
+            case ACCESSORY -> Optional.of(new Requirement(need, plan.accessory(), SETS_PER_BATCH));
+            case GLASS -> Optional.of(new Requirement(need, GLASS_BOTTLE_ID, BOTTLES));
+            case CHEST, FUEL, FIRE_STARTER, AMBIENT_QI -> Optional.empty();
+        };
     }
 
     private void startBatch(TowerWorld world) {

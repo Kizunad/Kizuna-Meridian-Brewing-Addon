@@ -10,7 +10,6 @@ import dev.kizuna.meridian.brewing.server.BrewRecipes;
 import dev.kizuna.meridian.brewing.server.BrewTowerController;
 import dev.kizuna.meridian.brewing.server.FireKind;
 import dev.kizuna.meridian.brewing.server.HeatBand;
-import dev.kizuna.meridian.brewing.server.TowerNeed;
 import dev.kizuna.meridian.brewing.server.TowerPhase;
 import dev.kizuna.meridian.brewing.server.TowerStatus;
 import dev.kizuna.meridian.brewing.server.VesselKind;
@@ -37,7 +36,8 @@ import net.minecraft.world.item.Items;
  * 再往下是状态、温度条、火、燃料、进度、铜箱子和真元，最后一行是开工还缺的东西。
  *
  * <p>内容全部来自 {@link BrewTowerMenu} 的整数表，按钮只发原版 {@code clickMenuButton} 的编号；没学会的药方
- * 在这里点不了只是提示，服务端照样会拒。缺料一行按 {@link BrewTowerController#requirements} 同一张表画。
+ * 在这里点不了只是提示，服务端照样会拒。整数表是逐项同步的，怎么读见 {@link BrewTowerReadout}；
+ * 缺料一行按 {@link BrewTowerController#stocked} 那张表画。
  * 底板照原版容器的灰色画法，不用自制贴图（ui-neutral-chrome）。</p>
  */
 final class BrewTowerScreen extends AbstractContainerScreen<BrewTowerMenu> {
@@ -45,7 +45,6 @@ final class BrewTowerScreen extends AbstractContainerScreen<BrewTowerMenu> {
     private static final TowerStatus[] STATUSES = TowerStatus.values();
     private static final BrewForm[] FORMS = BrewForm.values();
     private static final FireKind[] FIRES = FireKind.values();
-    private static final TowerNeed[] NEEDS = TowerNeed.values();
     private static final String KEY = "screen.meridian_brewing.tower.";
     private static final String MESSAGE = "message.meridian_brewing.";
     private static final Identifier TILE = Identifier.withDefaultNamespace("container/stonecutter/recipe");
@@ -208,7 +207,7 @@ final class BrewTowerScreen extends AbstractContainerScreen<BrewTowerMenu> {
 
     private void extractStatus(GuiGraphicsExtractor graphics) {
         // 一行一样：状态、温度和火带、温度条、火力和燃料、本批进度、铜箱子和真元。
-        TowerStatus status = STATUSES[menu.data(BrewTowerMenu.DATA_STATUS)];
+        TowerStatus status = BrewTowerReadout.pick(STATUSES, menu.data(BrewTowerMenu.DATA_STATUS));
         Component statusName = Component.translatable(KEY + "status." + status.name().toLowerCase(Locale.ROOT));
         line(graphics, Component.translatable(KEY + "status", statusName), STATUS_Y);
         line(graphics, temperatureLine(), STATUS_Y + LINE_STEP);
@@ -236,7 +235,7 @@ final class BrewTowerScreen extends AbstractContainerScreen<BrewTowerMenu> {
 
     private Component fireLine() {
         // 火力档、火种、火室里点着的燃料还能烧几秒。
-        Component fire = fireName(FIRES[menu.data(BrewTowerMenu.DATA_FIRE)]);
+        Component fire = fireName(BrewTowerReadout.pick(FIRES, menu.data(BrewTowerMenu.DATA_FIRE)));
         return Component.translatable(KEY + "fire", menu.data(BrewTowerMenu.DATA_LEVEL), fire,
                 menu.data(BrewTowerMenu.DATA_FUEL_SECONDS));
     }
@@ -278,32 +277,31 @@ final class BrewTowerScreen extends AbstractContainerScreen<BrewTowerMenu> {
     }
 
     private List<NeedIcon> needIcons() {
-        // 按开工前查的顺序；物品类的从药方表取料名和件数，其余按缺的那一项给图标。
-        int mask = menu.data(BrewTowerMenu.DATA_NEEDS);
+        // 按开工前查的顺序。掩码和选中的药方可能一新一旧，每一样怎么查见 BrewTowerReadout。
         Optional<BrewKind> kind = selected();
-        if (mask == 0 || kind.isEmpty()) {
+        if (kind.isEmpty()) {
             return List.of();
         }
         BrewRecipe recipe = BrewRecipes.require(kind.orElseThrow());
+        int mask = menu.data(BrewTowerMenu.DATA_NEEDS);
         var icons = new ArrayList<NeedIcon>();
-        for (TowerNeed need : NEEDS) {
-            if ((mask & need.bit()) != 0) {
-                icons.add(needIcon(need, recipe));
-            }
+        for (BrewTowerReadout.Shown shown : BrewTowerReadout.shown(mask, menu.data(BrewTowerMenu.DATA_SELECTED))) {
+            needIcon(shown, recipe).ifPresent(icons::add);
         }
         return icons;
     }
 
-    private NeedIcon needIcon(TowerNeed need, BrewRecipe recipe) {
+    private Optional<NeedIcon> needIcon(BrewTowerReadout.Shown shown, BrewRecipe recipe) {
         // 提示文字和服务端写进动作栏的是同一批语言键。
-        return switch (need) {
-            case CHEST -> new NeedIcon(stack(CHEST_ICON, 1),
-                    Component.translatable(MESSAGE + "tower.need.chest", VesselKind.TOWER.waterCapacity()));
-            case FUEL -> new NeedIcon(new ItemStack(Items.COAL_BLOCK),
-                    Component.translatable(MESSAGE + "tower.need.fuel", BrewTowerController.stableLevel(recipe)));
-            case FIRE_STARTER -> starterIcon(recipe.fireKind());
-            case AMBIENT_QI -> new NeedIcon(ItemStack.EMPTY, Component.translatable(KEY + "need.qi_tooltip"));
-            default -> itemIcon(need, recipe);
+        return switch (shown.need()) {
+            case CHEST -> Optional.of(new NeedIcon(stack(CHEST_ICON, 1),
+                    Component.translatable(MESSAGE + "tower.need.chest", VesselKind.TOWER.waterCapacity())));
+            case FUEL -> Optional.of(new NeedIcon(new ItemStack(Items.COAL_BLOCK),
+                    Component.translatable(MESSAGE + "tower.need.fuel", BrewTowerController.stableLevel(recipe))));
+            case FIRE_STARTER -> Optional.of(starterIcon(recipe.fireKind()));
+            case AMBIENT_QI -> Optional.of(
+                    new NeedIcon(ItemStack.EMPTY, Component.translatable(KEY + "need.qi_tooltip")));
+            case PRIMARY, BASE, PROPELLANT, ACCESSORY, GLASS -> shown.item().map(BrewTowerScreen::itemIcon);
         };
     }
 
@@ -314,18 +312,12 @@ final class BrewTowerScreen extends AbstractContainerScreen<BrewTowerMenu> {
         return new NeedIcon(stack(Identifier.parse(first), 1), Component.translatable(key));
     }
 
-    private NeedIcon itemIcon(TowerNeed need, BrewRecipe recipe) {
-        // 主料、底料、火药、辅料、玻璃瓶：药方表里写着件数。
-        BrewForm form = FORMS[menu.data(BrewTowerMenu.DATA_FORM)];
-        for (BrewTowerController.Requirement requirement : BrewTowerController.requirements(recipe, form)) {
-            if (requirement.need() == need) {
-                ItemStack stack = stack(BrewItemStacks.recipeItemId(requirement.itemId()), requirement.count());
-                Component tooltip = Component.translatable(MESSAGE + "tower.need.item", stack.getHoverName(),
-                        requirement.count());
-                return new NeedIcon(stack, tooltip);
-            }
-        }
-        throw new IllegalStateException("药塔缺料项不在药方表里：" + need);
+    private static NeedIcon itemIcon(BrewTowerController.Requirement requirement) {
+        // 主料、底料、火药、辅料、玻璃瓶：料名和件数。
+        ItemStack stack = stack(BrewItemStacks.recipeItemId(requirement.itemId()), requirement.count());
+        Component tooltip = Component.translatable(MESSAGE + "tower.need.item", stack.getHoverName(),
+                requirement.count());
+        return new NeedIcon(stack, tooltip);
     }
 
     private List<Component> tileTooltip(BrewKind kind) {
@@ -376,17 +368,13 @@ final class BrewTowerScreen extends AbstractContainerScreen<BrewTowerMenu> {
 
     private BrewForm shownForm() {
         // 选了药方就按药方能出的形态显示；没选时显示窗口里选的。
-        BrewForm chosen = FORMS[menu.data(BrewTowerMenu.DATA_FORM)];
+        BrewForm chosen = BrewTowerReadout.pick(FORMS, menu.data(BrewTowerMenu.DATA_FORM));
         return selected().map(kind -> BrewTowerController.formFor(kind, chosen)).orElse(chosen);
     }
 
     private Optional<BrewKind> selected() {
         // 没选是 -1。
-        int index = menu.data(BrewTowerMenu.DATA_SELECTED);
-        if (index == NONE) {
-            return Optional.empty();
-        }
-        return Optional.of(KINDS[index]);
+        return BrewTowerReadout.kind(menu.data(BrewTowerMenu.DATA_SELECTED));
     }
 
     private boolean known(BrewKind kind) {
