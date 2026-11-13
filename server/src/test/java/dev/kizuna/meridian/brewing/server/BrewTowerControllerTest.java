@@ -282,6 +282,36 @@ public final class BrewTowerControllerTest {
         assertNeedsBelongToTheSelection(tower);
     }
 
+    @Test
+    public void fuelNeedNamesTheLevelTheTowerIsActuallyWaitingFor() {
+        // 开工前按药方的稳定档数说；开工以后按这一秒实际要烧的档数说（泡料只要 1 档），中途换了药方也还是这一批的。
+        var world = FakeTower.stockedFor(BrewKind.BITTER_YELLOW, 1);
+        world.barrelFuel.clear();
+        var tower = new BrewTowerController(FINE_CAP, QI);
+        tower.select(BrewKind.BITTER_YELLOW, CHOOSER);
+        tower.second(world);
+        int stable = BrewTowerController.stableLevel(BrewRecipes.require(BrewKind.BITTER_YELLOW));
+        assertEquals(stable, tower.fuelWanted());
+        assertEquals(BrewText.message("tower.need.fuel", stable), tower.needs().get(TowerNeed.FUEL));
+        for (int cell = 0; cell < BrewTowerController.FUEL_CELLS; cell++) {
+            world.barrelFuel.add(TowerFuel.COAL_BLOCK);
+        }
+        tower.second(world);
+        tower.second(world);
+        assertEquals(TowerPhase.SOAKING, tower.phase());
+        assertEquals("燃料够时没有在等的档数", 0, tower.fuelWanted());
+        Arrays.fill(world.cells, null);
+        world.barrelFuel.clear();
+        tower.second(world);
+        assertEquals("泡料只要 1 档", 1, tower.fuelWanted());
+        assertEquals(BrewText.message("tower.need.fuel", 1), tower.needs().get(TowerNeed.FUEL));
+        tower.select(BrewKind.DEPLETION, CHOOSER);
+        assertEquals("换了药方，等的还是这一批的档数", 1, tower.fuelWanted());
+        tower.second(world);
+        assertEquals(1, tower.fuelWanted());
+        assertEquals(BrewText.message("tower.need.fuel", 1), tower.needs().get(TowerNeed.FUEL));
+    }
+
     private static void assertNeedsBelongToTheSelection(BrewTowerController tower) {
         // 没开工时在等的料，每一样都得在现在这张药方、这个形态的开工清单里。
         BrewRecipe recipe = BrewRecipes.require(tower.selected().orElseThrow());

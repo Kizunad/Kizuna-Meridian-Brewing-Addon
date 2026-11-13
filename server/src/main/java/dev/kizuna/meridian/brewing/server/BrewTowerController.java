@@ -55,6 +55,7 @@ public final class BrewTowerController {
     private final FuelCell[] fuel = new FuelCell[FUEL_CELLS];
     private final List<IngredientBatch> reserve = new ArrayList<>();
     private final EnumMap<TowerNeed, BrewText> needs = new EnumMap<>(TowerNeed.class);
+    private int fuelWanted;
     private BrewKind selected;
     private UUID chooser;
     private BrewForm form = BrewForm.DRINK;
@@ -135,8 +136,20 @@ public final class BrewTowerController {
         // 没开工时在等的料是按上一张药方、上一个形态查的，换了就不作数，下一秒按新的重查；
         // 窗口这一秒里不能还读到上一张药方的缺料。开了工以后等的是这一批的燃料、真元、箱子和瓶子，和选什么无关。
         if (phase == TowerPhase.IDLE) {
-            needs.clear();
+            clearNeeds();
         }
+    }
+
+    private void clearNeeds() {
+        // 缺料和「缺燃料缺的是几档」一起清，窗口不会读到没有缺项的档数。
+        needs.clear();
+        fuelWanted = 0;
+    }
+
+    private void needFuel(int wanted) {
+        // 缺燃料那句话和同步给窗口的档数是同一个数。
+        needs.put(TowerNeed.FUEL, BrewText.message("tower.need.fuel", wanted));
+        fuelWanted = wanted;
     }
 
     /** 收完一批接着开下一批。 */
@@ -164,7 +177,7 @@ public final class BrewTowerController {
     /** 结构有效时每秒一步：先认掉被人拿走的燃料，再按阶段推进，最后写铜灯。 */
     public void second(TowerWorld world) {
         clock++;
-        needs.clear();
+        clearNeeds();
         dropRemovedFuel(world);
         switch (phase) {
             case IDLE -> idle(world);
@@ -184,7 +197,7 @@ public final class BrewTowerController {
      */
     public void broken(TowerWorld world, BrewText reason) {
         clock++;
-        needs.clear();
+        clearNeeds();
         level = 0;
         dropRemovedFuel(world);
         if (phase == TowerPhase.SOAKING) {
@@ -236,6 +249,14 @@ public final class BrewTowerController {
     public Map<TowerNeed, BrewText> needs() {
         // 拷一份只读的，EnumMap 保住开工检查的顺序。
         return Collections.unmodifiableMap(new EnumMap<>(needs));
+    }
+
+    /**
+     * 在等燃料时等的是几档：开工前是选好药方的稳定档数，开工以后是这一秒要烧的档数（泡料、保温 1 档，
+     * 升温猛火，熬制回稳定档），和 {@link #needs()} 里那句缺燃料说的是同一个数；没在等燃料时是 0。
+     */
+    public int fuelWanted() {
+        return fuelWanted;
     }
 
     public Optional<BrewKind> selected() {
@@ -355,7 +376,7 @@ public final class BrewTowerController {
         }
         int stable = stableLevel(recipe);
         if (availableFuel(world) < stable) {
-            needs.put(TowerNeed.FUEL, BrewText.message("tower.need.fuel", stable));
+            needFuel(stable);
         }
         if (recipe.fireKind() != fire && starter(world, recipe.fireKind()).isEmpty()) {
             String starterKey = "tower.need.starter." + recipe.fireKind().name().toLowerCase(Locale.ROOT);
@@ -557,7 +578,7 @@ public final class BrewTowerController {
         // 烧够 wanted 格（不够从木桶补），虚拟釜按实际烧着的档数推进一秒；档数不够就记缺燃料。
         level = burn(world, wanted);
         if (level < wanted) {
-            needs.put(TowerNeed.FUEL, BrewText.message("tower.need.fuel", wanted));
+            needFuel(wanted);
         }
         cauldron.tick(STEP_SECONDS, BrewStructure.built(heatSource()));
     }

@@ -33,7 +33,7 @@ import net.minecraft.world.item.Items;
 
 /**
  * 三阶药塔的窗口：上排 6 张药方（主料图标，没学会的盖灰点不了）和「停」，下排形态、单批 / 连续两个切换钮，
- * 再往下是状态、温度条、火、燃料、进度、铜箱子和真元，最后一行是开工还缺的东西。
+ * 再往下是状态、温度条、火、燃料、进度、铜箱子和真元，最后是还缺的东西（一行放不下就排两行）。
  *
  * <p>内容全部来自 {@link BrewTowerMenu} 的整数表，按钮只发原版 {@code clickMenuButton} 的编号；没学会的药方
  * 在这里点不了只是提示，服务端照样会拒。整数表是逐项同步的，怎么读见 {@link BrewTowerReadout}；
@@ -95,6 +95,9 @@ final class BrewTowerScreen extends AbstractContainerScreen<BrewTowerMenu> {
     private static final int UNKNOWN_OVERLAY = 0xB0C6C6C6;
     private static final int BEVEL = 2;
     private static final int EDGE = 1;
+    /** 缺料换行后两行的间距，以及最下面一行不能越过的底线（底板内沿）。 */
+    private static final int NEED_ROW_STEP = 17;
+    private static final int NEED_FLOOR = IMAGE_HEIGHT - EDGE - BEVEL;
     private Button stopButton;
     private Button formButton;
     private Button modeButton;
@@ -161,10 +164,9 @@ final class BrewTowerScreen extends AbstractContainerScreen<BrewTowerMenu> {
             graphics.setComponentTooltipForNextFrame(font, tileTooltip(tile.orElseThrow()), mouseX, mouseY);
             return;
         }
-        List<NeedIcon> icons = needIcons();
-        for (int index = 0; index < icons.size(); index++) {
-            if (isHovering(needX(index), NEED_Y, NEED_STEP, NEED_STEP, mouseX, mouseY)) {
-                graphics.setComponentTooltipForNextFrame(font, List.of(icons.get(index).tooltip()), mouseX, mouseY);
+        for (PlacedNeed need : placedNeeds()) {
+            if (isHovering(need.x(), need.y(), need.width(), NEED_ROW_STEP, mouseX, mouseY)) {
+                graphics.setComponentTooltipForNextFrame(font, List.of(need.icon().tooltip()), mouseX, mouseY);
                 return;
             }
         }
@@ -258,22 +260,56 @@ final class BrewTowerScreen extends AbstractContainerScreen<BrewTowerMenu> {
             line(graphics, Component.translatable(KEY + "pick"), NEED_Y + TEXT_ICON_OFFSET);
             return;
         }
-        List<NeedIcon> icons = needIcons();
-        if (icons.isEmpty()) {
+        List<PlacedNeed> placed = placedNeeds();
+        if (placed.isEmpty()) {
             return;
         }
-        graphics.text(font, needsLabel(), MARGIN, NEED_Y + TEXT_ICON_OFFSET, LABEL_COLOR, false);
-        for (int index = 0; index < icons.size(); index++) {
-            NeedIcon icon = icons.get(index);
-            int x = needX(index);
-            if (icon.stack().isEmpty()) {
-                Component qi = Component.translatable(KEY + "need.qi");
-                graphics.text(font, qi, x, NEED_Y + TEXT_ICON_OFFSET, WARNING_COLOR, false);
+        graphics.text(font, needsLabel(), MARGIN, placed.getFirst().y() + TEXT_ICON_OFFSET, LABEL_COLOR, false);
+        for (PlacedNeed need : placed) {
+            ItemStack stack = need.icon().stack();
+            if (stack.isEmpty()) {
+                graphics.text(font, qiLabel(), need.x(), need.y() + TEXT_ICON_OFFSET, WARNING_COLOR, false);
                 continue;
             }
-            graphics.item(icon.stack(), x, NEED_Y);
-            graphics.itemDecorations(font, icon.stack(), x, NEED_Y);
+            graphics.item(stack, need.x(), need.y());
+            graphics.itemDecorations(font, stack, need.x(), need.y());
         }
+    }
+
+    private List<PlacedNeed> placedNeeds() {
+        // 「缺：」后面一样接一样排，一行放不下就换行；要两行时整体上移，底下一行不出底板。画和悬停都按这里的位置。
+        List<NeedIcon> icons = needIcons();
+        var widths = new ArrayList<Integer>();
+        for (NeedIcon icon : icons) {
+            widths.add(needWidth(icon));
+        }
+        int left = MARGIN + font.width(needsLabel()) + NEED_GAP;
+        List<BrewTowerReadout.Spot> spots = BrewTowerReadout.flow(widths, left, imageWidth - MARGIN);
+        int rows = 1;
+        if (!spots.isEmpty()) {
+            rows = spots.getLast().row() + 1;
+        }
+        int top = Math.min(NEED_Y, NEED_FLOOR - rows * NEED_ROW_STEP);
+        var placed = new ArrayList<PlacedNeed>();
+        for (int index = 0; index < icons.size(); index++) {
+            BrewTowerReadout.Spot spot = spots.get(index);
+            placed.add(new PlacedNeed(icons.get(index), spot.x(), top + spot.row() * NEED_ROW_STEP,
+                    widths.get(index)));
+        }
+        return placed;
+    }
+
+    private int needWidth(NeedIcon icon) {
+        // 图标占一格；环境真元没有物品，按那几个字的宽度。
+        if (icon.stack().isEmpty()) {
+            return font.width(qiLabel()) + NEED_GAP;
+        }
+        return NEED_STEP;
+    }
+
+    private static Component qiLabel() {
+        // 缺环境真元没有图标，直接写字。
+        return Component.translatable(KEY + "need.qi");
     }
 
     private List<NeedIcon> needIcons() {
@@ -297,12 +333,17 @@ final class BrewTowerScreen extends AbstractContainerScreen<BrewTowerMenu> {
             case CHEST -> Optional.of(new NeedIcon(stack(CHEST_ICON, 1),
                     Component.translatable(MESSAGE + "tower.need.chest", VesselKind.TOWER.waterCapacity())));
             case FUEL -> Optional.of(new NeedIcon(new ItemStack(Items.COAL_BLOCK),
-                    Component.translatable(MESSAGE + "tower.need.fuel", BrewTowerController.stableLevel(recipe))));
+                    Component.translatable(MESSAGE + "tower.need.fuel", fuelLevel(recipe))));
             case FIRE_STARTER -> Optional.of(starterIcon(recipe.fireKind()));
             case AMBIENT_QI -> Optional.of(
                     new NeedIcon(ItemStack.EMPTY, Component.translatable(KEY + "need.qi_tooltip")));
             case PRIMARY, BASE, PROPELLANT, ACCESSORY, GLASS -> shown.item().map(BrewTowerScreen::itemIcon);
         };
+    }
+
+    private int fuelLevel(BrewRecipe recipe) {
+        // 服务端同步来的、塔实际在等的档数，和它那句缺燃料是同一个数。
+        return BrewTowerReadout.fuelLevel(menu.data(BrewTowerMenu.DATA_FUEL_WANTED), recipe);
     }
 
     private NeedIcon starterIcon(FireKind fire) {
@@ -390,11 +431,6 @@ final class BrewTowerScreen extends AbstractContainerScreen<BrewTowerMenu> {
     private Component needsLabel() {
         // 缺料行的开头。
         return Component.translatable(KEY + "needs");
-    }
-
-    private int needX(int index) {
-        // 「缺：」后面一格一个图标。
-        return MARGIN + font.width(needsLabel()) + NEED_GAP + index * NEED_STEP;
     }
 
     private int barWidth() {
@@ -487,6 +523,10 @@ final class BrewTowerScreen extends AbstractContainerScreen<BrewTowerMenu> {
 
     /** 缺的一样东西：图标（环境真元没有物品，是空的）和悬停提示。 */
     private record NeedIcon(ItemStack stack, Component tooltip) {
+    }
+
+    /** 排好位置的一样缺料：左上角相对底板的坐标和占的宽度。 */
+    private record PlacedNeed(NeedIcon icon, int x, int y, int width) {
     }
 
     /** 屏幕坐标里的一块矩形。 */

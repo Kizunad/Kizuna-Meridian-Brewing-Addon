@@ -82,6 +82,11 @@ public final class BrewStructureClientTest implements FabricClientGameTest {
     private static final int TILE_TOP = 18;
     private static final int TILE_WIDTH = 16;
     private static final int TILE_HEIGHT = 18;
+    /** 九样全缺时排两行（从 y=129 起），煤炭块是第一行第七个（「缺：」后从 x=28 起一格 18）：取它的正中。 */
+    private static final int NEED_FUEL_X = 28 + 6 * 18 + 8;
+    private static final int NEED_FUEL_Y = 129 + 8;
+    /** 泡料、保温时塔只要 1 档火。 */
+    private static final int SOAK_FUEL_LEVEL = 1;
     private static final int TICKS_PER_SECOND = 20;
     private static final int OPEN_TIMEOUT_TICKS = 2 * TICKS_PER_SECOND;
     /** 泡料 13 秒加升温、再熬到半程；熬完 30 秒、待收 5 秒装瓶，都留出余量。 */
@@ -166,17 +171,26 @@ public final class BrewStructureClientTest implements FabricClientGameTest {
 
     private static void mixedTable(ClientGameTestContext context, Stage stage) {
         // 整数表逐项同步，新旧会混着到：缺料掩码全亮（含上一张泼型药方才有的「缺火药」）、选中的换成只能喝的聚气汤，
-        // 窗口照样得画出来（2026-11-13 试玩时在这里崩过）。拍完把两项放回去，后面的截图不受影响。
+        // 窗口照样得画出来（2026-11-13 试玩时在这里崩过），九样排两行、都在底板里面。
+        // 再把「在等几档燃料」设成 1 档（泡料时的值），指着煤炭块看提示写的是 1 档而不是聚气汤的稳定档数。
+        // 拍完把三项放回去，后面的截图不受影响。
         int allNeeds = (1 << TowerNeed.values().length) - 1;
         int[] synced = context.computeOnClient(client -> {
             var menu = (BrewTowerMenu) ((AbstractContainerScreen<?>) client.gui.screen()).getMenu();
-            int[] before = {menu.data(BrewTowerMenu.DATA_NEEDS), menu.data(BrewTowerMenu.DATA_SELECTED)};
+            int[] before = {menu.data(BrewTowerMenu.DATA_NEEDS), menu.data(BrewTowerMenu.DATA_SELECTED),
+                menu.data(BrewTowerMenu.DATA_FUEL_WANTED)};
             menu.setData(BrewTowerMenu.DATA_NEEDS, allNeeds);
             menu.setData(BrewTowerMenu.DATA_SELECTED, BrewKind.QI_GATHER.ordinal());
+            menu.setData(BrewTowerMenu.DATA_FUEL_WANTED, SOAK_FUEL_LEVEL);
             return before;
         });
         stage.settle();
         windowShot(context, stage, "struct_06b_lv3_window_mixed_table");
+        Vec2 fuel = panelCursor(context, NEED_FUEL_X, NEED_FUEL_Y);
+        context.getInput().setCursorPos(fuel.x, fuel.y);
+        stage.settle();
+        windowShot(context, stage, "struct_06c_lv3_window_fuel_tooltip");
+        context.getInput().setCursorPos(0, 0);
         context.runOnClient(client -> {
             if (!towerOpen(client)) {
                 throw new AssertionError("整数表新旧混着时药塔窗口没撑住");
@@ -184,6 +198,7 @@ public final class BrewStructureClientTest implements FabricClientGameTest {
             var menu = (BrewTowerMenu) ((AbstractContainerScreen<?>) client.gui.screen()).getMenu();
             menu.setData(BrewTowerMenu.DATA_NEEDS, synced[0]);
             menu.setData(BrewTowerMenu.DATA_SELECTED, synced[1]);
+            menu.setData(BrewTowerMenu.DATA_FUEL_WANTED, synced[2]);
         });
         stage.settle();
     }
@@ -321,15 +336,19 @@ public final class BrewStructureClientTest implements FabricClientGameTest {
     }
 
     private static Vec2 tileCursor(ClientGameTestContext context, BrewKind kind) {
-        // 药方格坐标相对底板左上角，底板在窗口里居中；换算成窗口像素。
+        // 药方格坐标相对底板左上角。
+        return panelCursor(context, TILE_LEFT + kind.ordinal() * TILE_WIDTH + TILE_WIDTH / 2,
+                TILE_TOP + TILE_HEIGHT / 2);
+    }
+
+    private static Vec2 panelCursor(ClientGameTestContext context, int panelX, int panelY) {
+        // 相对底板左上角的坐标换算成窗口像素；底板在窗口里居中。
         return context.computeOnClient(client -> {
             Window window = client.getWindow();
             float scale = (float) window.getScreenWidth() / window.getGuiScaledWidth();
             int left = (window.getGuiScaledWidth() - TOWER_WIDTH) / 2;
             int top = (window.getGuiScaledHeight() - TOWER_HEIGHT) / 2;
-            int x = left + TILE_LEFT + kind.ordinal() * TILE_WIDTH + TILE_WIDTH / 2;
-            int y = top + TILE_TOP + TILE_HEIGHT / 2;
-            return new Vec2(x * scale, y * scale);
+            return new Vec2((left + panelX) * scale, (top + panelY) * scale);
         });
     }
 

@@ -58,7 +58,9 @@ public final class BrewTowerMenu extends AbstractContainerMenu {
     /** {@code TowerPhase} 序号。 */
     public static final int DATA_PHASE = 16;
     public static final int DATA_ARMED = 17;
-    public static final int DATA_COUNT = 18;
+    /** 在等燃料时等的是几档（1–4），和 {@code DATA_NEEDS} 里的缺燃料是一回事；没在等燃料时 0。 */
+    public static final int DATA_FUEL_WANTED = 18;
+    public static final int DATA_COUNT = 19;
     /** {@code DATA_CONTINUOUS}、{@code DATA_ARMED} 这类开关项的两个值。 */
     public static final int FLAG_OFF = 0;
     public static final int FLAG_ON = 1;

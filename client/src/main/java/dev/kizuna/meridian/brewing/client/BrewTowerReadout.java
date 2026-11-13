@@ -43,6 +43,40 @@ final class BrewTowerReadout {
         return Optional.of(KINDS[selected]);
     }
 
+    /** 缺料一行里一样东西摆在哪：{@code x} 是相对底板的横坐标，{@code row} 是第几行（从 0 起）。 */
+    record Spot(int x, int row) {
+    }
+
+    /**
+     * 悬停「缺燃料」写几档。{@code synced} 是服务端同步来的、塔这一秒实际在等的档数
+     * （泡料、保温只要 1 档，中途换了药方也还是这一批的）；还没同步到（0）或认不得时，按选中药方的稳定档数写。
+     */
+    static int fuelLevel(int synced, BrewRecipe recipe) {
+        if (synced < 1 || synced > BrewTowerController.FUEL_CELLS) {
+            return BrewTowerController.stableLevel(recipe);
+        }
+        return synced;
+    }
+
+    /**
+     * 缺料一行怎么排：从 {@code left} 起一样接一样往右，哪一样的右边会超过 {@code right} 就另起一行、回到
+     * {@code left}。{@code widths} 是每一样占的宽度（图标一格，文字按字宽）。一行七个图标以内位置和不换行时一样。
+     */
+    static List<Spot> flow(List<Integer> widths, int left, int right) {
+        var spots = new ArrayList<Spot>();
+        int x = left;
+        int row = 0;
+        for (int width : widths) {
+            if (x > left && x + width > right) {
+                x = left;
+                row++;
+            }
+            spots.add(new Spot(x, row));
+            x += width;
+        }
+        return spots;
+    }
+
     /** 按开工前查的顺序列出掩码里的每一样；没有选中的药方时什么都不列。 */
     static List<Shown> shown(int mask, int selected) {
         Optional<BrewKind> kind = kind(selected);

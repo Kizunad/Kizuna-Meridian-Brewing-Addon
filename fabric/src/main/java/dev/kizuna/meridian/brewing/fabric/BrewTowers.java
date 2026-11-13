@@ -317,6 +317,7 @@ public final class BrewTowers {
                 controller.continuous() ? BrewTowerMenu.FLAG_ON : BrewTowerMenu.FLAG_OFF);
         data.set(BrewTowerMenu.DATA_PHASE, controller.phase().ordinal());
         data.set(BrewTowerMenu.DATA_ARMED, controller.armed() ? BrewTowerMenu.FLAG_ON : BrewTowerMenu.FLAG_OFF);
+        data.set(BrewTowerMenu.DATA_FUEL_WANTED, controller.fuelWanted());
     }
 
     private static void fillBand(ContainerData data, BrewTowerController controller) {
