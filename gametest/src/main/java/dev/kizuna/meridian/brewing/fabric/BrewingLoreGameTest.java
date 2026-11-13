@@ -2,7 +2,9 @@ package dev.kizuna.meridian.brewing.fabric;
 
 import dev.kizuna.meridian.brewing.server.BrewActionResult;
 import dev.kizuna.meridian.brewing.server.BrewKind;
+import dev.kizuna.meridian.brewing.server.BrewQuality;
 import dev.kizuna.meridian.brewing.server.BrewText;
+import dev.kizuna.meridian.brewing.server.BrewUse;
 import dev.kizuna.meridian.brewing.server.RecipeKnowledge;
 import dev.kizuna.meridian.brewing.test.BrewingTestPlayers;
 import java.util.Arrays;
@@ -120,13 +122,28 @@ public final class BrewingLoreGameTest {
 
     @GameTest(maxTicks = TIMEOUT)
     public void apparatusTooltipsNameTheirFurnace(GameTestHelper context) {
-        // 铜釜、巫釜写属于哪一座药炉和蓝图图样，铁炉座写是二阶的火，铁火盆写只用来合成铁炉座。
+        // 铜釜、巫釜写属于哪一座药炉和蓝图图样，铁炉座写是二阶的火，铁火盆写只用来合成铁炉座；
+        // 铜釜另写氧化和上蜡，晒药匾写什么时候才晒。
         assertTooltip(context, BrewingBlocks.COPPER_CAULDRON,
-                List.of("apparatus.copper_cauldron", "apparatus.copper_cauldron.layout"));
+                List.of("apparatus.copper_cauldron", "apparatus.copper_cauldron.layout",
+                        "apparatus.copper_cauldron.oxidation", "apparatus.copper_cauldron.wax"));
         assertTooltip(context, BrewingBlocks.WITCH_CAULDRON,
                 List.of("apparatus.witch_cauldron", "apparatus.witch_cauldron.layout"));
         assertTooltip(context, BrewingBlocks.IRON_STOVE, List.of("apparatus.iron_stove"));
         assertTooltip(context, BrewingBlocks.IRON_BRAZIER, List.of("apparatus.iron_brazier"));
+        assertTooltip(context, BrewingBlocks.HERB_CRATE, List.of("apparatus.herb_crate"));
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void charmBrewTooltipTellsWhoItFollowsAndWhatWakesIt(GameTestHelper context) {
+        // 魅惑药水除了秒数，还写受惑者跟谁、打谁，什么时候醒。
+        ItemStack charm = BrewItemStacks.create(BrewKind.CHARM, BrewQuality.COMMON, BrewUse.SPLASH);
+        List<String> keys = BrewTooltipLines.lines(charm).stream()
+                .map(line -> String.join(",", BrewingTestPlayers.translationKeys(line)))
+                .toList();
+        context.assertTrue(keys.contains("tooltip.meridian_brewing.charm.follow")
+                && keys.contains("tooltip.meridian_brewing.charm.wake"), "魅惑药水的提示没写规矩：" + keys);
         context.succeed();
     }
 

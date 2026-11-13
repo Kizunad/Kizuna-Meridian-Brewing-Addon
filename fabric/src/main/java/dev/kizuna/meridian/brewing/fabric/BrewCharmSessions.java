@@ -21,7 +21,9 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.LivingEntity;
 
@@ -35,6 +37,8 @@ public final class BrewCharmSessions {
     private static final long TICKS_PER_SECOND = 20;
     private static final long SELECT_TICKS = 5;
     private static final long IMMUNITY_MILLIS = 10_000;
+    /** 玩家被魅惑接管时动作栏那句话的语言键。 */
+    public static final String TAKEN_MESSAGE = "message.meridian_brewing.charm.taken";
     private static final Identifier STOP_PHASE = Identifier.parse("meridian_brewing:end_control");
     private static final Map<UUID, Active> active = new HashMap<>();
     private static CharmController controller;
@@ -111,6 +115,11 @@ public final class BrewCharmSessions {
         send(CharmCommand.Action.START, updated, CharmEndReason.CHARM_END_UNSPECIFIED);
         active.put(subjectId, new Active(subject, caster, updated, tick));
         BrewBodyEffects.addStatus(subject, BrewingEffects.CHARM_CONTROL, seconds, quality);
+        if (subject instanceof ServerPlayer player) {
+            // 玩家的身体接下来不听自己使唤：动作栏写明是谁下的药、多久、怎么醒。
+            player.sendOverlayMessage(Component.translatable(TAKEN_MESSAGE, caster.getDisplayName(),
+                    String.valueOf(Math.round(seconds)), String.valueOf(Math.round(BrewCharmTargets.RANGE))));
+        }
     }
 
     public static boolean controlled(UUID subject) {

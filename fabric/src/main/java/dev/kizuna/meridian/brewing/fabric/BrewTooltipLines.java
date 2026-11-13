@@ -27,7 +27,8 @@ import net.minecraft.world.item.Items;
 
 /**
  * 巫药物品提示：品质一行，再写这一档的药效。数字都从 {@link BrewEffectProfiles} 取，语言文件里只有句式。
- * 药方羊皮纸写它记的是哪一味药；釜和火写它属于哪一座药炉，铁火盆写它只是铁炉座的料。
+ * 药方羊皮纸写它记的是哪一味药；釜和火写它属于哪一座药炉，铁火盆写它只是铁炉座的料；
+ * 铜釜另写氧化和上蜡，晒药匾写什么时候才晒。
  *
  * <p>原版那行「(0:01)」是登记用的显示效果，巫药物品已经用 {@code tooltip_display} 藏掉。</p>
  */
@@ -36,10 +37,12 @@ public final class BrewTooltipLines {
     private static final int DECIMALS = 2;
     private static final double PERCENT = 100.0;
     private static final Map<String, List<String>> APPARATUS_LINES = Map.of(
-            "copper_cauldron", List.of("apparatus.copper_cauldron", "apparatus.copper_cauldron.layout"),
+            "copper_cauldron", List.of("apparatus.copper_cauldron", "apparatus.copper_cauldron.layout",
+                    "apparatus.copper_cauldron.oxidation", "apparatus.copper_cauldron.wax"),
             "witch_cauldron", List.of("apparatus.witch_cauldron", "apparatus.witch_cauldron.layout"),
             "iron_stove", List.of("apparatus.iron_stove"),
-            "iron_brazier", List.of("apparatus.iron_brazier"));
+            "iron_brazier", List.of("apparatus.iron_brazier"),
+            "herb_crate", List.of("apparatus.herb_crate"));
 
     private BrewTooltipLines() {
     }
@@ -148,7 +151,9 @@ public final class BrewTooltipLines {
         return List.of(
                 line("charm", number(profile.radius()), number(profile.staggerSeconds()),
                         number(profile.controlSeconds())),
-                line("charm.immune", number(profile.immunitySeconds())));
+                line("charm.immune", number(profile.immunitySeconds())),
+                line("charm.follow"),
+                line("charm.wake", number(BrewCharmTargets.RANGE)));
     }
 
     private static MutableComponent line(String key, Object... args) {

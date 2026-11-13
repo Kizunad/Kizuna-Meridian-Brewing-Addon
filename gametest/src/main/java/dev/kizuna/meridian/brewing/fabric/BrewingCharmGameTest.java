@@ -178,6 +178,28 @@ public final class BrewingCharmGameTest {
     }
 
     @GameTest(maxTicks = TIMEOUT)
+    public void charmedPlayerIsToldTheBodyIsTaken(GameTestHelper context) {
+        // 玩家被接管的那一刻，动作栏告诉他是谁下的药、怎么醒；下药的人不收这句。
+        ServerPlayer caster = BrewingTestPlayers.create(context);
+        ServerPlayer subject = BrewingTestPlayers.create(context);
+        charm(subject, caster);
+        context.runAfterDelay(1, () -> {
+            context.assertTrue(takenMessages(subject) == 1, "受惑的玩家没有恰好收到一句接管提示");
+            context.assertTrue(takenMessages(caster) == 0, "下药的人也收到了接管提示");
+            BrewingTestPlayers.close(subject);
+            BrewingTestPlayers.close(caster);
+            context.succeed();
+        });
+    }
+
+    private static long takenMessages(ServerPlayer player) {
+        // 数发给这名玩家的动作栏里有几句接管提示。
+        return BrewingTestPlayers.overlays(player).stream()
+                .filter(sent -> BrewingTestPlayers.translationKeys(sent.text()).contains(BrewCharmSessions.TAKEN_MESSAGE))
+                .count();
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
     public void playerSessionSendsIntentsAndRejectsOwnActions(GameTestHelper context) {
         // 真正玩家会话通过网络发送逐 tick 意图；主动施放、热键栏、丢弃、放挖与容器都拒绝。
         ServerPlayer caster = BrewingTestPlayers.create(context);
