@@ -18,6 +18,7 @@ public final class BrewingFabric implements ModInitializer {
         BrewingRegistries.register();
         BrewingCreativeTab.register();
         BrewingLoot.register();
+        BrewLore.register();
         PreparationInteractions.register();
         HerbKnifeDraw.register();
         BrewingRuntime.register();

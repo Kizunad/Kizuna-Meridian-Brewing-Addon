@@ -283,6 +283,12 @@ final class BrewStructureDefinitions {
             return BrewText.message("structure.anchor.tier" + tier);
         }
 
+        /** 摆得不对时补的一句：锚点该进哪一座药炉，结构蓝图里照哪张图样摆。 */
+        BrewText layoutHint() {
+            // 每一阶一句，药炉名和图样 ID 都写在语言文件里。
+            return BrewText.message("structure.hint.tier" + tier);
+        }
+
     }
 
     /** 结构里要查的一格：相对 NBT 原点的位置和这一格的规则。 */

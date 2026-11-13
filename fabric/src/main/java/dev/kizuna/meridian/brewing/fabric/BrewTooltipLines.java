@@ -16,15 +16,18 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import net.minecraft.ChatFormatting;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
 /**
  * 巫药物品提示：品质一行，再写这一档的药效。数字都从 {@link BrewEffectProfiles} 取，语言文件里只有句式。
- * 药方羊皮纸写它记的是哪一味药。
+ * 药方羊皮纸写它记的是哪一味药；釜和火写它属于哪一座药炉，铁火盆写它只是铁炉座的料。
  *
  * <p>原版那行「(0:01)」是登记用的显示效果，巫药物品已经用 {@code tooltip_display} 藏掉。</p>
  */
@@ -32,15 +35,24 @@ public final class BrewTooltipLines {
     private static final String PREFIX = "tooltip.meridian_brewing.";
     private static final int DECIMALS = 2;
     private static final double PERCENT = 100.0;
+    private static final Map<String, List<String>> APPARATUS_LINES = Map.of(
+            "copper_cauldron", List.of("apparatus.copper_cauldron", "apparatus.copper_cauldron.layout"),
+            "witch_cauldron", List.of("apparatus.witch_cauldron", "apparatus.witch_cauldron.layout"),
+            "iron_stove", List.of("apparatus.iron_stove"),
+            "iron_brazier", List.of("apparatus.iron_brazier"));
 
     private BrewTooltipLines() {
     }
 
-    /** 不是巫药也不是药方时返回空表。 */
+    /** 不是巫药、药方，也不是釜和火时返回空表。 */
     public static List<Component> lines(ItemStack stack) {
-        // 药方和巫药各写各的；别的物品不加行。
+        // 药方、药炉器具和巫药各写各的；别的物品不加行。
         if (stack.getItem() instanceof RecipeScrollItem) {
             return List.of(recipeLine(stack).withStyle(ChatFormatting.GRAY));
+        }
+        List<Component> apparatus = apparatusLines(stack);
+        if (!apparatus.isEmpty()) {
+            return apparatus;
         }
         if (!BrewItemStacks.isBrew(stack)) {
             return List.of();
@@ -65,6 +77,19 @@ public final class BrewTooltipLines {
         return RecipeScrollItem.kind(stack)
                 .map(kind -> line("recipe", BrewTexts.component(BrewCauldron.recipeName(kind))))
                 .orElseGet(() -> line("recipe.illegible"));
+    }
+
+    private static List<Component> apparatusLines(ItemStack stack) {
+        // 按物品 ID 查：别的模组同名的物品不算。
+        Identifier id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        if (!id.getNamespace().equals(BrewingFabric.MOD_ID)) {
+            return List.of();
+        }
+        List<Component> lines = new ArrayList<>();
+        for (String key : APPARATUS_LINES.getOrDefault(id.getPath(), List.of())) {
+            lines.add(line(key).withStyle(ChatFormatting.GRAY));
+        }
+        return List.copyOf(lines);
     }
 
     private static List<MutableComponent> effectLines(BrewKind kind, BrewQuality quality, BrewUse use) {

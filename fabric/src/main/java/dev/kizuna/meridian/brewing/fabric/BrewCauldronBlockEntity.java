@@ -171,8 +171,9 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
         rematchStructure();
         Optional<BrewText> problem = cauldron.startProblem(structure);
         if (problem.isPresent() && problem.equals(layout.match().problem())) {
-            // 卡在结构上才在不符那格发标记；缺料、缺火不发。
+            // 卡在结构上才在不符那格发标记，再补一句该进哪一座药炉；缺料、缺火不发。
             BrewStructureMarkers.show(caster, layout);
+            return BrewActionResult.returned(withLayoutHint(problem.orElseThrow()));
         }
         if (problem.isEmpty()) {
             problem = casterProblem(caster, cauldron.recipe().orElseThrow().kind());
@@ -552,7 +553,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
     }
 
     private BrewActionResult describeState(Player player) {
-        // 空手右键看釜：现查一次结构，不符时在不符那格发标记，并在状态后面接上哪一格不对。
+        // 空手右键看釜：现查一次结构，不符时在不符那格发标记，并在状态后面接上哪一格不对、该进哪一座药炉。
         rematchStructure();
         BrewText recipeName = BrewText.message("cauldron.no_recipe");
         if (cauldron.recipe().isPresent()) {
@@ -569,7 +570,15 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
         if (player instanceof ServerPlayer serverPlayer) {
             BrewStructureMarkers.show(serverPlayer, layout);
         }
-        return BrewActionResult.accepted(BrewText.message("joined", described, structureProblem.orElseThrow()));
+        BrewText located = withLayoutHint(structureProblem.orElseThrow());
+        return BrewActionResult.accepted(BrewText.message("joined", described, located));
+    }
+
+    private BrewText withLayoutHint(BrewText structureProblem) {
+        // 第一处不符后面接上这只釜该进哪一座药炉；没比出不符时原样返回。
+        return layout.layoutHint()
+                .map(hint -> BrewText.message("joined", structureProblem, hint))
+                .orElse(structureProblem);
     }
 
     private BrewActionResult addIngredient(ItemStack stack) {

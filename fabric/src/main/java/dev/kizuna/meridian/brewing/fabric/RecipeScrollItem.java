@@ -14,7 +14,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
-/** 药方羊皮纸：服务端把药方记进读者的身体，客户端照原版书本打开。 */
+/** 药方羊皮纸：服务端把药方记进读者的身体，再让读者的客户端翻开这张药方的讲解。 */
 final class RecipeScrollItem extends Item {
     RecipeScrollItem(Properties properties) {
         super(properties);
@@ -22,12 +22,12 @@ final class RecipeScrollItem extends Item {
 
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
-        // 羊皮纸不消耗；读不出药方、身体暂停都只提示，不学。
+        // 羊皮纸不消耗；读不出药方、身体暂停都只提示，不学。认得出药方就翻开讲解，学没学会都能读。
         ItemStack stack = player.getItemInHand(hand);
         if (!level.isClientSide() && player instanceof ServerPlayer reader) {
             BrewTexts.sendOverlay(player, read(reader, stack));
+            kind(stack).ifPresent(kind -> BrewLore.open(reader, kind.path()));
         }
-        player.openItemGui(stack, hand);
         return InteractionResult.SUCCESS;
     }
 

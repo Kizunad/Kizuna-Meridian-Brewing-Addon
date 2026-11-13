@@ -19,7 +19,7 @@ import net.minecraft.world.item.alchemy.PotionContents;
 import net.minecraft.world.level.ItemLike;
 
 /**
- * 炼药独占一页创造栏：器具、药刀、六张药方和药材在前，枯木其次，最后是每种巫药每种形态的四档品质。
+ * 炼药独占一页创造栏：器具、药刀、六张药方、《熬药总纲》和药材在前，枯木其次，最后是每种巫药每种形态的四档品质。
  *
  * <p>原版会按药水登记在食物与饮品、战斗页和搜索页里列出巫药的普通、喷溅、滞留药水和药箭。
  * 这些没有品质组件，喝了不起作用，所以从所有页里拿掉。</p>
@@ -50,6 +50,7 @@ public final class BrewingCreativeTab {
                     apparatus().forEach(output::accept);
                     output.accept(BrewingItems.item("herb_knife"));
                     recipes().forEach(output::accept);
+                    output.accept(BrewingItems.item("brew_manual"));
                     materials().forEach(output::accept);
                     qualityBrews().forEach(output::accept);
                 })

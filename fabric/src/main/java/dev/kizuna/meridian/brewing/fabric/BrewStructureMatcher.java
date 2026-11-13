@@ -3,6 +3,7 @@ package dev.kizuna.meridian.brewing.fabric;
 import dev.kizuna.meridian.brewing.fabric.BrewStructureDefinitions.Cell;
 import dev.kizuna.meridian.brewing.fabric.BrewStructureDefinitions.Definition;
 import dev.kizuna.meridian.brewing.server.BrewStructureSettings;
+import dev.kizuna.meridian.brewing.server.BrewText;
 import dev.kizuna.meridian.brewing.server.StructureMatch;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -250,6 +251,14 @@ final class BrewStructureMatcher {
 
     /** 比对结果：给规则看的 {@link StructureMatch}、认出来或最接近的摆法、不符时的标记。 */
     record Result(StructureMatch match, Optional<Placement> placement, Optional<Marker> marker) {
+        /** 摆得不对时那座药炉的提示；对上了、区块没加载、没配结构时为空。 */
+        Optional<BrewText> layoutHint() {
+            // 只有比出了第一处不符，才知道是照哪份定义比的。
+            if (match.status() != StructureMatch.Status.MISMATCH) {
+                return Optional.empty();
+            }
+            return placement.map(closest -> closest.definition().layoutHint());
+        }
     }
 
     private record Failure(Cell cell, BlockPos world, BlockState actual) {

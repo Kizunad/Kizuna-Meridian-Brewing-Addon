@@ -9,7 +9,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.Item;
 
-/** 炮制药材、药渣、药方和药刀的物品身份。具体交互由服务端宿主接入。 */
+/** 炮制药材、药渣、药方、《熬药总纲》和药刀的物品身份。具体交互由服务端宿主接入。 */
 final class BrewingItems {
     private static final Map<String, Item> ITEMS = new TreeMap<>();
 
@@ -28,6 +28,8 @@ final class BrewingItems {
         registerCustomItem("brew_recipe", new RecipeScrollItem(itemProperties("brew_recipe")
                 .stacksTo(1)
                 .component(BrewingComponents.RECIPE_KIND, "depletion")));
+        registerCustomItem("brew_manual", new BrewManualItem(itemProperties("brew_manual")
+                .stacksTo(1)));
         registerCustomItem("herb_knife", new HerbKnifeItem(itemProperties("herb_knife")
                 .stacksTo(1)
                 .durability(128)));

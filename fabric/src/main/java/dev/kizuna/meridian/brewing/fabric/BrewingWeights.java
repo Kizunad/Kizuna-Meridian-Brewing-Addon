@@ -26,6 +26,7 @@ final class BrewingWeights {
             Map.entry("berry_mash", 80),
             Map.entry("brew_residue", 100),
             Map.entry("brew_recipe", 10),
+            Map.entry("brew_manual", 300),
             Map.entry("herb_knife", 300),
             Map.entry("herb_crate", 2500),
             Map.entry("copper_cauldron", 6000),

@@ -15,6 +15,7 @@ import dev.kizuna.playeranimation.protocol.pb.PlayerAnimationProtocol.StopReques
 import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 import java.util.ArrayList;
 import net.minecraft.core.BlockPos;
+import dev.kizuna.meridian.brewing.fabric.BrewLore;
 import dev.kizuna.meridian.brewing.server.BrewKind;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -55,6 +56,7 @@ public final class BrewingTestPlayers {
     private static final Map<UUID, List<SoundPlayed>> SOUNDS = new HashMap<>();
     private static final Map<UUID, List<AnimationSent>> ANIMATIONS = new HashMap<>();
     private static final Map<UUID, List<OverlaySent>> OVERLAYS = new HashMap<>();
+    private static final Map<UUID, List<String>> LORE_OPENED = new HashMap<>();
     private static final Map<UUID, Integer> MARKER_PARTICLES = new HashMap<>();
     private static final List<Identifier> CHANNELS = List.of(
             Identifier.parse("meridian:body_view"),
@@ -63,7 +65,8 @@ public final class BrewingTestPlayers {
             Identifier.parse("meridian_human:control"),
             Identifier.parse("meridian_progression:event"),
             Identifier.parse("kizuna_players_animation:play"),
-            Identifier.parse("kizuna_players_animation:stop"));
+            Identifier.parse("kizuna_players_animation:stop"),
+            Identifier.parse("meridian_brewing:lore"));
 
     private BrewingTestPlayers() {
         // 夹具不创建身体，所有账户都由 Human 的正式登录入口建立。
@@ -92,6 +95,7 @@ public final class BrewingTestPlayers {
         SOUNDS.put(profile.id(), new ArrayList<>());
         ANIMATIONS.put(profile.id(), new ArrayList<>());
         OVERLAYS.put(profile.id(), new ArrayList<>());
+        LORE_OPENED.put(profile.id(), new ArrayList<>());
         TestPlayers.logIn(player, connection);
         BlockPos position = context.absolutePos(new BlockPos(1, HEIGHT, 1));
         player.setPos(position.getX(), position.getY(), position.getZ());
@@ -139,6 +143,10 @@ public final class BrewingTestPlayers {
             if (packet instanceof ClientboundSystemChatPacket chat && chat.overlay()) {
                 OVERLAYS.get(listener.player.getUUID()).add(new OverlaySent(
                         listener.player.level().getGameTime(), chat.content()));
+            }
+            if (packet instanceof ClientboundCustomPayloadPacket custom
+                    && custom.payload() instanceof BrewLore.OpenPayload opened) {
+                LORE_OPENED.get(listener.player.getUUID()).add(opened.document());
             }
             if (packet instanceof ClientboundKeepAlivePacket keepAlive) {
                 listener.handleKeepAlive(new ServerboundKeepAlivePacket(keepAlive.getId()));
@@ -225,6 +233,12 @@ public final class BrewingTestPlayers {
     public static List<OverlaySent> overlays(ServerPlayer player) {
         // 捕获真正发给客户端的动作栏包，核对发给谁、多久一次、用的哪些语言键。
         return List.copyOf(OVERLAYS.getOrDefault(player.getUUID(), List.of()));
+    }
+
+    /** 让这个玩家的客户端翻开过的讲解篇名，按发包先后排。 */
+    public static List<String> loreOpened(ServerPlayer player) {
+        // 捕获真正发给客户端的翻书包，没收过就是空表。
+        return List.copyOf(LORE_OPENED.getOrDefault(player.getUUID(), List.of()));
     }
 
     /** 一行字里用到的全部语言键，连同参数和后接的片段。 */
@@ -319,6 +333,7 @@ public final class BrewingTestPlayers {
         SOUNDS.remove(player.getUUID());
         ANIMATIONS.remove(player.getUUID());
         OVERLAYS.remove(player.getUUID());
+        LORE_OPENED.remove(player.getUUID());
         MARKER_PARTICLES.remove(player.getUUID());
     }
 }

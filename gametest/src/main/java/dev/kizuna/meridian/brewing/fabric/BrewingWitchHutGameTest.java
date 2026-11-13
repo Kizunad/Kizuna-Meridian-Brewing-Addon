@@ -37,7 +37,7 @@ import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
-/** 女巫小屋的药方箱：原版小屋结构件搭出来带一只朝门的箱子，箱子的战利品表六张药方等概率。 */
+/** 女巫小屋的药方箱：原版小屋结构件搭出来带一只朝门的箱子，箱子的战利品表六张药方等概率，还可能有一本《熬药总纲》。 */
 public final class BrewingWitchHutGameTest {
     private static final String SITE = "meridian_brewing_test:witch_hut_site";
     private static final int TIMEOUT = 40;
@@ -61,6 +61,9 @@ public final class BrewingWitchHutGameTest {
     /** 熬药卷轴占位 0.25：200 箱期望 50，标准差约 6，放宽到 30–70。 */
     private static final int MIN_SCROLL_CHESTS = 30;
     private static final int MAX_SCROLL_CHESTS = 70;
+    /** 《熬药总纲》占位 0.5：200 箱期望 100，标准差约 7，放宽到 70–130。 */
+    private static final int MIN_MANUAL_CHESTS = 70;
+    private static final int MAX_MANUAL_CHESTS = 130;
     /** 每种药方期望 25 张，标准差约 4.6。 */
     private static final int MIN_PER_RECIPE = 10;
 
@@ -106,35 +109,29 @@ public final class BrewingWitchHutGameTest {
         context.assertFalse(opened.isEmpty(), "打开的小屋箱子是空的");
         List<String> unexpected = opened.stream()
                 .filter(stack -> !stack.is(BrewingItems.item("brew_recipe")) && !stack.is(scroll())
-                        && !materials().contains(stack.getItem()))
+                        && !stack.is(BrewingItems.item("brew_manual")) && !materials().contains(stack.getItem()))
                 .map(stack -> BuiltInRegistries.ITEM.getKey(stack.getItem()).toString())
                 .toList();
-        context.assertTrue(unexpected.isEmpty(), "小屋箱子里有药方、熬药卷轴和炼药材料以外的东西：" + unexpected);
+        context.assertTrue(unexpected.isEmpty(), "小屋箱子里有药方、熬药卷轴、熬药总纲和炼药材料以外的东西：" + unexpected);
         context.succeed();
     }
 
     @GameTest(maxTicks = TIMEOUT)
     public void witchHutChestDrawsSixRecipesEvenly(GameTestHelper context) {
-        // 照原版开箱的参数抽 200 箱：有药方的箱数落在占位概率附近，六张药方都出、各自不少；
-        // 有熬药卷轴的箱数落在它的占位概率附近，一箱最多一卷；别的都是炼药材料。
-        ServerLevel level = context.getLevel();
-        LootTable table = level.getServer().reloadableRegistries().getLootTable(BrewWitchHut.CHEST_TABLE);
-        context.assertFalse(table == LootTable.EMPTY, "没有加载小屋箱子的战利品表：" + BrewWitchHut.CHEST_TABLE);
-        LootParams params = new LootParams.Builder(level)
-                .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(context.absolutePos(BlockPos.ZERO)))
-                .create(LootContextParamSets.CHEST);
-        RandomSource random = RandomSource.create(LOOT_SEED);
+        // 抽 200 箱：有药方的箱数落在占位概率附近，六张药方都出、各自不少；
+        // 有熬药卷轴的箱数落在它的占位概率附近，一箱最多一卷；总纲另有用例数；别的都是炼药材料。
         Item recipe = BrewingItems.item("brew_recipe");
+        Item manual = BrewingItems.item("brew_manual");
         Map<String, Integer> recipes = new TreeMap<>();
         Map<String, Integer> materials = new TreeMap<>();
         List<String> unexpected = new ArrayList<>();
         int chestsWithRecipe = 0;
         int chestsWithScroll = 0;
         int mostScrolls = 0;
-        for (int roll = 0; roll < LOOT_ROLLS; roll++) {
+        for (List<ItemStack> chest : drawChests(context)) {
             boolean hasRecipe = false;
             int scrolls = 0;
-            for (ItemStack stack : table.getRandomItems(params, random)) {
+            for (ItemStack stack : chest) {
                 String id = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
                 if (stack.is(recipe)) {
                     recipes.merge(String.valueOf(stack.get(BrewingComponents.RECIPE_KIND)), 1, Integer::sum);
@@ -143,7 +140,7 @@ public final class BrewingWitchHutGameTest {
                     scrolls += stack.getCount();
                 } else if (materials().contains(stack.getItem())) {
                     materials.merge(id, 1, Integer::sum);
-                } else {
+                } else if (!stack.is(manual)) {
                     unexpected.add(id);
                 }
             }
@@ -157,7 +154,8 @@ public final class BrewingWitchHutGameTest {
         }
         System.out.println("[女巫小屋箱子] 抽 " + LOOT_ROLLS + " 箱：有药方 " + chestsWithRecipe + " 箱；药方 " + recipes
                 + "；有熬药卷轴 " + chestsWithScroll + " 箱；材料（组数）" + materials);
-        context.assertTrue(unexpected.isEmpty(), "小屋箱子抽出了药方、熬药卷轴和炼药材料以外的东西：" + unexpected);
+        context.assertTrue(unexpected.isEmpty(),
+                "小屋箱子抽出了药方、熬药卷轴、熬药总纲和炼药材料以外的东西：" + unexpected);
         context.assertTrue(chestsWithScroll >= MIN_SCROLL_CHESTS && chestsWithScroll <= MAX_SCROLL_CHESTS,
                 "有熬药卷轴的箱数偏离占位概率 0.25：" + chestsWithScroll + " / " + LOOT_ROLLS);
         context.assertTrue(mostScrolls == 1, "一箱里不该有不止一卷熬药卷轴：" + mostScrolls);
@@ -170,6 +168,42 @@ public final class BrewingWitchHutGameTest {
         context.assertTrue(materials.keySet().size() == materials().size(),
                 "200 箱里没有出齐每种炼药材料：" + materials);
         context.succeed();
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void witchHutChestHoldsTheManualAtItsChance(GameTestHelper context) {
+        // 抽 200 箱：有《熬药总纲》的箱数落在它的占位概率附近，一箱最多一本。
+        Item manual = BrewingItems.item("brew_manual");
+        int chestsWithManual = 0;
+        int mostManuals = 0;
+        for (List<ItemStack> chest : drawChests(context)) {
+            int manuals = chest.stream().filter(stack -> stack.is(manual)).mapToInt(ItemStack::getCount).sum();
+            if (manuals > 0) {
+                chestsWithManual++;
+            }
+            mostManuals = Math.max(mostManuals, manuals);
+        }
+        System.out.println("[女巫小屋箱子] 抽 " + LOOT_ROLLS + " 箱：有熬药总纲 " + chestsWithManual + " 箱");
+        context.assertTrue(chestsWithManual >= MIN_MANUAL_CHESTS && chestsWithManual <= MAX_MANUAL_CHESTS,
+                "有熬药总纲的箱数偏离占位概率 0.5：" + chestsWithManual + " / " + LOOT_ROLLS);
+        context.assertTrue(mostManuals == 1, "一箱里不该有不止一本熬药总纲：" + mostManuals);
+        context.succeed();
+    }
+
+    private static List<List<ItemStack>> drawChests(GameTestHelper context) {
+        // 照原版开箱的参数，用固定种子抽 200 箱，每箱一份物品表。
+        ServerLevel level = context.getLevel();
+        LootTable table = level.getServer().reloadableRegistries().getLootTable(BrewWitchHut.CHEST_TABLE);
+        context.assertFalse(table == LootTable.EMPTY, "没有加载小屋箱子的战利品表：" + BrewWitchHut.CHEST_TABLE);
+        LootParams params = new LootParams.Builder(level)
+                .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(context.absolutePos(BlockPos.ZERO)))
+                .create(LootContextParamSets.CHEST);
+        RandomSource random = RandomSource.create(LOOT_SEED);
+        List<List<ItemStack>> chests = new ArrayList<>();
+        for (int roll = 0; roll < LOOT_ROLLS; roll++) {
+            chests.add(table.getRandomItems(params, random));
+        }
+        return chests;
     }
 
     private static SwampHutPiece hut(GameTestHelper context, BlockPos corner, Direction orientation) {
@@ -289,7 +323,7 @@ public final class BrewingWitchHutGameTest {
     }
 
     private static Set<Item> materials() {
-        // 和战利品表 chests/witch_hut.json 第二个池子一一对应。
+        // 和战利品表 chests/witch_hut.json 最后一个池子一一对应。
         return Set.of(Items.GLASS_BOTTLE, Items.GLOWSTONE_DUST, Items.SUGAR, Items.REDSTONE, Items.COBWEB,
                 Items.FERMENTED_SPIDER_EYE, Items.HONEY_BOTTLE, BrewingItems.item("dry_moss"),
                 BrewingItems.item("dry_poppy"));
