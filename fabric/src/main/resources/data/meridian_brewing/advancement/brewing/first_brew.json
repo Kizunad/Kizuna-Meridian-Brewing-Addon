@@ -1,0 +1,49 @@
+{
+  "parent": "meridian_brewing:brewing/recipe",
+  "display": {
+    "icon": {
+      "id": "minecraft:potion",
+      "components": {
+        "minecraft:potion_contents": {
+          "potion": "meridian_brewing:qi_gather"
+        }
+      }
+    },
+    "title": {
+      "translate": "advancements.meridian_brewing.brewing.first_brew.title"
+    },
+    "description": {
+      "translate": "advancements.meridian_brewing.brewing.first_brew.description"
+    }
+  },
+  "criteria": {
+    "has": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": [
+              "minecraft:potion",
+              "minecraft:splash_potion"
+            ],
+            "predicates": {
+              "minecraft:potion_contents": [
+                "meridian_brewing:depletion",
+                "meridian_brewing:bitter_yellow",
+                "meridian_brewing:armor_rot",
+                "meridian_brewing:insect_lure",
+                "meridian_brewing:qi_gather",
+                "meridian_brewing:charm"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "requirements": [
+    [
+      "has"
+    ]
+  ]
+}

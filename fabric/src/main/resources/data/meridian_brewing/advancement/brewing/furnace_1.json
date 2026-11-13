@@ -1,0 +1,27 @@
+{
+  "parent": "meridian_brewing:brewing/basics",
+  "display": {
+    "icon": {
+      "id": "meridian_brewing:copper_cauldron"
+    },
+    "title": {
+      "translate": "advancements.meridian_brewing.brewing.furnace_1.title"
+    },
+    "description": {
+      "translate": "advancements.meridian_brewing.brewing.furnace_1.description"
+    }
+  },
+  "criteria": {
+    "reached": {
+      "trigger": "meridian_brewing:furnace_built",
+      "conditions": {
+        "tier": 1
+      }
+    }
+  },
+  "requirements": [
+    [
+      "reached"
+    ]
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "parent": "meridian_progression:cultivation/root",
+  "display": {
+    "icon": {
+      "id": "meridian_brewing:brewing_basics_scroll"
+    },
+    "title": {
+      "translate": "advancements.meridian_brewing.brewing.basics.title"
+    },
+    "description": {
+      "translate": "advancements.meridian_brewing.brewing.basics.description"
+    }
+  },
+  "criteria": {
+    "reached": {
+      "trigger": "meridian_technique:volume_learned",
+      "conditions": {
+        "volume": "meridian_brewing:brewing_basics"
+      }
+    }
+  },
+  "requirements": [
+    [
+      "reached"
+    ]
+  ]
+}

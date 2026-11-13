@@ -1,0 +1,33 @@
+{
+  "parent": "meridian_brewing:brewing/basics",
+  "display": {
+    "icon": {
+      "id": "meridian_brewing:brew_manual"
+    },
+    "title": {
+      "translate": "advancements.meridian_brewing.brewing.manual.title"
+    },
+    "description": {
+      "translate": "advancements.meridian_brewing.brewing.manual.description"
+    }
+  },
+  "criteria": {
+    "has": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": [
+              "meridian_brewing:brew_manual"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "requirements": [
+    [
+      "has"
+    ]
+  ]
+}

@@ -52,6 +52,7 @@ final class RecipeScrollItem extends Item {
                 ? EnumSet.noneOf(BrewKind.class) : EnumSet.copyOf(current.known());
         known.add(kind.orElseThrow());
         BrewRecipeBook.replace(reader, known);
+        RecipeLearnedTrigger.TRIGGER.trigger(reader, kind.orElseThrow());
         return BrewText.message("recipe.learned", name);
     }
 

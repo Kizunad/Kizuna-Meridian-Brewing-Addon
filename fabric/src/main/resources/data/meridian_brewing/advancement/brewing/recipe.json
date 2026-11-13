@@ -1,0 +1,24 @@
+{
+  "parent": "meridian_brewing:brewing/basics",
+  "display": {
+    "icon": {
+      "id": "meridian_brewing:brew_recipe"
+    },
+    "title": {
+      "translate": "advancements.meridian_brewing.brewing.recipe.title"
+    },
+    "description": {
+      "translate": "advancements.meridian_brewing.brewing.recipe.description"
+    }
+  },
+  "criteria": {
+    "reached": {
+      "trigger": "meridian_brewing:recipe_learned"
+    }
+  },
+  "requirements": [
+    [
+      "reached"
+    ]
+  ]
+}

@@ -269,5 +269,19 @@
   "tooltip.meridian_brewing.charm": "溅开 %s 格：僵直 %s 秒，受惑 %s 秒",
   "tooltip.meridian_brewing.charm.immune": "醒后 %s 秒内免疫",
   "tooltip.meridian_brewing.charm.follow": "受惑者跟着你，去打你正在打的、或正在打你的",
-  "tooltip.meridian_brewing.charm.wake": "你或同伴伤到它就醒；离你超过 %s 格也醒"
+  "tooltip.meridian_brewing.charm.wake": "你或同伴伤到它就醒；离你超过 %s 格也醒",
+  "advancements.meridian_brewing.brewing.basics.title": "熬药式",
+  "advancements.meridian_brewing.brewing.basics.description": "沼泽小屋里的女巫熬了一辈子药。打倒修出真炁的女巫，或翻翻没人进过的女巫小屋，兴许能得一卷熬药的法门。",
+  "advancements.meridian_brewing.brewing.manual.title": "熬药总纲",
+  "advancements.meridian_brewing.brewing.manual.description": "一本书配一撮萤石粉，就能抄成熬药的总纲；三座药炉怎么搭、器具怎么用，里头都讲了。女巫小屋的箱底也常有。",
+  "advancements.meridian_brewing.brewing.recipe.title": "药方",
+  "advancements.meridian_brewing.brewing.recipe.description": "药方多半记在女巫的羊皮纸上，女巫身上、小屋箱子里都有。拿到手细细读一遍，便记在心里了。",
+  "advancements.meridian_brewing.brewing.first_brew.title": "头一锅",
+  "advancements.meridian_brewing.brewing.first_brew.description": "釜坐进药炉，火候守稳，按药方的次序下料，凉下来拿空瓶舀出第一瓶药。",
+  "advancements.meridian_brewing.brewing.furnace_1.title": "一阶药炉",
+  "advancements.meridian_brewing.brewing.furnace_1.description": "七块铜锭打一口铜釜，照结构蓝图里的图样搭起一阶药炉，把铜釜坐进去。",
+  "advancements.meridian_brewing.brewing.furnace_2.title": "二阶药炉",
+  "advancements.meridian_brewing.brewing.furnace_2.description": "铜釜添三块铁锭改成巫釜，照图样搭起二阶药炉。",
+  "advancements.meridian_brewing.brewing.furnace_3.title": "三阶药塔",
+  "advancements.meridian_brewing.brewing.furnace_3.description": "药塔自己会熬药：塔心是一池活水，木桶进料，铜箱子出药，底下续着燃料。图样也在结构蓝图里。"
 }

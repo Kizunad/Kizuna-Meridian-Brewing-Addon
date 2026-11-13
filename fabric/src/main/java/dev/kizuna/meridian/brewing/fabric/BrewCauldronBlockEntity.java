@@ -171,7 +171,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
         if (caster == null || !level.mayInteract(caster, worldPosition)) {
             return BrewActionResult.returned(BrewText.message("no_permission"));
         }
-        rematchStructure();
+        rematchStructureSeenBy(caster);
         Optional<BrewText> problem = cauldron.startProblem(structure);
         if (problem.isPresent() && problem.equals(layout.match().problem())) {
             // 卡在结构上才在不符那格发标记，再补一句该进哪一座药炉；缺料、缺火不发。
@@ -234,7 +234,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
             techniqueCaster = null;
             return BrewActionResult.accepted(BrewText.message("cauldron.brewed"));
         }
-        rematchStructure();
+        rematchStructureSeenBy(caster);
         BrewRecipe recipe = cauldron.recipe().orElseThrow(() -> new IllegalStateException("熬制中的釜没有药方"));
         Optional<BrewText> structureProblem = structure.problemFor(recipe.kind(), recipe.fireKind());
         if (structureProblem.isPresent()) {
@@ -557,7 +557,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
 
     private BrewActionResult describeState(Player player) {
         // 空手右键看釜：现查一次结构，不符时在不符那格发标记，并在状态后面接上哪一格不对、该进哪一座药炉。
-        rematchStructure();
+        rematchStructureSeenBy(player);
         BrewText recipeName = BrewText.message("cauldron.no_recipe");
         if (cauldron.recipe().isPresent()) {
             recipeName = BrewCauldron.recipeName(cauldron.recipe().orElseThrow().kind());
@@ -722,6 +722,14 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
         // 现比对一次整座结构，结果留着给显示和标记用，再顺手读火。
         layout = BrewStructureMatcher.matchCauldron((ServerLevel) level, worldPosition, getBlockState().getBlock());
         refreshHeatSource();
+    }
+
+    private void rematchStructureSeenBy(Player witness) {
+        // 玩家在场时现比一次；整座对上就按这座药炉的阶数给这名玩家记进度。
+        rematchStructure();
+        if (witness instanceof ServerPlayer player && layout.match().isValid()) {
+            FurnaceBuiltTrigger.TRIGGER.trigger(player, layout.placement().orElseThrow().definition().tier());
+        }
     }
 
     private void refreshHeatSource() {

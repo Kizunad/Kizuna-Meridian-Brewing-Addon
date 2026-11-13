@@ -1,0 +1,32 @@
+{
+  "parent": "minecraft:recipes/root",
+  "criteria": {
+    "has_dead_birch_wood": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": "meridian_brewing:dead_birch_wood"
+          }
+        ]
+      }
+    },
+    "has_the_recipe": {
+      "trigger": "minecraft:recipe_unlocked",
+      "conditions": {
+        "recipe": "meridian_brewing:dead_birch_wood_to_planks"
+      }
+    }
+  },
+  "requirements": [
+    [
+      "has_dead_birch_wood",
+      "has_the_recipe"
+    ]
+  ],
+  "rewards": {
+    "recipes": [
+      "meridian_brewing:dead_birch_wood_to_planks"
+    ]
+  }
+}

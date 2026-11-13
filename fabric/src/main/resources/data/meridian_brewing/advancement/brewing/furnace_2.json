@@ -1,0 +1,27 @@
+{
+  "parent": "meridian_brewing:brewing/furnace_1",
+  "display": {
+    "icon": {
+      "id": "meridian_brewing:witch_cauldron"
+    },
+    "title": {
+      "translate": "advancements.meridian_brewing.brewing.furnace_2.title"
+    },
+    "description": {
+      "translate": "advancements.meridian_brewing.brewing.furnace_2.description"
+    }
+  },
+  "criteria": {
+    "reached": {
+      "trigger": "meridian_brewing:furnace_built",
+      "conditions": {
+        "tier": 2
+      }
+    }
+  },
+  "requirements": [
+    [
+      "reached"
+    ]
+  ]
+}

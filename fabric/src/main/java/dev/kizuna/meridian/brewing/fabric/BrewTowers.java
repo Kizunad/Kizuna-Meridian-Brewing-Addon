@@ -213,6 +213,7 @@ public final class BrewTowers {
 
     private static void open(ServerPlayer viewer, ServerLevel level, Tower tower) {
         // 学会的药方在开窗时查一次；窗口开着期间新学的，关了重开才显示。
+        FurnaceBuiltTrigger.TRIGGER.trigger(viewer, BrewStructureDefinitions.TOWER_TIER);
         Session session = new Session(level, tower.id(), knownMask(viewer));
         Component title = Component.translatable("container." + BrewingFabric.MOD_ID + ".brew_tower");
         viewer.openMenu(new SimpleMenuProvider((containerId, inventory, player) ->

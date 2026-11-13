@@ -269,5 +269,19 @@
   "tooltip.meridian_brewing.charm": "Splashes %s blocks: stagger %s s, charmed %s s",
   "tooltip.meridian_brewing.charm.immune": "Immune for %s s after waking",
   "tooltip.meridian_brewing.charm.follow": "The charmed follows you and attacks what you are fighting or what fights you",
-  "tooltip.meridian_brewing.charm.wake": "It wakes when you or an ally hurt it, or beyond %s blocks from you"
+  "tooltip.meridian_brewing.charm.wake": "It wakes when you or an ally hurt it, or beyond %s blocks from you",
+  "advancements.meridian_brewing.brewing.basics.title": "The Brewing Form",
+  "advancements.meridian_brewing.brewing.basics.description": "Swamp witches have brewed all their lives. Defeat a witch who has refined true qi, or search a witch hut no one has entered, and you may find a scroll of the brewing art.",
+  "advancements.meridian_brewing.brewing.manual.title": "Brewing Compendium",
+  "advancements.meridian_brewing.brewing.manual.description": "A book and a pinch of glowstone dust make a copy of the brewing compendium; it explains how to build the three furnaces and use the tools. Witch hut chests often hold one too.",
+  "advancements.meridian_brewing.brewing.recipe.title": "Brew Recipe",
+  "advancements.meridian_brewing.brewing.recipe.description": "Most recipes are written on witches' parchment, carried by witches and kept in their huts. Read one carefully and it stays in your memory.",
+  "advancements.meridian_brewing.brewing.first_brew.title": "The First Pot",
+  "advancements.meridian_brewing.brewing.first_brew.description": "Set the cauldron in a furnace, keep the fire steady, add the ingredients in the order the recipe gives, and once it cools, ladle out your first bottle.",
+  "advancements.meridian_brewing.brewing.furnace_1.title": "First-Tier Furnace",
+  "advancements.meridian_brewing.brewing.furnace_1.description": "Forge a copper cauldron from seven copper ingots, build a first-tier furnace from the pattern in a structure blueprint, and set the cauldron in it.",
+  "advancements.meridian_brewing.brewing.furnace_2.title": "Second-Tier Furnace",
+  "advancements.meridian_brewing.brewing.furnace_2.description": "Add three iron ingots to a copper cauldron to make a witch cauldron, then build a second-tier furnace from its pattern.",
+  "advancements.meridian_brewing.brewing.furnace_3.title": "Third-Tier Tower",
+  "advancements.meridian_brewing.brewing.furnace_3.description": "The tower brews on its own: a pool of still water at its heart, barrels for ingredients, copper chests for potions, fuel kept burning below. Its pattern is in a structure blueprint too."
 }
