@@ -288,5 +288,10 @@
   "advancements.meridian_brewing.brewing.furnace_2.title": "Second-Tier Furnace",
   "advancements.meridian_brewing.brewing.furnace_2.description": "Add three iron ingots to a copper cauldron to make a witch cauldron, then build a second-tier furnace from its pattern.",
   "advancements.meridian_brewing.brewing.furnace_3.title": "Third-Tier Tower",
-  "advancements.meridian_brewing.brewing.furnace_3.description": "The tower brews on its own: a pool of still water at its heart, barrels for ingredients, copper chests for potions, fuel kept burning below. Its pattern is in a structure blueprint too."
+  "advancements.meridian_brewing.brewing.furnace_3.description": "The tower brews on its own: a pool of still water at its heart, barrels for ingredients, copper chests for potions, fuel kept burning below. Its pattern is in a structure blueprint too.",
+  "advancements.meridian_brewing.cultivators.brewing.title": "Three Fires",
+  "advancements.meridian_brewing.cultivators.brewing.description": "The black, white, and red ash beneath the cauldron holds no more secrets. Where the wooden spoon runs smooth, three turns of heat yield a finished brew.",
+  "codex.intro.meridian_brewing.brewing": "An old brewing craft kept in stilt huts deep within the marsh. Following rim grooves and shifting ash, it simmers a pot full of potent draughts.",
+  "codex.power.meridian_brewing.brewing_basics": "Know the warmth held within the black, white, and red ash beneath the stove. Run a wooden spoon along the pot's rim groove, balancing the heat in three steady turns.",
+  "codex.source.meridian_brewing.brewing_basics": "Tucked occasionally into corner chests within witch huts of the marsh; overcome a witch who has cultivated True Qi, and it may sometimes be found on her."
 }
