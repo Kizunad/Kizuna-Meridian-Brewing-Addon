@@ -12,6 +12,9 @@
   "entrypoints": {
     "main": [
       "dev.kizuna.meridian.brewing.fabric.BrewingFabric"
+    ],
+    "meridian_origin": [
+      "dev.kizuna.meridian.brewing.fabric.BrewOrigins"
     ]
   },
   "mixins": [
@@ -26,6 +29,7 @@
     "fabricloader": ">=0.20.1",
     "fabric-api": "*",
     "meridian_technique": "*",
+    "meridian_origin": "*",
     "meridian_framework": "*",
     "meridian_human_host": "*",
     "meridian_vanilla_damage": "*",

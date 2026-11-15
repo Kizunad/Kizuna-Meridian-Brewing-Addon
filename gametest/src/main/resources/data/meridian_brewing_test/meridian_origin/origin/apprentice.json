@@ -1,0 +1,16 @@
+{
+  "weight": 1,
+  "icon": "minecraft:brewing_stand",
+  "talents": [
+    {
+      "type": "meridian_brewing:starting_recipes",
+      "params": {
+        "recipes": [
+          "qi_gather",
+          "bitter_yellow"
+        ]
+      }
+    }
+  ],
+  "threats": []
+}

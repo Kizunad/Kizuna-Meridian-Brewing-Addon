@@ -34,6 +34,7 @@
   学没学会、读第几次都会翻开；字迹模糊的不翻开。见下面「游戏里的讲解和提示」。
 - 读过的药方记在身体上（`addon_progress["meridian_brewing:recipes"]`，格式 `shared/.../recipes.proto`），换世界不会带过去。旧版本记在玩家存档里的药方，进世界时并进身体一次，以后不再写玩家存档。
 - 查自己读过哪些：`/meridian progression recipes`；管理员可以 `recipes learn|forget [<玩家>] <药方|all>`，见 Framework 的指令页。
+- 出身也能带药方：本模组给出身附属登记了一次性天赋 `meridian_brewing:starting_recipes`，参数 `recipes` 是药方 ID 列表（如 `["qi_gather", "bitter_yellow"]`，至少一张；写错药方或一张不写，出身数据读取失败，开服时直接起不来）。选定出身时并进已读过的药方，原来读过的不丢；身体读不到就等下次进服再记，记成以后不再补发（`fabric/.../BrewOrigins.java`）。这样记下的药方和管理员指令一样不算「读了一张药方」，不完成「药方」进度。
 
 两只釜对照（`server/.../VesselKind.java:5–6`）：
 

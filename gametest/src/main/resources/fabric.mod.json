@@ -27,7 +27,8 @@
       "dev.kizuna.meridian.brewing.fabric.BrewingLoreGameTest",
       "dev.kizuna.meridian.brewing.fabric.BrewingTowerGameTest",
       "dev.kizuna.meridian.brewing.fabric.BrewingSaveGameTest",
-      "dev.kizuna.meridian.brewing.fabric.BrewingAdvancementGameTest"
+      "dev.kizuna.meridian.brewing.fabric.BrewingAdvancementGameTest",
+      "dev.kizuna.meridian.brewing.fabric.BrewingOriginGameTest"
     ]
   },
   "depends": {

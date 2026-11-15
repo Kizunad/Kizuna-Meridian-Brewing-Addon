@@ -24,6 +24,8 @@ dependencies {
     implementation 'dev.kizuna:kizuna-players-animation'
     // 女巫施放的动作测试读 PA 生物附属里登记着的播放。
     implementation 'dev.kizuna:kizuna-players-animation-mobs-addon'
+    // 出身测试读出身附属定下的出身，确认它已读完重进服玩家的身体。
+    implementation 'dev.kizuna.meridian.origin:fabric'
     // 重量测试读 BS3D 的物品元数据。
     implementation 'dev.kizuna.backpack3d:server'
 }

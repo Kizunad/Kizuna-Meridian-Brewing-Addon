@@ -20,6 +20,8 @@ dependencies {
     implementation 'dev.kizuna:kizuna-players-animation'
     // 女巫敷药的动作经 PA 的生物附属播放；生物附属是硬依赖。
     implementation 'dev.kizuna:kizuna-players-animation-mobs-addon'
+    // 出身附属是硬依赖：登记「开局会的药方」天赋类型；运行时由完整装配装入。
+    implementation 'dev.kizuna.meridian.origin:fabric'
     // 物品重量登记在 BS3D 的物品元数据里，由负重附属读取；BS3D 是硬依赖。
     implementation 'dev.kizuna.backpack3d:server'
     include project(':server')

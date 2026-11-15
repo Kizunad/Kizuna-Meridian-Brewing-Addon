@@ -21,6 +21,12 @@ kizunaWorkspace.includeSource('technique', [
         server: 'dev.kizuna.meridian.technique:server',
         shared: 'dev.kizuna.meridian.technique:shared'
 ])
+// 出身附属：登记「开局会的药方」这一类天赋，按真实坐标声明依赖。
+kizunaWorkspace.includeSource('origin', [
+        fabric: 'dev.kizuna.meridian.origin:fabric',
+        server: 'dev.kizuna.meridian.origin:server',
+        shared: 'dev.kizuna.meridian.origin:shared'
+])
 kizunaWorkspace.includeSource('vanilla-damage', [
         fabric: 'dev.kizuna.meridian.vanilla:fabric',
         server: 'dev.kizuna.meridian.vanilla:server'
