@@ -95,6 +95,10 @@ public final class BrewingGameTest {
     private static final int STRUCTURE_Z = 2;
     private static final int OBSERVE_TICKS = 2;
     private static final int WITHERING_OBSERVE_TICKS = 8;
+    private static final int EXPECTED_WITHERING_BUDGET = 8;
+    private static final int WITHERING_CANDIDATE_COUNT = 10;
+    private static final int WITHERING_ROW_WIDTH = 5;
+    private static final int WITHERING_SOURCE_HEIGHT = 6;
     private static final double HEAT_OBSERVE_SECONDS = 6.0;
     private static final double COLLECTION_COOLING_SECONDS = 1.25;
     private static final long CURRENT_GAME_DAY = 3L;
@@ -515,34 +519,24 @@ public final class BrewingGameTest {
 
     @GameTest(maxTicks = DEFAULT_TIMEOUT)
     public void depletionWitheringUsesPerTickBudget(GameTestHelper context) {
-        // 真实喷溅入口把十个草方块排入枯萎队列，验证第一批不超过服务端预算。
+        // 十个中心必中的任务同 tick 入队，逐 tick 检查预算，直到所有草方块都转换。
         ServerLevel level = context.getLevel();
         BlockPos origin = context.absolutePos(new BlockPos(STRUCTURE_X, STRUCTURE_Y, STRUCTURE_Z));
-        List<BlockPos> candidates = new ArrayList<>();
-        int[] lateralOffsets = {-2, -1, 0, 1, 2};
-        int[] depthOffsets = {-1, 1};
-        for (int lateralOffset : lateralOffsets) {
-            for (int depthOffset : depthOffsets) {
-                BlockPos candidate = origin.offset(lateralOffset, 0, depthOffset);
-                level.setBlockAndUpdate(candidate, Blocks.GRASS_BLOCK.defaultBlockState());
-                candidates.add(candidate);
-            }
-        }
         ServerPlayer player = BrewingTestPlayers.create(context);
         player.setGameMode(GameType.SURVIVAL);
-        player.setPos(origin.getX() + 0.5, origin.getY() + 1.0, origin.getZ() + 0.5);
-        ItemStack brew = BrewItemStacks.create(BrewKind.DEPLETION, BrewQuality.POOR, BrewUse.SPLASH);
-        BrewingRuntime.splash(level, brew, Vec3.atCenterOf(origin), player);
-        context.runAfterDelay(WITHERING_OBSERVE_TICKS, () -> {
-            int changed = 0;
-            for (BlockPos candidate : candidates) {
-                if (level.getBlockState(candidate).is(Blocks.DIRT)) {
-                    changed++;
-                }
+        player.setPos(Vec3.atCenterOf(origin.above(WITHERING_SOURCE_HEIGHT)));
+        List<BlockPos> candidates = enqueueWitheringGrass(level, origin, player);
+        int[] previousChanged = {0};
+        context.onEachTick(() -> {
+            int changed = countWitheredGrass(level, candidates);
+            int changedThisTick = changed - previousChanged[0];
+            context.assertTrue(changedThisTick <= EXPECTED_WITHERING_BUDGET,
+                    "单 tick 枯萎超过预算：" + changedThisTick);
+            previousChanged[0] = changed;
+            if (changed == candidates.size()) {
+                BrewingTestPlayers.close(player);
+                context.succeed();
             }
-            context.assertTrue(changed > 0, "枯萎喷溅没有转换草方块");
-            context.assertTrue(changed <= 8, "单 tick 枯萎超过预算：" + changed);
-            context.succeed();
         });
     }
 
@@ -580,6 +574,36 @@ public final class BrewingGameTest {
                 });
             });
         });
+    }
+
+    private static List<BlockPos> enqueueWitheringGrass(ServerLevel level, BlockPos origin, ServerPlayer player) {
+        // 每次只暴露一格中心草，入队后暂换泥土，避免后续喷溅重复选中已经入队的目标。
+        ItemStack brew = BrewItemStacks.create(BrewKind.DEPLETION, BrewQuality.POOR, BrewUse.SPLASH);
+        BlockState grass = Blocks.GRASS_BLOCK.defaultBlockState();
+        List<BlockPos> candidates = new ArrayList<>();
+        for (int index = 0; index < WITHERING_CANDIDATE_COUNT; index++) {
+            BlockPos candidate = origin.offset(index % WITHERING_ROW_WIDTH, 0, index / WITHERING_ROW_WIDTH);
+            level.setBlockAndUpdate(candidate, grass);
+            BrewingRuntime.splash(level, brew, Vec3.atCenterOf(candidate), player);
+            level.setBlockAndUpdate(candidate, Blocks.DIRT.defaultBlockState());
+            candidates.add(candidate);
+        }
+        // 同步准备期间世界不会推进，恢复草后十个零延迟任务会一起进入预算分配。
+        for (BlockPos candidate : candidates) {
+            level.setBlockAndUpdate(candidate, grass);
+        }
+        return List.copyOf(candidates);
+    }
+
+    private static int countWitheredGrass(ServerLevel level, List<BlockPos> candidates) {
+        // 只统计这组目标的真实世界变化，其他用例的枯萎任务可以共享同一个世界队列。
+        int changed = 0;
+        for (BlockPos candidate : candidates) {
+            if (level.getBlockState(candidate).is(Blocks.DIRT)) {
+                changed++;
+            }
+        }
+        return changed;
     }
 
     private static List<BlockPos> placeWitheringGrass(ServerLevel level, BlockPos origin,
