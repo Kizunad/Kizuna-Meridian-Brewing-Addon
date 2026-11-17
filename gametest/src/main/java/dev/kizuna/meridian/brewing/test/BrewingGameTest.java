@@ -400,6 +400,8 @@ public final class BrewingGameTest {
         context.assertTrue(BrewingRuntime.consume(level, player, bitter), "饮用入口没有识别巫药");
         context.assertTrue(!BrewingTestPlayers.body(player).getId().isBlank(), "药效没有使用真实身体");
         context.assertTrue(player.hasEffect(bitterEffect), "苦黄膏饮用没有添加状态效果");
+        context.assertTrue(!player.getEffect(bitterEffect).isVisible() && player.getEffect(bitterEffect).showIcon(),
+                "药效要不出粒子、有图标");
 
         var target = context.spawn(EntityTypes.ZOMBIE,
                 new BlockPos(STRUCTURE_X, STRUCTURE_Y, STRUCTURE_Z));

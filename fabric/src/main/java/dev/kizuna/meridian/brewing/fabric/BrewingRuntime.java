@@ -560,7 +560,7 @@ public final class BrewingRuntime {
         int durationTicks = Math.max(MIN_EFFECT_TICKS,
                 (int) Math.round(durationSeconds * TICKS_PER_SECOND));
         target.addEffect(new MobEffectInstance(effect, durationTicks, quality.componentValue(),
-                false /* ambient */, true /* visible */, true /* showIcon */));
+                false /* ambient */, false /* showParticles */, true /* showIcon */));
     }
 
     private static void spawnSilverfish(ServerLevel level, Vec3 position,

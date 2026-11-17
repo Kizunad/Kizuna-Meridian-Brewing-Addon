@@ -301,7 +301,7 @@ final class BrewBodyEffects {
         // 本仓已按药种合并剂量，覆盖图标避免原版 hiddenEffect 留下另一套刷新期限。
         int duration = Math.max(1, (int) Math.ceil(seconds * TICKS_PER_SECOND));
         var effect = new MobEffectInstance(status, duration, quality.componentValue(),
-                false /* ambient */, true /* visible */, true /* showIcon */);
+                false /* ambient */, false /* showParticles */, true /* showIcon */);
         if (BrewingEffects.kind(status).isPresent()) {
             target.forceAddEffect(effect, null);
         } else {
