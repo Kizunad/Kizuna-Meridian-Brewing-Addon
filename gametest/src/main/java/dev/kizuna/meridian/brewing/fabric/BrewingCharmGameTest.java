@@ -461,6 +461,57 @@ public final class BrewingCharmGameTest {
         context.succeed();
     }
 
+    @GameTest(maxTicks = TIMEOUT)
+    public void casterIsNotCharmedByItsOwnBrew(GameTestHelper context) {
+        // 施药者站在自己药的范围里：自己不中，不受控、不僵直、也不记免疫；旁边的人照常中。
+        Villager caster = villager(context, 1);
+        Villager subject = villager(context, 2);
+        charm(caster, caster);
+        context.assertTrue(!BrewCharmSessions.controlled(caster.getUUID()), "施药者被自己的魅惑控住了");
+        context.assertTrue(!caster.hasEffect(BrewingEffects.CHARM_CONTROL)
+                && !caster.hasEffect(BrewingEffects.CHARM_STAGGER), "施药者身上挂了自己的魅惑效果");
+        charm(subject, caster);
+        context.assertTrue(BrewCharmSessions.controlled(subject.getUUID()), "旁边的人没有照常中魅惑");
+        List.of(caster, subject).forEach(Mob::discard);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = TIMEOUT)
+    public void mobCasterTargetPriorityAndOwnSubjectsAreNeverTargets(GameTestHelper context) {
+        // 生物施药：先是施药者正在打的，再是最近 100 tick 伤过施药者的，再是 16 格内正盯着施药者的；都没有就跟随。
+        // 被这个施药者魅惑着的生物哪一步都不算数。
+        Villager caster = villager(context, 1);
+        Villager subject = villager(context, 2);
+        Villager other = villager(context, 3);
+        Villager attacker = villager(context, 4);
+        Villager fought = villager(context, 5);
+        var hunter = context.spawn(EntityTypes.PILLAGER, new BlockPos(2, HEIGHT, 2));
+        hunter.setNoAi(true /* noAi */);
+        charm(subject, caster);
+        charm(other, caster);
+        context.assertTrue(BrewCharmTargets.opponent(caster, subject) == null, "无敌人时没有跟随");
+        hunter.setTarget(caster);
+        context.assertTrue(BrewCharmTargets.opponent(caster, subject) == hunter, "没有选正盯着施药者的敌人");
+        hit(caster, attacker);
+        context.assertTrue(BrewCharmTargets.opponent(caster, subject) == attacker,
+                "伤过施药者的没有排在盯着她的前面");
+        caster.setTarget(fought);
+        context.assertTrue(BrewCharmTargets.opponent(caster, subject) == fought, "施药者正在打的没有排第一");
+        // 另一只被她魅惑着的刚伤了她（直接伤害入口打进去的），成了「最近伤过她的」：它不能被选成对手，
+        // 往下数到正盯着她的那个。这里不靠改目标来摆局：装着 Threatening 时她本来就盯不上自己魅惑着的。
+        caster.setTarget(null);
+        hit(caster, other);
+        context.assertTrue(BrewCharmTargets.opponent(caster, subject) == hunter,
+                "被同一个施药者魅惑着的被选成了对手：" + BrewCharmTargets.opponent(caster, subject));
+        context.runAfterDelay(MEMORY_EXPIRED, () -> {
+            context.assertTrue(BrewCharmTargets.opponent(caster, subject) == hunter, "五秒前伤过施药者的没有过期");
+            hunter.setTarget(null);
+            context.assertTrue(BrewCharmTargets.opponent(caster, subject) == null, "都没有时没有回到跟随");
+            List.of(caster, subject, other, attacker, fought, hunter).forEach(Mob::discard);
+            context.succeed();
+        });
+    }
+
     private static Villager villager(GameTestHelper context, int x) {
         // 正式健康宿主认领身体，关闭 AI 只用于隔离药效生命周期断言。
         Villager entity = context.spawn(EntityTypes.VILLAGER, new BlockPos(x, HEIGHT, 1));

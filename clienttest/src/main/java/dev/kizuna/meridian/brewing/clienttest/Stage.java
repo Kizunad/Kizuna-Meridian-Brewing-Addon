@@ -54,7 +54,14 @@ final class Stage {
         stage.command("time set noon");
         stage.command("weather clear");
         stage.spectate();
+        stage.closeScreen();
         return stage;
+    }
+
+    void closeScreen() {
+        // 新玩家进世界会弹出身三选一，把整个画面盖住；这里不选，关掉。等几 tick 是等那个包到。
+        context.waitTicks(SETTLE_TICKS);
+        context.runOnClient(client -> client.gui.setScreen(null));
     }
 
     void spectate() {

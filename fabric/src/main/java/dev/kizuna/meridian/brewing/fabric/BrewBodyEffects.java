@@ -242,6 +242,10 @@ final class BrewBodyEffects {
     private static void charm(LivingEntity target, BrewBodyHost.Binding binding, Application application,
                                 BrewPotency potency) {
         // 判定和醒后免疫在本仓；受控目标的决策由控制宿主接续。
+        // 施药者不中自己的魅惑：往脚下丢、站在自己药的范围里，都不受控、不僵直、不记免疫。
+        if (target == application.source()) {
+            return;
+        }
         BrewBodyState state = BrewBodyProgress.read(binding.body());
         long now = binding.body().getSettledAt().getElapsedMillis();
         if (state.getCharmImmunityUntilMillis() > now || BrewCharmSessions.controlled(target.getUUID())) {

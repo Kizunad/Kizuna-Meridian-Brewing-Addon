@@ -15,7 +15,12 @@ import net.minecraft.world.entity.OwnableEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.monster.Enemy;
 
-/** 魅惑的阵营与四步选敌规则，控制器复用同一份世界事实。 */
+/**
+ * 魅惑的阵营与选敌规则，控制器复用同一份世界事实。
+ *
+ * <p>受控者替施药者打谁，依次是：施药者正在打的（玩家是最近亲手命中的，生物是当前目标）、最近伤过施药者的、
+ * 16 格内正盯着施药者的敌对生物；都没有就跟随。受控者自己、施药者一方、被同一个施药者魅惑着的都不算数。</p>
+ */
 public final class BrewCharmTargets {
     public static final double RANGE = 16;
     private static final long MEMORY_TICKS = 100;
@@ -51,28 +56,23 @@ public final class BrewCharmTargets {
         if (attacker instanceof ServerPlayer) {
             outgoing.put(attackerId, new Hit(targetId, tick));
         }
-        if (target instanceof ServerPlayer) {
-            incoming.put(targetId, new Hit(attackerId, tick));
-        }
+        // 谁最近伤过谁对生物也记：生物施药时同样要问「最近谁伤过施药者」。五秒过期，每 tick 清。
+        incoming.put(targetId, new Hit(attackerId, tick));
     }
 
     public static LivingEntity opponent(LivingEntity caster, LivingEntity subject) {
-        // 玩家严格按亲手命中、受击、正被敌对生物瞄准、跟随的顺序挑选。
-        if (caster instanceof ServerPlayer) {
-            UUID casterId = caster.getUUID();
-            LivingEntity attacked = remembered(caster, subject, outgoing.get(casterId));
-            if (attacked != null) {
-                return attacked;
-            }
-            LivingEntity attacker = remembered(caster, subject, incoming.get(casterId));
-            if (attacker != null) {
-                return attacker;
-            }
-        } else if (caster instanceof Mob mob) {
-            LivingEntity target = mob.getTarget();
-            if (valid(caster, subject, target)) {
-                return target;
-            }
+        // 严格按施药者正在打的、最近伤过施药者的、正盯着施药者的敌对生物、跟随的顺序挑选。
+        UUID casterId = caster.getUUID();
+        LivingEntity engaged = remembered(caster, subject, outgoing.get(casterId));
+        if (caster instanceof Mob mob && valid(caster, subject, mob.getTarget())) {
+            engaged = mob.getTarget();
+        }
+        if (engaged != null) {
+            return engaged;
+        }
+        LivingEntity attacker = remembered(caster, subject, incoming.get(casterId));
+        if (attacker != null) {
+            return attacker;
         }
         return caster.level().getEntitiesOfClass(Mob.class, caster.getBoundingBox().inflate(RANGE),
                         mob -> mob.getTarget() == caster && caster.distanceToSqr(mob) <= RANGE * RANGE
@@ -108,9 +108,10 @@ public final class BrewCharmTargets {
     }
 
     private static boolean valid(LivingEntity caster, LivingEntity subject, LivingEntity target) {
-        // 本次受控者不能自伤，也不能代打旁观者、死体或施药者一方。
+        // 本次受控者不能自伤，也不能代打旁观者、死体、施药者一方，或者被同一个施药者魅惑着的另一只。
         return target != null && target != subject && target.isAlive() && !target.isRemoved()
-                && !target.isSpectator() && target.level() == caster.level() && !sameSide(caster, target);
+                && !target.isSpectator() && target.level() == caster.level() && !sameSide(caster, target)
+                && !BrewCharmSessions.charmedBy(caster, target);
     }
 
     static void forget(UUID player) {

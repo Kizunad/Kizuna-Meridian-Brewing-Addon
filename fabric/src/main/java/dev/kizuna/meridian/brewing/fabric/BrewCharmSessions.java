@@ -127,6 +127,12 @@ public final class BrewCharmSessions {
         return active.containsKey(subject);
     }
 
+    static boolean charmedBy(LivingEntity caster, LivingEntity subject) {
+        // 这只生物现在是不是被这个施药者魅惑着。
+        Active value = active.get(subject.getUUID());
+        return value != null && value.caster() == caster;
+    }
+
     private static void tick(MinecraftServer server) {
         // 输入与 AI 运行前先终止无效会话；到了选敌的点（或刚有人挨打、死了）再重选，对手换了才发给控制器。
         long tick = server.overworld().getGameTime();
