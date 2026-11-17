@@ -19,10 +19,10 @@ import net.minecraft.world.item.ItemStack;
  * {@link ContainerData} 的整数同步，不新增网络包。服务端带着它看的那座塔；客户端只有一张整数表，由原版同步填。
  *
  * <p>整数都在 16 位以内（原版按短整数同步）：温度、进度按十分之一，燃料按秒。枚举按序号，药方按
- * {@code BrewKind.values()} 的顺序，“选中的药方”和“形态”没有时是 -1。</p>
+ * {@code BrewKind.towerKinds()} 的顺序，“选中的药方”和“形态”没有时是 -1。</p>
  */
 public final class BrewTowerMenu extends AbstractContainerMenu {
-    /** 0–5：按 {@code BrewKind.values()} 选药方。 */
+    /** 0–5：按 {@code BrewKind.towerKinds()} 选药方。 */
     public static final int BUTTON_FIRST_RECIPE = 0;
     public static final int BUTTON_DRINK = 6;
     public static final int BUTTON_SPLASH = 7;
@@ -48,7 +48,7 @@ public final class BrewTowerMenu extends AbstractContainerMenu {
     /** 在等的东西，{@code TowerNeed.bit()} 的或。 */
     public static final int DATA_NEEDS = 10;
     public static final int DATA_CHEST_FREE = 11;
-    /** 看窗口的人学会的药方，第 i 位是 {@code BrewKind.values()[i]}。 */
+    /** 看窗口的人学会的药方，第 i 位是 {@code BrewKind.towerKinds()[i]}。 */
     public static final int DATA_KNOWN = 12;
     /** 选中的药方序号，没选是 -1。 */
     public static final int DATA_SELECTED = 13;

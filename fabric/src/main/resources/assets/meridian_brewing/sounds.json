@@ -195,6 +195,15 @@
       }
     ]
   },
+  "potion.elixir": {
+    "subtitle": "subtitles.meridian_brewing.potion.elixir",
+    "sounds": [
+      {
+        "name": "minecraft:block.brewing_stand.brew",
+        "type": "event"
+      }
+    ]
+  },
   "potion.qi_gather": {
     "subtitle": "subtitles.meridian_brewing.potion.qi_gather",
     "sounds": [

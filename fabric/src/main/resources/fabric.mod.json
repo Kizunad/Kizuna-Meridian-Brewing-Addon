@@ -33,6 +33,7 @@
     "meridian_framework": "*",
     "meridian_human_host": "*",
     "meridian_vanilla_damage": "*",
+    "meridian_vanilla_healing": "*",
     "kizuna_players_animation": "*",
     "kizuna_players_animation_mobs": "*",
     "backpack_storage_3d": "*"

@@ -83,6 +83,71 @@
             {
               "function": "minecraft:set_components",
               "components": {
+                "meridian_brewing:recipe_kind": "fire_elixir"
+              }
+            }
+          ]
+        },
+        {
+          "type": "minecraft:item",
+          "name": "meridian_brewing:brew_recipe",
+          "weight": 1,
+          "functions": [
+            {
+              "function": "minecraft:set_components",
+              "components": {
+                "meridian_brewing:recipe_kind": "metal_elixir"
+              }
+            }
+          ]
+        },
+        {
+          "type": "minecraft:item",
+          "name": "meridian_brewing:brew_recipe",
+          "weight": 1,
+          "functions": [
+            {
+              "function": "minecraft:set_components",
+              "components": {
+                "meridian_brewing:recipe_kind": "wood_elixir"
+              }
+            }
+          ]
+        },
+        {
+          "type": "minecraft:item",
+          "name": "meridian_brewing:brew_recipe",
+          "weight": 1,
+          "functions": [
+            {
+              "function": "minecraft:set_components",
+              "components": {
+                "meridian_brewing:recipe_kind": "water_elixir"
+              }
+            }
+          ]
+        },
+        {
+          "type": "minecraft:item",
+          "name": "meridian_brewing:brew_recipe",
+          "weight": 1,
+          "functions": [
+            {
+              "function": "minecraft:set_components",
+              "components": {
+                "meridian_brewing:recipe_kind": "earth_elixir"
+              }
+            }
+          ]
+        },
+        {
+          "type": "minecraft:item",
+          "name": "meridian_brewing:brew_recipe",
+          "weight": 1,
+          "functions": [
+            {
+              "function": "minecraft:set_components",
+              "components": {
                 "meridian_brewing:recipe_kind": "charm"
               }
             }

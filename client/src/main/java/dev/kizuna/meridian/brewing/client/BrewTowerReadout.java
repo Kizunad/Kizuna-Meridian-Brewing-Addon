@@ -17,7 +17,7 @@ import java.util.Optional;
  * 认不得的位不画，认不得的序号按没有或第一项算。</p>
  */
 final class BrewTowerReadout {
-    private static final BrewKind[] KINDS = BrewKind.values();
+    private static final BrewKind[] KINDS = BrewKind.towerKinds();
     private static final TowerNeed[] NEEDS = TowerNeed.values();
 
     private BrewTowerReadout() {

@@ -38,7 +38,7 @@ public class BrewTowerReadoutTest {
     @Test
     public void everyMixOfMaskAndRecipeCanBeDrawn() {
         // 掩码、药方各自取遍（含认不得的位和越界的序号）：不抛异常，认得的缺项一样不少，料类的都带着料名和件数。
-        for (int selected = NO_SELECTION - 1; selected <= BrewKind.values().length + 1; selected++) {
+        for (int selected = NO_SELECTION - 1; selected <= BrewKind.towerKinds().length + 1; selected++) {
             for (int mask = 0; mask <= ALL_NEEDS; mask++) {
                 check(mask, selected);
                 check(mask | UNKNOWN_BITS, selected);
@@ -49,7 +49,7 @@ public class BrewTowerReadoutTest {
     @Test
     public void stockedNeedsAgreeWithTheStartList() {
         // 窗口单独查到的料名、件数，和服务端开工清单里的是同一份。
-        for (BrewKind kind : BrewKind.values()) {
+        for (BrewKind kind : BrewKind.towerKinds()) {
             for (BrewForm form : BrewForm.values()) {
                 var recipe = BrewRecipes.require(kind);
                 for (BrewTowerController.Requirement listed : BrewTowerController.requirements(recipe, form)) {
@@ -127,7 +127,7 @@ public class BrewTowerReadoutTest {
     private static void check(int mask, int selected) {
         List<Shown> shown = BrewTowerReadout.shown(mask, selected);
         String where = "mask=" + mask + " selected=" + selected;
-        if (selected < 0 || selected >= BrewKind.values().length) {
+        if (selected < 0 || selected >= BrewKind.towerKinds().length) {
             assertTrue(where, shown.isEmpty());
             return;
         }

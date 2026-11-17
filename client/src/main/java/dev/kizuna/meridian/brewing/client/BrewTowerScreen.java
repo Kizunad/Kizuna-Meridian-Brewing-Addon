@@ -41,7 +41,7 @@ import net.minecraft.world.item.Items;
  * 底板照原版容器的灰色画法，不用自制贴图（ui-neutral-chrome）。</p>
  */
 final class BrewTowerScreen extends AbstractContainerScreen<BrewTowerMenu> {
-    private static final BrewKind[] KINDS = BrewKind.values();
+    private static final BrewKind[] KINDS = BrewKind.towerKinds();
     private static final TowerStatus[] STATUSES = TowerStatus.values();
     private static final BrewForm[] FORMS = BrewForm.values();
     private static final FireKind[] FIRES = FireKind.values();

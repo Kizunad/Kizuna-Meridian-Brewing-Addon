@@ -125,6 +125,10 @@ public final class BrewTooltipLines {
     }
 
     private static List<MutableComponent> effectLines(BrewKind kind, BrewQuality quality, BrewUse use) {
+        // 丹露统一按药种目录读取提示，巫药分别展示自己的作用。
+        if (kind.elixir()) {
+            return elixir(kind, quality);
+        }
         return switch (kind) {
             case QI_GATHER -> qiGather(BrewEffectProfiles.qiGather(quality));
             case DEPLETION -> depletion(BrewEffectProfiles.depletion(quality));
@@ -132,7 +136,16 @@ public final class BrewTooltipLines {
             case INSECT_LURE -> insectLure(BrewEffectProfiles.insectLure(quality));
             case BITTER_YELLOW -> bitterYellow(BrewEffectProfiles.bitterYellow(quality, use));
             case CHARM -> charm(BrewEffectProfiles.charm(quality));
+            default -> throw new IllegalArgumentException("没有登记药效提示：" + kind);
         };
+    }
+
+    private static List<MutableComponent> elixir(BrewKind kind, BrewQuality quality) {
+        // 喝下得多少本行真元；丹毒留多久、在身时再喝打几折。
+        var settings = BrewElixirs.settings();
+        return List.of(
+                line(kind.path(), number(settings.dose(quality, 0))),
+                line("elixir.toxin", number(settings.toxinSeconds()), number(settings.repeatFactor())));
     }
 
     private static List<MutableComponent> qiGather(QiGatherProfile profile) {

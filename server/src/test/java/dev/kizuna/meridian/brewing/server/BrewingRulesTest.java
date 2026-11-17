@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
@@ -223,6 +224,35 @@ public final class BrewingRulesTest {
                 cauldron.startProblem(new BrewStructure(HeatSourceKind.SUN_BRAZIER_2, StructureMatch.unloaded()))
                         .orElseThrow().key());
         assertTrue(cauldron.startProblem(STABLE_HEAT).isEmpty());
+    }
+
+    @Test
+    public void fireElixirBrewsFromVanillaBlazePowderAndRefusesGunpowder() {
+        // 火行丹露的主料是原版的烈焰粉，不用炮制：下进釜就定了是这张方子。它只能喝，火药下不进去。
+        // 铁炉座三档（93 度）在它的火候带里，辅料岩浆膏、引药火焰弹按时下，凉下来舀出的是优质。
+        BrewStructure heat = BrewStructure.built(HeatSourceKind.SUN_BRAZIER_3);
+        BrewCauldron cauldron = new BrewCauldron(VesselKind.WITCH_CAULDRON, BrewForm.DRINK);
+        cauldron.addWater(3);
+        assertTrue(cauldron.addIngredient(IngredientSlot.PRIMARY,
+                IngredientBatch.prepared("minecraft:blaze_powder", 0)).accepted());
+        assertEquals(BrewKind.FIRE_ELIXIR, cauldron.recipe().orElseThrow().kind());
+        cauldron.addIngredient(IngredientSlot.BASE, IngredientBatch.raw("minecraft:glowstone_dust"));
+        assertTrue(!cauldron.addIngredient(IngredientSlot.PROPELLANT,
+                IngredientBatch.raw(BrewCauldron.PROPELLANT_INGREDIENT_ID)).accepted());
+        cauldron.startBrew(heat);
+        cauldron.tick(8.0, heat);
+        cauldron.addIngredient(IngredientSlot.ACCESSORY, IngredientBatch.raw("minecraft:magma_cream"));
+        cauldron.tick(14.0, heat);
+        cauldron.addIngredient(IngredientSlot.CATALYST, IngredientBatch.raw("minecraft:fire_charge"));
+        cauldron.tick(8.0, heat);
+        assertEquals(BrewCauldronState.BREWED, cauldron.state());
+        cauldron.tick(COLLECTION_COOLING_SECONDS, BrewStructure.built(HeatSourceKind.NONE));
+        BrewCollectionResult result = cauldron.collectBottle(3);
+        assertEquals(BrewCollectionKind.POTION, result.kind());
+        assertEquals(Optional.of(BrewQuality.SUPERIOR), result.score().orElseThrow().quality());
+        // 丹露不进药塔：塔里能选的还是原来六种。
+        assertTrue(Arrays.stream(BrewKind.towerKinds()).noneMatch(BrewKind::elixir));
+        assertEquals(BrewKind.values().length - BrewKind.elixirKinds().length, BrewKind.towerKinds().length);
     }
 
     @Test

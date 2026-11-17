@@ -61,7 +61,7 @@ public final class BrewTowers {
     private static final int TENTHS = 10;
     private static final int PERCENT = 100;
     private static final int NONE = -1;
-    private static final BrewKind[] KINDS = BrewKind.values();
+    private static final BrewKind[] KINDS = BrewKind.towerKinds();
     /** 每座塔上一次告诉选药方的人的不符原因：同一个原因只说一次。只在内存里，重启后再说一次无妨。 */
     private static final Map<UUID, BrewText> REPORTED = new HashMap<>();
     /** 定义暂时找不到、正停着的塔：只在停下那一刻记一次日志。只在内存里。 */

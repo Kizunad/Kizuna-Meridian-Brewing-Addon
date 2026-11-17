@@ -93,7 +93,8 @@ public final class BrewingPlayFixGameTest {
     private static final int LOOT_ROLLS = 200;
     private static final int LAST_HURT_TICKS = 100;
     private static final float LETHAL_DAMAGE = 1_000.0F;
-    private static final int QUALITY_BREWS = 28;
+    /** 六种巫药七种瓶（苦黄膏有喝、泼两种）加五种丹露，各四档。 */
+    private static final int QUALITY_BREWS = 48;
     private static final int WEIGHED_ITEMS = 33;
     /** 四档品质的组件值是 0–3，99 谁也不是。 */
     private static final int UNKNOWN_QUALITY = 99;

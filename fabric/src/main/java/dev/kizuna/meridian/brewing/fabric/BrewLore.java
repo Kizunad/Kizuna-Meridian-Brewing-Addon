@@ -31,7 +31,7 @@ public final class BrewLore {
         // 只有静态入口。
     }
 
-    /** 七篇的篇名：六张药方按 {@link BrewKind} 的顺序，最后是总纲。 */
+    /** 各篇的篇名：药方按 {@link BrewKind} 的顺序（六张巫药、然后是丹露），最后是总纲。 */
     public static List<String> documents() {
         // 篇名就是药方路径名，和羊皮纸上的药方组件同一套。
         List<String> documents = new ArrayList<>();

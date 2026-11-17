@@ -11,7 +11,7 @@ import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.item.alchemy.Potion;
 
-/** 六种巫药的原版 Potion 身份；品质留在物品数据组件。 */
+/** 巫药和五行丹露的原版 Potion 身份；品质留在物品数据组件。 */
 final class BrewingPotions {
     private static final int DEFAULT_STATUS_DURATION_TICKS = 20;
     private static final Map<BrewKind, Holder.Reference<Potion>> POTIONS = new EnumMap<>(BrewKind.class);
@@ -27,6 +27,9 @@ final class BrewingPotions {
         POTIONS.put(BrewKind.INSECT_LURE, register(BrewKind.INSECT_LURE, BrewingEffects.INSECT_LURE));
         POTIONS.put(BrewKind.QI_GATHER, register(BrewKind.QI_GATHER, BrewingEffects.QI_GATHER));
         POTIONS.put(BrewKind.CHARM, register(BrewKind.CHARM, BrewingEffects.CHARM_CONTROL));
+        for (BrewKind kind : BrewKind.elixirKinds()) {
+            POTIONS.put(kind, register(kind, BrewingEffects.status(kind)));
+        }
     }
 
     static Holder<Potion> potion(BrewKind kind) {

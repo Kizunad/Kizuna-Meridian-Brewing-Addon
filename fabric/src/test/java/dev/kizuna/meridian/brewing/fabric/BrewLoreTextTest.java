@@ -17,12 +17,12 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * 七篇讲解的正文：中文、英文语言文件里都有，都不是空的。中文是老药婆讲古的世界内文本，
+ * 十二篇讲解的正文：中文、英文语言文件里都有，都不是空的。中文是老药婆讲古的世界内文本，
  * 不许出现分数、倍率、按键、界面这些机制说法，也不许夹英文。
  */
 public class BrewLoreTextTest {
     private static final String LANG_DIRECTORY = "/assets/meridian_brewing/lang/";
-    private static final int DOCUMENT_COUNT = 7;
+    private static final int DOCUMENT_COUNT = 12;
     private static final List<String> MECHANIC_WORDS = List.of(
             "分数", "总分", "满分", "扣分", "得分", "倍率", "机制", "判定", "时窗", "动作栏", "窗口",
             "右键", "左键", "主手", "副手", "×", "%");
@@ -30,7 +30,7 @@ public class BrewLoreTextTest {
 
     @Test
     public void everyDocumentHasTextInBothLanguages() throws IOException {
-        // 六张药方加总纲，每一篇在两份语言文件里都要有正文。
+        // 六张巫药方、五张丹露方加总纲，每一篇在两份语言文件里都要有正文。
         List<String> documents = BrewLore.documents();
         assertEquals(DOCUMENT_COUNT, documents.size());
         for (String language : List.of("zh_cn", "en_us")) {

@@ -5,8 +5,18 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.Optional;
 
-/** 首版六张药方；数值集中于此，后续试熬只需改配置来源。 */
+/** 六张巫药方与五行丹露方共用原料、火候带和时窗目录。 */
 public final class BrewRecipes {
+    private static final HeatBand FIRE_HEAT = new HeatBand(88, 96);
+    private static final HeatBand METAL_HEAT = new HeatBand(90, 98);
+    private static final HeatBand WOOD_HEAT = new HeatBand(80, 88);
+    private static final HeatBand WATER_HEAT = new HeatBand(82, 90);
+    private static final HeatBand EARTH_HEAT = new HeatBand(84, 92);
+    private static final TimingWindow EARLY_ACCESSORY = new TimingWindow(6, 10);
+    private static final TimingWindow LATE_ACCESSORY = new TimingWindow(8, 12);
+    private static final TimingWindow EARLY_CATALYST = new TimingWindow(18, 22);
+    private static final TimingWindow MIDDLE_CATALYST = new TimingWindow(20, 24);
+    private static final TimingWindow LATE_CATALYST = new TimingWindow(22, 26);
     private static final Map<BrewKind, BrewRecipe> RECIPES = buildRecipes();
 
     private BrewRecipes() {
@@ -55,7 +65,7 @@ public final class BrewRecipes {
     }
 
     private static Map<BrewKind, BrewRecipe> buildRecipes() {
-        // 这些火候带和时窗沿用旧稿占位，报告会明确标记为可调参数。
+        // 药方表集中声明火候带、原料和时窗。
         var recipes = new EnumMap<BrewKind, BrewRecipe>(BrewKind.class);
         recipes.put(BrewKind.DEPLETION, recipe(BrewKind.DEPLETION, 92, 100,
                 "withered_bush_ash", "fermented_spider_eye", 6, 10,
@@ -75,7 +85,29 @@ public final class BrewRecipes {
         recipes.put(BrewKind.QI_GATHER, recipe(BrewKind.QI_GATHER, 86, 94,
                 "dried_pufferfish", "prismarine_shard", 8, 12,
                 "nautilus_shell", 22, 26));
+        addElementElixirs(recipes);
         return Collections.unmodifiableMap(recipes);
+    }
+
+    private static void addElementElixirs(Map<BrewKind, BrewRecipe> recipes) {
+        // 五种主料都是原版成品，直接按现成主料识别。
+        var fire = new IngredientPlan("blaze_powder", "magma_cream", LATE_ACCESSORY,
+                "fire_charge", LATE_CATALYST);
+        var metal = new IngredientPlan("iron_nugget", "quartz", EARLY_ACCESSORY, "gold_nugget", MIDDLE_CATALYST);
+        var wood = new IngredientPlan("moss_block", "glow_berries", LATE_ACCESSORY, "vine", LATE_CATALYST);
+        var water = new IngredientPlan("packed_ice", "dried_kelp", EARLY_ACCESSORY,
+                "prismarine_crystals", EARLY_CATALYST);
+        var earth = new IngredientPlan("clay_ball", "bone_meal", EARLY_ACCESSORY, "brown_mushroom", EARLY_CATALYST);
+        recipes.put(BrewKind.FIRE_ELIXIR, new BrewRecipe(BrewKind.FIRE_ELIXIR,
+                FireKind.SUN_FIRE, FIRE_HEAT, fire, BrewQiRule.NONE));
+        recipes.put(BrewKind.METAL_ELIXIR, new BrewRecipe(BrewKind.METAL_ELIXIR,
+                FireKind.SUN_FIRE, METAL_HEAT, metal, BrewQiRule.NONE));
+        recipes.put(BrewKind.WOOD_ELIXIR, new BrewRecipe(BrewKind.WOOD_ELIXIR,
+                FireKind.SUN_FIRE, WOOD_HEAT, wood, BrewQiRule.NONE));
+        recipes.put(BrewKind.WATER_ELIXIR, new BrewRecipe(BrewKind.WATER_ELIXIR,
+                FireKind.SOUL_FIRE, WATER_HEAT, water, BrewQiRule.NONE));
+        recipes.put(BrewKind.EARTH_ELIXIR, new BrewRecipe(BrewKind.EARTH_ELIXIR,
+                FireKind.SUN_FIRE, EARTH_HEAT, earth, BrewQiRule.NONE));
     }
 
     private static BrewRecipe recipe(BrewKind kind, double minimum, double maximum,

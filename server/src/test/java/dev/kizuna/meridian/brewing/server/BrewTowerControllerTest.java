@@ -41,7 +41,7 @@ public final class BrewTowerControllerTest {
 
     @Test
     public void everyRecipeBrewsEightBottlesOfAtLeastFineFromTwoSets() {
-        for (BrewKind kind : BrewKind.values()) {
+        for (BrewKind kind : BrewKind.towerKinds()) {
             var world = FakeTower.stockedFor(kind, 1);
             if (kind.fireKind() == FireKind.SOUL_FIRE) {
                 world.add("minecraft:soul_sand", 1);

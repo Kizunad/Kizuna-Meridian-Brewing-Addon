@@ -1,0 +1,10 @@
+{
+  "replace": false,
+  "values": [
+    "meridian_brewing:fire_toxin",
+    "meridian_brewing:metal_toxin",
+    "meridian_brewing:wood_toxin",
+    "meridian_brewing:water_toxin",
+    "meridian_brewing:earth_toxin"
+  ]
+}

@@ -43,7 +43,9 @@ final class BrewEffectResume {
     }
 
     private static void resume(ServerPlayer player) {
-        // 死亡由身体核心清账；无药效历史的登录无需生成空活动。
+        // 金毒按保存的原版倒计时重新校准身体修正。
+        BrewMetalToxin.clear(player);
+        BrewMetalToxin.synchronize(player);
         if (!BrewCharmSessions.controlled(player.getUUID())) {
             player.removeEffect(BrewingEffects.CHARM_CONTROL);
         }
@@ -54,12 +56,17 @@ final class BrewEffectResume {
             return;
         }
         var binding = BrewRecipeBook.mergeLegacy(player, found.get());
+        // 死亡由身体核心清账；无药效历史的登录无需生成空活动。
         if (binding.body().getVitality().getDead()
                 || !binding.body().containsAddonProgress(BrewBodyProgress.KEY)) {
             return;
         }
         var remaining = new EnumMap<BrewKind, Long>(BrewKind.class);
         for (BrewKind kind : BrewKind.values()) {
+            // 丹毒是原版状态效果自己存自己续，身体里没有它的剂量要对。
+            if (kind.elixir()) {
+                continue;
+            }
             var effect = player.getEffect(BrewingEffects.status(kind));
             if (effect != null) {
                 remaining.put(kind, effect.getDuration() * MILLIS_PER_TICK);

@@ -1,12 +1,14 @@
 package dev.kizuna.meridian.brewing.fabric;
 
-import dev.kizuna.meridian.brewing.server.BrewKind;
+import dev.kizuna.meridian.brewing.server.BrewBodyProgress;
 import dev.kizuna.meridian.brewing.server.BrewEffectProfiles;
+import dev.kizuna.meridian.brewing.server.BrewKind;
+import dev.kizuna.meridian.brewing.server.BrewPotency;
 import dev.kizuna.meridian.brewing.server.BrewQuality;
 import dev.kizuna.meridian.brewing.server.InsectLureProfile;
-import dev.kizuna.meridian.brewing.server.BrewBodyProgress;
-import dev.kizuna.meridian.brewing.server.BrewPotency;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
@@ -20,7 +22,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.AABB;
 
-/** 六种药效及魅惑两档控制状态的注册表入口和持续行为。 */
+/** 巫药、丹毒及魅惑两档控制状态的注册表入口和持续行为。 */
 final class BrewingEffects {
     private static final int TICKS_PER_SECOND = 20;
     private static final BrewEffectKind NO_TICK = BrewEffectKind.NO_TICK;
@@ -32,6 +34,7 @@ final class BrewingEffects {
     static Holder.Reference<MobEffect> BITTER_YELLOW;
     static Holder.Reference<MobEffect> CHARM_STAGGER;
     static Holder.Reference<MobEffect> CHARM_CONTROL;
+    private static final Map<BrewKind, Holder.Reference<MobEffect>> TOXINS = new EnumMap<>(BrewKind.class);
 
     private BrewingEffects() {
         // 状态效果只注册一次。
@@ -51,6 +54,10 @@ final class BrewingEffects {
                 NO_TICK);
         CHARM_CONTROL = register("charm_control", MobEffectCategory.HARMFUL, 0xC77DBA,
                 NO_TICK);
+        for (BrewKind kind : BrewKind.elixirKinds()) {
+            Identifier id = Identifier.fromNamespaceAndPath(BrewingFabric.MOD_ID, kind.elementPath() + "_toxin");
+            TOXINS.put(kind, Registry.registerForHolder(BuiltInRegistries.MOB_EFFECT, id, new BrewToxinEffect(kind)));
+        }
     }
 
     private static Holder.Reference<MobEffect> register(String path, MobEffectCategory category,
@@ -69,6 +76,7 @@ final class BrewingEffects {
             case BITTER_YELLOW -> BITTER_YELLOW;
             case INSECT_LURE -> INSECT_LURE;
             case CHARM -> CHARM_CONTROL;
+            case FIRE_ELIXIR, METAL_ELIXIR, WOOD_ELIXIR, WATER_ELIXIR, EARTH_ELIXIR -> TOXINS.get(kind);
         };
     }
 
@@ -78,7 +86,8 @@ final class BrewingEffects {
             return Optional.of(BrewKind.CHARM);
         }
         for (BrewKind kind : BrewKind.values()) {
-            if (effect.equals(status(kind))) {
+            // 丹毒不是药效本身：它被移除时没有身体里的剂量要撤，不算进来源种类。
+            if (!kind.elixir() && effect.equals(status(kind))) {
                 return Optional.of(kind);
             }
         }

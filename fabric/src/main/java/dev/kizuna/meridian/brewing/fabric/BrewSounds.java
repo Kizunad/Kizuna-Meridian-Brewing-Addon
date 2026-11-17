@@ -17,6 +17,7 @@ final class BrewSounds {
     private static final Cue BITTER_YELLOW = new Cue("potion.bitter_yellow", 0.5F, 1);
     private static final Cue QI_GATHER = new Cue("potion.qi_gather", 0.3F, 1.4F);
     private static final Cue CHARM = new Cue("potion.charm", 0.5F, 1.3F);
+    private static final Cue ELIXIR = new Cue("potion.elixir", 0.4F, 1.1F);
     private static final Cue RESIDUE = new Cue("residue.plant", 0.25F, 1.6F);
     private static final Cue KNIFE_CUT = new Cue("knife.cut", 0.5F, 1.2F);
     static final Cue CAULDRON_ADD = new Cue("cauldron.add", 0.3F, 1.4F);
@@ -39,6 +40,10 @@ final class BrewSounds {
 
     static void effect(LivingEntity target, BrewKind kind) {
         // 一次用药对每个目标只播一次，逐部位催发由调用方合并。
+        if (kind.elixir()) {
+            play(target, ELIXIR);
+            return;
+        }
         Cue cue = switch (kind) {
             case DEPLETION -> DEPLETION;
             case ARMOR_ROT -> ARMOR_ROT;
@@ -46,6 +51,7 @@ final class BrewSounds {
             case BITTER_YELLOW -> BITTER_YELLOW;
             case QI_GATHER -> QI_GATHER;
             case CHARM -> CHARM;
+            default -> throw new IllegalArgumentException("没有登记药效声音：" + kind);
         };
         play(target, cue);
     }

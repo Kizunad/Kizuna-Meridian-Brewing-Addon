@@ -58,6 +58,7 @@ final class BrewBodyEffects {
         BrewQiPayment.initialize(config);
         BrewStructureMatcher.initialize(config);
         BrewTowers.initialize(config);
+        BrewElixirs.initialize(config);
         VanillaDamageFabric.registerPartArmorModifier(BrewArmorEffects::multiplier);
         BrewNausea.initialize();
         BrewEffectResume.initialize();
@@ -94,6 +95,10 @@ final class BrewBodyEffects {
         }
         BrewBodyHost.Binding binding = found.get();
         if (binding.body().getVitality().getDead()) {
+            return List.of();
+        }
+        if (application.kind().elixir()) {
+            BrewElixirs.drink(target, binding, application.kind(), application.quality());
             return List.of();
         }
         if (application.kind() == BrewKind.CHARM) {

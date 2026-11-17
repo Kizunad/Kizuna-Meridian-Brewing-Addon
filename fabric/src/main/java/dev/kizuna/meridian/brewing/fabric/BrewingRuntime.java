@@ -530,6 +530,10 @@ public final class BrewingRuntime {
             return;
         }
         BrewKind kind = BrewItemStacks.kind(stack);
+        if (kind.elixir()) {
+            // 丹露只能喝，泼出去什么也不发生。
+            return;
+        }
         BrewQuality quality = BrewItemStacks.quality(stack);
         ResolvedEffect effect = resolve(kind, quality);
         double radius = effect.radius();
@@ -608,6 +612,10 @@ public final class BrewingRuntime {
     }
 
     private static ResolvedEffect resolve(BrewKind kind, BrewQuality quality) {
+        // 丹露的可用方式由药种目录限定，不能解析成喷溅药效。
+        if (kind.elixir()) {
+            throw new IllegalArgumentException("丹露没有喷溅效果：" + kind);
+        }
         return switch (kind) {
             case DEPLETION -> new ResolvedEffect(kind, quality,
                     new DepletionData(BrewEffectProfiles.depletion(quality)));
@@ -621,6 +629,7 @@ public final class BrewingRuntime {
                     new BitterData(BrewEffectProfiles.bitterYellow(quality, BrewUse.DRINK),
                             BrewEffectProfiles.bitterYellow(quality, BrewUse.SPLASH)));
             case CHARM -> charmEffect(kind, quality);
+            default -> throw new IllegalArgumentException("没有登记喷溅药效：" + kind);
         };
     }
 

@@ -135,6 +135,9 @@ public final class BrewEffectLifecycle {
         }
         Set<BrewKind> kinds = new HashSet<>();
         for (MobEffectInstance effect : removed) {
+            if (effect.getEffect().equals(BrewingEffects.status(BrewKind.METAL_ELIXIR))) {
+                BrewMetalToxin.clear(entity);
+            }
             if (effect.getEffect().equals(BrewingEffects.CHARM_CONTROL)) {
                 BrewCharmSessions.end(entity, CharmEndReason.EFFECT_REMOVED);
             }

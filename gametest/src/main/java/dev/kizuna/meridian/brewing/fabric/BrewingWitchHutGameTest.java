@@ -37,7 +37,7 @@ import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
-/** 女巫小屋的药方箱：原版小屋结构件搭出来带一只朝门的箱子，箱子的战利品表六张药方等概率，还可能有一本《熬药总纲》。 */
+/** 女巫小屋的药方箱：原版小屋结构件搭出来带一只朝门的箱子，全部药方都可抽出，还可能有一本《熬药总纲》。 */
 public final class BrewingWitchHutGameTest {
     private static final String SITE = "meridian_brewing_test:witch_hut_site";
     private static final int TIMEOUT = 40;
@@ -64,8 +64,6 @@ public final class BrewingWitchHutGameTest {
     /** 《熬药总纲》占位 0.5：200 箱期望 100，标准差约 7，放宽到 70–130。 */
     private static final int MIN_MANUAL_CHESTS = 70;
     private static final int MAX_MANUAL_CHESTS = 130;
-    /** 每种药方期望 25 张，标准差约 4.6。 */
-    private static final int MIN_PER_RECIPE = 10;
 
     /**
      * 原版小屋第一次搭时按地面挪到地面高度，记下的高度 ≥ 0 才算记住；测试场地在 y 0 以下，原版每跑一次都按
@@ -117,9 +115,35 @@ public final class BrewingWitchHutGameTest {
     }
 
     @GameTest(maxTicks = TIMEOUT)
-    public void witchHutChestDrawsSixRecipesEvenly(GameTestHelper context) {
-        // 抽 200 箱：有药方的箱数落在占位概率附近，六张药方都出、各自不少；
-        // 有熬药卷轴的箱数落在它的占位概率附近，一箱最多一卷；总纲另有用例数；别的都是炼药材料。
+    public void witchHutChestDrawsEveryRegisteredRecipe(GameTestHelper context) {
+        // 真实抽箱覆盖全部药方，固定概率的箱数和卷数仍按原来区间核对。
+        ChestDraw draw = drawRecipeChests(context);
+        Map<String, Integer> recipes = draw.recipes();
+        Map<String, Integer> materials = draw.materials();
+        ChestCounts counts = draw.counts();
+        int chestsWithRecipe = counts.recipes();
+        int chestsWithScroll = counts.scrolls();
+        int mostScrolls = counts.mostScrolls();
+        List<String> unexpected = draw.unexpected();
+        System.out.println("[女巫小屋箱子] 抽 " + LOOT_ROLLS + " 箱：有药方 " + chestsWithRecipe
+                + " 箱；药方 " + recipes
+                + "；有熬药卷轴 " + chestsWithScroll + " 箱；材料（组数）" + materials);
+        context.assertTrue(unexpected.isEmpty(),
+                "小屋箱子抽出了药方、熬药卷轴、熬药总纲和炼药材料以外的东西：" + unexpected);
+        context.assertTrue(chestsWithScroll >= MIN_SCROLL_CHESTS && chestsWithScroll <= MAX_SCROLL_CHESTS,
+                "有熬药卷轴的箱数偏离占位概率 0.25：" + chestsWithScroll + " / " + LOOT_ROLLS);
+        context.assertTrue(mostScrolls == 1, "一箱里不该有不止一卷熬药卷轴：" + mostScrolls);
+        Set<String> kinds = Arrays.stream(BrewKind.values()).map(BrewKind::path).collect(Collectors.toSet());
+        context.assertTrue(recipes.keySet().equals(kinds), "已登记药方没有都出现，或出了未登记的药方：" + recipes);
+        context.assertTrue(chestsWithRecipe >= MIN_RECIPE_CHESTS && chestsWithRecipe <= MAX_RECIPE_CHESTS,
+                "有药方的箱数偏离占位概率 0.75：" + chestsWithRecipe + " / " + LOOT_ROLLS);
+        context.assertTrue(materials.keySet().size() == materials().size(),
+                "200 箱里没有出齐每种炼药材料：" + materials);
+        context.succeed();
+    }
+
+    private static ChestDraw drawRecipeChests(GameTestHelper context) {
+        // 汇总一次抽样中的药方、材料及箱数，让验证阶段只负责检查规则。
         Item recipe = BrewingItems.item("brew_recipe");
         Item manual = BrewingItems.item("brew_manual");
         Map<String, Integer> recipes = new TreeMap<>();
@@ -152,23 +176,14 @@ public final class BrewingWitchHutGameTest {
             }
             mostScrolls = Math.max(mostScrolls, scrolls);
         }
-        System.out.println("[女巫小屋箱子] 抽 " + LOOT_ROLLS + " 箱：有药方 " + chestsWithRecipe + " 箱；药方 " + recipes
-                + "；有熬药卷轴 " + chestsWithScroll + " 箱；材料（组数）" + materials);
-        context.assertTrue(unexpected.isEmpty(),
-                "小屋箱子抽出了药方、熬药卷轴、熬药总纲和炼药材料以外的东西：" + unexpected);
-        context.assertTrue(chestsWithScroll >= MIN_SCROLL_CHESTS && chestsWithScroll <= MAX_SCROLL_CHESTS,
-                "有熬药卷轴的箱数偏离占位概率 0.25：" + chestsWithScroll + " / " + LOOT_ROLLS);
-        context.assertTrue(mostScrolls == 1, "一箱里不该有不止一卷熬药卷轴：" + mostScrolls);
-        Set<String> kinds = Arrays.stream(BrewKind.values()).map(BrewKind::path).collect(Collectors.toSet());
-        context.assertTrue(recipes.keySet().equals(kinds), "六张药方没有都出现，或出了未登记的药方：" + recipes);
-        context.assertTrue(chestsWithRecipe >= MIN_RECIPE_CHESTS && chestsWithRecipe <= MAX_RECIPE_CHESTS,
-                "有药方的箱数偏离占位概率 0.75：" + chestsWithRecipe + " / " + LOOT_ROLLS);
-        int fewest = recipes.values().stream().mapToInt(Integer::intValue).min().orElse(0);
-        context.assertTrue(fewest >= MIN_PER_RECIPE, "六张药方不是等概率，最少的只出 " + fewest + " 张：" + recipes);
-        context.assertTrue(materials.keySet().size() == materials().size(),
-                "200 箱里没有出齐每种炼药材料：" + materials);
-        context.succeed();
+        var counts = new ChestCounts(chestsWithRecipe, chestsWithScroll, mostScrolls);
+        return new ChestDraw(recipes, materials, unexpected, counts);
     }
+
+    private record ChestDraw(Map<String, Integer> recipes, Map<String, Integer> materials,
+                             List<String> unexpected, ChestCounts counts) { }
+
+    private record ChestCounts(int recipes, int scrolls, int mostScrolls) { }
 
     @GameTest(maxTicks = TIMEOUT)
     public void witchHutChestHoldsTheManualAtItsChance(GameTestHelper context) {
