@@ -25,7 +25,9 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.projectile.Projectile;
 
 /**
  * 唯一负责醒的规则与时钟；控制器仅执行当前会话，不另开药效计时器。
@@ -41,6 +43,8 @@ public final class BrewCharmSessions {
     public static final String TAKEN_MESSAGE = "message.meridian_brewing.charm.taken";
     private static final Identifier STOP_PHASE = Identifier.parse("meridian_brewing:end_control");
     private static final Map<UUID, Active> active = new HashMap<>();
+    private static final Map<UUID, ProjectileLaunch> projectileLaunches = new HashMap<>();
+    private static long projectileSequence;
     private static CharmController controller;
     private static boolean opponentsStale;
 
@@ -59,7 +63,23 @@ public final class BrewCharmSessions {
             controller = controllers.getFirst();
         });
         VanillaDamageFabric.registerDamageObserver(BrewCharmSessions::damaged);
+        registerProjectiles();
         registerLifecycle();
+    }
+
+    private static void registerProjectiles() {
+        // 以入世界时刻记录离手；读档的投射物从本次加载算，不沿用无法确认的旧出手时刻。
+        ServerEntityEvents.ENTITY_LOAD.register((entity, level) -> {
+            if (entity instanceof Projectile) {
+                long tick = level.getServer().overworld().getGameTime();
+                projectileLaunches.put(entity.getUUID(), new ProjectileLaunch(tick, ++projectileSequence));
+            }
+        });
+        ServerEntityEvents.ENTITY_UNLOAD.register((entity, level) -> projectileLaunches.remove(entity.getUUID()));
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+            projectileLaunches.clear();
+            projectileSequence = 0;
+        });
     }
 
     private static void registerLifecycle() {
@@ -104,6 +124,7 @@ public final class BrewCharmSessions {
             return;
         }
         long tick = level.getServer().overworld().getGameTime();
+        long launchBoundary = projectileSequence;
         var session = CharmSession.newBuilder()
                 .setSessionId(UUID.randomUUID().toString())
                 .setSubjectUuid(subject.getStringUUID())
@@ -113,7 +134,7 @@ public final class BrewCharmSessions {
                 .build();
         var updated = withOpponent(session, subject, caster);
         send(CharmCommand.Action.START, updated, CharmEndReason.CHARM_END_UNSPECIFIED);
-        active.put(subjectId, new Active(subject, caster, updated, tick));
+        active.put(subjectId, new Active(subject, caster, updated, tick, launchBoundary));
         BrewBodyEffects.addStatus(subject, BrewingEffects.CHARM_CONTROL, seconds, quality);
         if (subject instanceof ServerPlayer player) {
             // 玩家的身体接下来不听自己使唤：动作栏写明是谁下的药、多久、怎么醒。
@@ -159,7 +180,7 @@ public final class BrewCharmSessions {
         if (!next.getOpponentUuid().equals(current.getOpponentUuid())) {
             send(CharmCommand.Action.UPDATE, next, CharmEndReason.CHARM_END_UNSPECIFIED);
         }
-        active.put(subject.getUUID(), new Active(subject, caster, next, tick));
+        active.put(subject.getUUID(), new Active(subject, caster, next, tick, value.launchBoundary()));
     }
 
     private static CharmEndReason ended(Active value, long tick) {
@@ -200,21 +221,46 @@ public final class BrewCharmSessions {
         LivingEntity target = event.target();
         LivingEntity attacker = event.attacker();
         UUID targetId = target.getUUID();
+        Active value = active.get(targetId);
+        boolean allyDamage = value != null && BrewCharmTargets.sameSide(value.caster(), attacker);
+        if (allyDamage && launchedBeforeCharm(value, event.source())) {
+            return;
+        }
         BrewCharmTargets.hit(target, attacker);
         opponentsStale = true;
-        Active value = active.get(targetId);
         if (value == null) {
             return;
         }
-        LivingEntity caster = value.caster();
-        if (BrewCharmTargets.sameSide(caster, attacker)) {
+        if (allyDamage) {
             end(target, CharmEndReason.ALLY_DAMAGE);
             return;
         }
+        shorten(value);
+    }
+
+    private static boolean launchedBeforeCharm(Active value, DamageSource source) {
+        // 只豁免已经离手的投射物；同一 tick 内以入世界顺序区分控制前后，近战和其他来源照常叫醒。
+        if (!(source.getDirectEntity() instanceof Projectile projectile)) {
+            return false;
+        }
+        ProjectileLaunch launch = projectileLaunches.get(projectile.getUUID());
+        if (launch == null) {
+            return false;
+        }
+        long launchedTick = launch.tick();
+        long startedTick = value.session().getStartedTick();
+        return launchedTick < startedTick
+                || launchedTick == startedTick && launch.sequence() <= value.launchBoundary();
+    }
+
+    private static void shorten(Active value) {
+        // 外人伤害仍扣一秒；缩时只改期限，保留会话最初的出手边界。
+        LivingEntity target = value.subject();
+        LivingEntity caster = value.caster();
         CharmSession previous = value.session();
         long shortened = previous.getEndsTick() - TICKS_PER_SECOND;
         var session = previous.toBuilder().setEndsTick(shortened).build();
-        active.put(targetId, new Active(value.subject(), caster, session, value.selectedTick()));
+        active.put(target.getUUID(), new Active(target, caster, session, value.selectedTick(), value.launchBoundary()));
         long tick = target.level().getServer().overworld().getGameTime();
         if (shortened <= tick) {
             end(target, CharmEndReason.EXPIRED);
@@ -291,5 +337,7 @@ public final class BrewCharmSessions {
         }
     }
 
-    private record Active(LivingEntity subject, LivingEntity caster, CharmSession session, long selectedTick) { }
+    private record Active(LivingEntity subject, LivingEntity caster, CharmSession session,
+                          long selectedTick, long launchBoundary) { }
+    private record ProjectileLaunch(long tick, long sequence) { }
 }

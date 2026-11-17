@@ -4,6 +4,9 @@
   "version": "1.0.0",
   "name": "炼药注册 GameTest",
   "environment": "server",
+  "mixins": [
+    "meridian_brewing_test.mixins.json"
+  ],
   "entrypoints": {
     "fabric-gametest": [
       "dev.kizuna.meridian.brewing.test.BrewingGameTest",
@@ -13,6 +16,7 @@
       "dev.kizuna.meridian.brewing.fabric.BrewingBodyGameTest",
       "dev.kizuna.meridian.brewing.fabric.BrewingHostGameTest",
       "dev.kizuna.meridian.brewing.fabric.BrewingCharmGameTest",
+      "dev.kizuna.meridian.brewing.fabric.BrewingCharmProjectileGameTest",
       "dev.kizuna.meridian.brewing.fabric.WitchBrewGameTest",
       "dev.kizuna.meridian.brewing.fabric.WitchResidueGameTest",
       "dev.kizuna.meridian.brewing.fabric.WitchProjectileGameTest",

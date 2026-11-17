@@ -11,7 +11,8 @@
       "dev.kizuna.meridian.brewing.clienttest.BrewStructureClientTest",
       "dev.kizuna.meridian.brewing.clienttest.BrewLoreClientTest",
       "dev.kizuna.meridian.brewing.clienttest.WitchCastClientTest",
-      "dev.kizuna.meridian.brewing.clienttest.CharmAllyClientTest"
+      "dev.kizuna.meridian.brewing.clienttest.CharmAllyClientTest",
+      "dev.kizuna.meridian.brewing.clienttest.CharmPrelaunchClientTest"
     ]
   },
   "depends": {"fabric-api": "*", "meridian_brewing": "*", "meridian_brewing_client": "*"}
