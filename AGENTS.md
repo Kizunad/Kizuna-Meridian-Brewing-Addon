@@ -8,6 +8,15 @@
 - 依赖相邻仓库的协议，不复制协议源码，不修改依赖仓库；跨仓能力使用本仓接口，不通过反向依赖接入。
 - 旧稿中的时窗、火候、效果曲线和倍率属于可调占位，集中放在规则类或配置常量中，并在报告中标明依据。
 - 每个 Java 方法和构造器内部写清楚代码意图；公开标识符使用英文，玩家文本使用语言资源。
-- Gradle 命令必须通过 `/tmp/kizuna-gradle.lock` 串行执行并带 `--no-daemon`。
-- 交付前运行 `test build`、`:gametest:runGametest`、文档检查、数据检查和 `git diff --check`。
+- 交付前运行文档检查、数据检查和 `git diff --check`。
 - 未经用户明确授权不提交、不推送、不创建远端；保留工作区已有改动。
+
+## 构建和测试
+
+构建、测试一律走工作区的 `kz`（`~/Code/Kizuna-remote-session/scripts/kz`），不直接运行 `./gradlew`。细则以 `~/Code/Kizuna-remote-session/handoff/codex-worker-rules.md` 为准，动手前先读。
+
+- 单测、构建和服务端 GameTest：`kz test ~/Code/<本仓的 worktree>`
+- 要带上别的仓的 worktree 一起测：每个加一次 `--with ~/Code/<那个仓的 worktree>`
+- 客户端测试：`kz client ~/Code/<本仓的 worktree>` 列出有哪些项，`kz client ~/Code/<本仓的 worktree> <项>` 跑其中一项
+- 要自己写 Gradle 参数时：`kz gradle ~/Code/<本仓的 worktree> -- <参数>`
+- 不提交、不推送；在自己的 worktree（`~/Code/wt-*`）里改，不改主目录。
