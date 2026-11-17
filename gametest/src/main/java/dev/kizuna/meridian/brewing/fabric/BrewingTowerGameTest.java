@@ -314,14 +314,16 @@ public final class BrewingTowerGameTest {
     public void drainedAmbientInterruptsThenResumesWhenQiReturns(GameTestHelper context) {
         // #16：开熬以后每 tick 把水池所在区块这一秒的速率占满：欠付超过宽限就断锅、回到泡好待熬，
         // 占着期间一直说环境真元不够、不开熬；不占了，环境真元回来，塔自己重新开熬。
-        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV3);
-        requireAmbient(context, site);
-        stock(context, site, bitterStock());
-        TowerRun run = open(context, site, BrewKind.BITTER_YELLOW);
-        BrewingTestPlayers.close(run.chooser());
-        Drain drain = new Drain(context, run, site.cauldron());
-        context.onEachTick(drain::take);
-        eachSecond(context, drain::observe);
+        startBetweenPayments(context, () -> {
+            BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV3);
+            requireAmbient(context, site);
+            stock(context, site, bitterStock());
+            TowerRun run = open(context, site, BrewKind.BITTER_YELLOW);
+            BrewingTestPlayers.close(run.chooser());
+            Drain drain = new Drain(context, run, site.cauldron());
+            context.onEachTick(drain::take);
+            eachSecond(context, drain::observe);
+        });
     }
 
     @GameTest(environment = TOWER_BATCH, maxTicks = SHORT_TIMEOUT, structure = BrewSites.LV3_SITE)
@@ -381,14 +383,16 @@ public final class BrewingTowerGameTest {
     public void stoppingAfterAQiInterruptGivesNoExtraGlassBottle(GameTestHelper context) {
         // 复审第 5 条：辅料蜂蜜瓶下锅以后占满环境真元，欠付超过宽限就断锅回到泡料，这时按停退料。
         // 蜂蜜瓶取出时空瓶已经还了，退料不再整瓶退回：木桶里玻璃瓶加蜂蜜瓶的总数和开工前一样。
-        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV3);
-        requireAmbient(context, site);
-        stock(context, site, bitterStock());
-        int bottlesBefore = bottleCount(context, site);
-        TowerRun run = open(context, site, BrewKind.BITTER_YELLOW);
-        LateRefund refund = new LateRefund(context, site, run, bottlesBefore);
-        context.onEachTick(refund::take);
-        eachSecond(context, refund::observe);
+        startBetweenPayments(context, () -> {
+            BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV3);
+            requireAmbient(context, site);
+            stock(context, site, bitterStock());
+            int bottlesBefore = bottleCount(context, site);
+            TowerRun run = open(context, site, BrewKind.BITTER_YELLOW);
+            LateRefund refund = new LateRefund(context, site, run, bottlesBefore);
+            context.onEachTick(refund::take);
+            eachSecond(context, refund::observe);
+        });
     }
 
     @GameTest(environment = TOWER_BATCH, maxTicks = FLOW_TIMEOUT, structure = BrewSites.LV3_SITE)
@@ -554,6 +558,16 @@ public final class BrewingTowerGameTest {
                 overlap.retainAll(lit.get(second - 1));
                 context.assertTrue(overlap.isEmpty(), "相邻两秒亮的是同一组：" + lit);
             }
+        }
+    }
+
+    private static void startBetweenPayments(GameTestHelper context, Runnable start) {
+        // 首次查询避开塔付款的整秒 tick，让环境换窗时测试先占满速率。
+        // 序列在逐 tick 任务遍历结束后执行，开场可安全登记 onEachTick。
+        if (context.getLevel().getGameTime() % TICKS_PER_SECOND == 0) {
+            context.startSequence().thenExecuteAfter(1, start);
+        } else {
+            start.run();
         }
     }
 
@@ -970,6 +984,8 @@ public final class BrewingTowerGameTest {
             } else if (!draining) {
                 draining = tower.phase() == TowerPhase.BREWING && tower.brewElapsedSeconds() > accessoryDone;
             } else if (tower.phase() == TowerPhase.SOAKING) {
+                String reason = BrewTexts.chinese(tower.needs().get(TowerNeed.AMBIENT_QI));
+                context.assertTrue(QI_INTERRUPTED.equals(reason), "断锅原因不对：" + reason);
                 draining = false;
                 ServerPlayer chooser = run.chooser();
                 context.assertTrue(chooser.containerMenu.clickMenuButton(chooser, BrewTowerMenu.BUTTON_STOP),
