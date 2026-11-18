@@ -1,6 +1,6 @@
 schema_version: 1
 namespace: "meridian_brewing"
-binding_templates { id: "human:adult" version: 1 }
+binding_template_groups: "human:humanoid"
 definitions {
   id: "meridian_brewing:brew"
   version: 1
