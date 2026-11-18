@@ -324,5 +324,7 @@
   "advancements.meridian_brewing.cultivators.brewing.description": "The black, white, and red ash beneath the cauldron holds no more secrets. Where the wooden spoon runs smooth, three turns of heat yield a finished brew.",
   "codex.intro.meridian_brewing.brewing": "An old brewing craft kept in stilt huts deep within the marsh. Following rim grooves and shifting ash, it simmers a pot full of potent draughts.",
   "codex.power.meridian_brewing.brewing_basics": "Know the warmth held within the black, white, and red ash beneath the stove. Run a wooden spoon along the pot's rim groove, balancing the heat in three steady turns.",
-  "codex.source.meridian_brewing.brewing_basics": "Tucked occasionally into corner chests within witch huts of the marsh; overcome a witch who has cultivated True Qi, and it may sometimes be found on her."
+  "codex.source.meridian_brewing.brewing_basics": "Tucked occasionally into corner chests within witch huts of the marsh; overcome a witch who has cultivated True Qi, and it may sometimes be found on her.",
+  "status_group.meridian_brewing.pill_toxin": "Pill Toxins",
+  "status_group.meridian_brewing.brew": "Brews"
 }

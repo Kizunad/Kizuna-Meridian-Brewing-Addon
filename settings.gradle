@@ -31,6 +31,11 @@ kizunaWorkspace.includeSource('vanilla-damage', [
         fabric: 'dev.kizuna.meridian.vanilla:fabric',
         server: 'dev.kizuna.meridian.vanilla:server'
 ])
+// 状态图标的客户端场景读界面框架排出来的格位；bs3d 也组合它，坐标相同，先在这里按完整映射登记。
+kizunaWorkspace.includeSource('inventory-ui', [
+        '': 'dev.kizuna.inventoryui:kizuna-inventory-ui-framework',
+        server: 'dev.kizuna.inventoryui:server'
+])
 // 客户端的放置模型按真实坐标依赖 bs3d client，而经 Human 嵌套的 Progression 只登记 bs3d server；
 // 同一仓库只按最先登记的规则替换，嵌套构建在 includeBuild 时即登记，所以 bs3d 要在 Human 之前组合并列出两个模块。
 kizunaWorkspace.includeSource('bs3d', [

@@ -1,0 +1,17 @@
+{
+  "effects": [
+    "meridian_brewing:depletion",
+    "meridian_brewing:armor_rot",
+    "meridian_brewing:insect_lure",
+    "meridian_brewing:qi_gather",
+    "meridian_brewing:bitter_yellow",
+    "meridian_brewing:charm_stagger",
+    "meridian_brewing:charm_control"
+  ],
+  "group": {
+    "name": "status_group.meridian_brewing.brew",
+    "icon": "meridian_brewing:status_group/brew",
+    "merge_order": 50,
+    "display_order": 30
+  }
+}

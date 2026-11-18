@@ -324,5 +324,7 @@
   "advancements.meridian_brewing.cultivators.brewing.description": "一口大锅底下的黑白红三层柴灰算是摸透了，木勺磨平处，调顺三回火候熬成良药。",
   "codex.intro.meridian_brewing.brewing": "沼泽深处高脚屋里的熬炼古法，依着锅沿细槽与各色柴灰火候，炼出满锅灵药。",
   "codex.power.meridian_brewing.brewing_basics": "摸透灶膛黑白红三层柴灰的温凉，以木勺顺着锅沿细槽分三次调停火候熬药。",
-  "codex.source.meridian_brewing.brewing_basics": "沼泽女巫小屋墙角的箱里偶有夹带，胜过修出真炁的女巫，身上有时也能摸到。"
+  "codex.source.meridian_brewing.brewing_basics": "沼泽女巫小屋墙角的箱里偶有夹带，胜过修出真炁的女巫，身上有时也能摸到。",
+  "status_group.meridian_brewing.pill_toxin": "丹毒",
+  "status_group.meridian_brewing.brew": "药性"
 }

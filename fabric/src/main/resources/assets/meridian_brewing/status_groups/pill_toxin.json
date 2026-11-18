@@ -1,0 +1,15 @@
+{
+  "effects": [
+    "meridian_brewing:fire_toxin",
+    "meridian_brewing:metal_toxin",
+    "meridian_brewing:wood_toxin",
+    "meridian_brewing:water_toxin",
+    "meridian_brewing:earth_toxin"
+  ],
+  "group": {
+    "name": "status_group.meridian_brewing.pill_toxin",
+    "icon": "meridian_brewing:status_group/pill_toxin",
+    "merge_order": 40,
+    "display_order": 20
+  }
+}

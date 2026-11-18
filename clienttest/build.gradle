@@ -16,6 +16,14 @@ dependencies {
     implementation 'dev.kizuna.meridian.technique:server'
     implementation 'dev.kizuna.meridian.technique:shared'
     implementation 'dev.kizuna.meridian.vanilla:fabric'
+    // 状态图标场景读界面框架排出来的格位，核对合并与让开界面。
+    implementation 'dev.kizuna.inventoryui:kizuna-inventory-ui-framework'
+    // 状态图标场景穿戴真实容器并读取 BS3D 面板；运行仍由完整装配统一提供。
+    compileOnly 'dev.kizuna.backpack3d:server'
+    compileOnly 'dev.kizuna.backpack3d:client'
+    compileOnly files(kizunaWorkspace.artifact('bs3d-vanilla', 'client', false))
+    // 界面框架经 owo 给原版类注入了接口，编译这边也要看得见 owo。
+    implementation libs.owo
 }
 
 apply from: new File(kizunaWorkspace.directory('framework'), 'scripts/full-assembly.gradle')
