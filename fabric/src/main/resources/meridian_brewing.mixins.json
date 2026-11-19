@@ -14,7 +14,6 @@
     "BrewMilkResidueMixin",
     "WitchHutChestMixin",
     "StructureTemplateAccessor",
-    "TowerLavaPickupMixin",
     "PlayerElixirToxinMixin",
     "LivingEntityElixirToxinMixin"
   ]

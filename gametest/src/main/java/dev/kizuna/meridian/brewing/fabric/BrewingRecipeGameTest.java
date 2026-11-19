@@ -177,7 +177,7 @@ public final class BrewingRecipeGameTest {
     }
 
     static BrewCauldronBlockEntity preparedQiGather(GameTestHelper context, ServerPlayer player) {
-        // 和世界熬药测试同一套：摆随包二阶结构（巫釜坐铁炉座），三块煤、两桶水、聚气汤主料和底料。
+        // 巫釜坐铁炉座，备三块煤、两桶水、聚气汤主料和底料。
         ServerLevel level = context.getLevel();
         BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV2);
         BlockPos cauldronPos = site.cauldron();

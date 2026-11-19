@@ -13,14 +13,13 @@ import java.util.Map;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 
-/** 釜快照的存档读写：釜方块实体和药塔的虚拟釜共用同一套字段名。 */
+/** 读写釜方块实体的熬制进度、投料记录与铜釜外观。 */
 final class BrewCauldronSnapshots {
     private BrewCauldronSnapshots() {
     }
 
     /** 把一只釜的快照写进存档。 */
     static void write(ValueOutput output, BrewCauldron.Snapshot snapshot) {
-        // 字段名沿用釜方块实体的旧存档，药塔记录里的虚拟釜也写这一套。
         output.putString("state", snapshot.state().name());
         output.putString("form", snapshot.form().name());
         output.putString("recipe_kind", enumName(snapshot.recipeKind()));

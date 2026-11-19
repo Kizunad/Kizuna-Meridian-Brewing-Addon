@@ -3,7 +3,6 @@ package dev.kizuna.meridian.brewing.fabric;
 import dev.kizuna.meridian.brewing.server.BrewActionResult;
 import dev.kizuna.meridian.brewing.server.BrewCauldron;
 import dev.kizuna.meridian.brewing.server.BrewCauldronState;
-import dev.kizuna.meridian.brewing.server.BrewCollectionKind;
 import dev.kizuna.meridian.brewing.server.BrewForm;
 import dev.kizuna.meridian.brewing.server.BrewKind;
 import dev.kizuna.meridian.brewing.server.BrewProgress;
@@ -12,11 +11,9 @@ import dev.kizuna.meridian.brewing.server.BrewRecipe;
 import dev.kizuna.meridian.brewing.server.BrewSaveMarks;
 import dev.kizuna.meridian.brewing.server.BrewStructure;
 import dev.kizuna.meridian.brewing.server.BrewText;
-import dev.kizuna.meridian.brewing.server.BrewUse;
 import dev.kizuna.meridian.brewing.server.CopperCauldronState;
 import dev.kizuna.meridian.brewing.server.CopperExposure;
 import dev.kizuna.meridian.brewing.server.CopperOxidation;
-import dev.kizuna.meridian.brewing.server.FireKind;
 import dev.kizuna.meridian.brewing.server.HeatSourceKind;
 import dev.kizuna.meridian.brewing.server.IngredientBatch;
 import dev.kizuna.meridian.brewing.server.IngredientSlot;
@@ -33,14 +30,13 @@ import net.minecraft.core.NonNullList;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.ItemTags;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
 import net.minecraft.world.Container;
 import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.Containers;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.WorldlyContainer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
@@ -83,7 +79,6 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
     private static final long COPPER_NOT_AGING = -1L;
     private static final int WATER_BUCKET_UNITS = 3;
     private static final int WATER_BOTTLE_UNITS = 1;
-    private static final int STRUCTURE_CHECK_TICKS = 20;
     private static final int[] STAGING_SLOT = {0};
     private static final Set<IngredientSlot> AUTOMATED_SLOTS =
             EnumSet.of(IngredientSlot.PRIMARY, IngredientSlot.BASE, IngredientSlot.PROPELLANT);
@@ -92,8 +87,6 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
     private final VesselKind vessel;
     private final BrewCauldron cauldron;
     private BrewStructure structure;
-    private BrewStructureMatcher.Result layout;
-    private int structureCheckCountdown;
     private long copperOxidationTicks;
     private UUID techniqueCaster;
     private BrewQiTally qiTally;
@@ -105,8 +98,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
         super(BrewingBlocks.BREW_CAULDRON_ENTITY, pos, state);
         this.vessel = vessel;
         this.cauldron = new BrewCauldron(vessel, BrewForm.DRINK);
-        this.layout = BrewStructureMatcher.unchecked();
-        this.structure = new BrewStructure(HeatSourceKind.NONE, layout.match());
+        this.structure = BrewStructure.built(HeatSourceKind.NONE);
         if (vessel == VesselKind.COPPER_CAULDRON) {
             // 用 /setblock 或结构放下的铜釜带着外观氧化级，规则状态从它起算。
             cauldron.restoreCopperOxidation(CopperCauldronBlock.oxidation(state));
@@ -137,6 +129,9 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
         // Human 已统一执行施放中的手位和标签门禁，这里只处理釜的投料规则。
         if (level == null || level.isClientSide()) {
             return InteractionResult.SUCCESS;
+        }
+        if (player.isSpectator() || !level.mayInteract(player, worldPosition)) {
+            return InteractionResult.FAIL;
         }
         boolean controlledByCaster = techniqueControlledBy(player);
         ItemStack stack = player.getItemInHand(hand);
@@ -171,13 +166,8 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
         if (caster == null || !level.mayInteract(caster, worldPosition)) {
             return BrewActionResult.returned(BrewText.message("no_permission"));
         }
-        rematchStructureSeenBy(caster);
+        refreshHeatSource();
         Optional<BrewText> problem = cauldron.startProblem(structure);
-        if (problem.isPresent() && problem.equals(layout.match().problem())) {
-            // 卡在结构上才在不符那格发标记，再补一句该进哪一座药炉；缺料、缺火不发。
-            BrewStructureMarkers.show(caster, layout);
-            return BrewActionResult.returned(withLayoutHint(problem.orElseThrow()));
-        }
         if (problem.isEmpty()) {
             problem = casterProblem(caster, cauldron.recipe().orElseThrow().kind());
         }
@@ -234,11 +224,10 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
             techniqueCaster = null;
             return BrewActionResult.accepted(BrewText.message("cauldron.brewed"));
         }
-        rematchStructureSeenBy(caster);
+        refreshHeatSource();
         BrewRecipe recipe = cauldron.recipe().orElseThrow(() -> new IllegalStateException("熬制中的釜没有药方"));
         Optional<BrewText> structureProblem = structure.problemFor(recipe.kind(), recipe.fireKind());
         if (structureProblem.isPresent()) {
-            BrewStructureMarkers.show(caster, layout);
             return interruptTechnique(BrewText.message("technique.interrupted", structureProblem.orElseThrow()));
         }
         BrewQiTally paid = BrewQiPayment.paySecond(caster, level, worldPosition, drawId, qiTally);
@@ -283,18 +272,11 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
 
     private void tick(Level currentLevel) {
         // 熬药式接管期间只刷新结构与铜釜状态，规则推进交给周期效果，避免重复计时。
-        // 火每 tick 读一格；整座结构每 20 tick 查一次就够，晚一秒发现结构坏了无所谓。
         if (currentLevel.isClientSide()) {
             return;
         }
         ticks++;
-        structureCheckCountdown--;
-        if (structureCheckCountdown <= 0) {
-            structureCheckCountdown = STRUCTURE_CHECK_TICKS;
-            rematchStructure();
-        } else {
-            refreshHeatSource();
-        }
+        refreshHeatSource();
         addStagedIngredient();
         if (!techniqueControlled()) {
             tickCauldron(SECONDS_PER_TICK);
@@ -509,7 +491,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
             result = cauldron.addWater(WATER_BOTTLE_UNITS);
             remainder = new ItemStack(Items.GLASS_BOTTLE);
         } else if (stack.is(Items.GLASS_BOTTLE)) {
-            Collected collected = collect();
+            BrewBottle collected = collect();
             result = collected.result();
             remainder = collected.output();
         } else {
@@ -523,7 +505,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
     }
 
     private BrewActionResult collectBottle(Player player) {
-        Collected collected = collect();
+        BrewBottle collected = collect();
         if (collected.result().accepted()) {
             BrewingItemReturns.giveOrDrop(player, collected.output());
         }
@@ -531,33 +513,11 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
     }
 
     /** 舀一瓶。收药可能清空釜内配方，先留下药方和剂型再舀；没舀到时产物为空。 */
-    private Collected collect() {
-        long currentGameDay = currentGameDay();
-        Optional<BrewRecipe> recipe = cauldron.recipe();
-        BrewForm form = cauldron.form();
-        var result = cauldron.collectBottle(currentGameDay);
-        if (result.kind() == BrewCollectionKind.NOTHING) {
-            return new Collected(BrewActionResult.returned(result.message()), ItemStack.EMPTY);
-        }
-        var score = result.score().orElseThrow();
-        ItemStack output = residueStack();
-        if (result.kind() == BrewCollectionKind.POTION) {
-            BrewKind kind = recipe.orElseThrow().kind();
-            BrewUse use = form == BrewForm.SPLASH ? BrewUse.SPLASH : BrewUse.DRINK;
-            output = BrewItemStacks.create(kind, score.quality().orElseThrow(), use);
-            BrewSounds.quality(level, worldPosition, score.quality().orElseThrow());
-        } else {
-            BrewSounds.atBlock(level, worldPosition, BrewSounds.CAULDRON_DUMP);
-        }
-        return new Collected(BrewActionResult.accepted(result.message()), output);
-    }
-
-    private record Collected(BrewActionResult result, ItemStack output) {
+    private BrewBottle collect() {
+        return BrewBottle.collect(cauldron, level, worldPosition);
     }
 
     private BrewActionResult describeState(Player player) {
-        // 空手右键看釜：现查一次结构，不符时在不符那格发标记，并在状态后面接上哪一格不对、该进哪一座药炉。
-        rematchStructureSeenBy(player);
         BrewText recipeName = BrewText.message("cauldron.no_recipe");
         if (cauldron.recipe().isPresent()) {
             recipeName = BrewCauldron.recipeName(cauldron.recipe().orElseThrow().kind());
@@ -566,22 +526,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
         int temperature = (int) Math.round(cauldron.temperature());
         BrewText described = BrewText.message("cauldron.describe", recipeName, stateName,
                 cauldron.waterUnits(), vessel.waterCapacity(), temperature);
-        Optional<BrewText> structureProblem = structure.match().problem();
-        if (structureProblem.isEmpty()) {
-            return BrewActionResult.accepted(described);
-        }
-        if (player instanceof ServerPlayer serverPlayer) {
-            BrewStructureMarkers.show(serverPlayer, layout);
-        }
-        BrewText located = withLayoutHint(structureProblem.orElseThrow());
-        return BrewActionResult.accepted(BrewText.message("joined", described, located));
-    }
-
-    private BrewText withLayoutHint(BrewText structureProblem) {
-        // 第一处不符后面接上这只釜该进哪一座药炉；没比出不符时原样返回。
-        return layout.layoutHint()
-                .map(hint -> BrewText.message("joined", structureProblem, hint))
-                .orElse(structureProblem);
+        return BrewActionResult.accepted(described);
     }
 
     private BrewActionResult addIngredient(ItemStack stack) {
@@ -718,23 +663,9 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
         return cauldron.ingredientSlotFor(itemId);
     }
 
-    private void rematchStructure() {
-        // 现比对一次整座结构，结果留着给显示和标记用，再顺手读火。
-        layout = BrewStructureMatcher.matchCauldron((ServerLevel) level, worldPosition, getBlockState().getBlock());
-        refreshHeatSource();
-    }
-
-    private void rematchStructureSeenBy(Player witness) {
-        // 玩家在场时现比一次；整座对上就按这座药炉的阶数给这名玩家记进度。
-        rematchStructure();
-        if (witness instanceof ServerPlayer player && layout.match().isValid()) {
-            FurnaceBuiltTrigger.TRIGGER.trigger(player, layout.placement().orElseThrow().definition().tier());
-        }
-    }
-
     private void refreshHeatSource() {
-        // 火源每次都现读，结构沿用上次比对的结果。
-        structure = new BrewStructure(scanHeatSource(), layout.match());
+        // 单口釜只从正下方取热。
+        structure = BrewStructure.built(scanHeatSource());
     }
 
     private HeatSourceKind scanHeatSource() {
@@ -784,12 +715,6 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
             stack.set(BrewingComponents.PREPARED_DAY, batch.preparedGameDay());
         }
         return stack;
-    }
-
-    private ItemStack residueStack() {
-        Identifier id = Identifier.fromNamespaceAndPath(BrewingFabric.MOD_ID, "brew_residue");
-        Item item = BuiltInRegistries.ITEM.getValue(id);
-        return new ItemStack(item);
     }
 
     private static String itemId(Item item) {

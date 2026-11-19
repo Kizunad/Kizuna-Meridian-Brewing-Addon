@@ -1,383 +1,422 @@
 package dev.kizuna.meridian.brewing.fabric;
 
-import dev.kizuna.meridian.brewing.server.BrewActionResult;
-import dev.kizuna.meridian.brewing.server.BrewKind;
-import dev.kizuna.meridian.brewing.server.BrewStructure;
-import dev.kizuna.meridian.brewing.server.BrewText;
-import dev.kizuna.meridian.brewing.server.BrewTowerController;
-import dev.kizuna.meridian.brewing.server.FireKind;
-import dev.kizuna.meridian.brewing.server.FrameClass;
-import dev.kizuna.meridian.brewing.server.HeatSourceKind;
-import dev.kizuna.meridian.brewing.server.StructureMatch;
-import dev.kizuna.meridian.brewing.test.BrewSites;
+import dev.kizuna.meridian.brewing.fabric.FurnacePatterns.Role;
 import dev.kizuna.meridian.brewing.test.BrewingTestPlayers;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.tags.BlockTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.HopperBlock;
+import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.ChestType;
+import net.minecraft.world.level.block.state.properties.SlabType;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
+import net.minecraft.world.level.storage.SavedDataStorage;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 
-/**
- * 随包熬药结构的识别：SPEC E1 第 1–9 条（按 PLAN 定案改），外加 P1（煤对着釜用，转给釜下的火）
- * 和 P2（定义里点名的外框格可以换成漏斗、投掷器）。三阶药池的几条在塔那一段补。
- *
- * <p>结构都用 JAR 里的 NBT 摆，摆法和玩家用 {@code /place template} 一样；比对走方块实体同一个入口。</p>
- */
 public final class BrewingStructureGameTest {
+    static final String ARENA = "meridian_brewing_test:furnace_yard";
+    private static final BlockPos CORNER = new BlockPos(1, 1, 1);
+    private static final BlockPos SMALL = new BlockPos(3, 0, 4);
+    private static final int SMALL_FLOOR_HEIGHT = 5;
+    private static final BlockPos MEDIUM = new BlockPos(5, 0, 5);
+    private static final BlockPos LARGE = new BlockPos(8, 0, 8);
     private static final int TIMEOUT = 100;
-    private static final int OBSERVE_TICKS = 2;
-    private static final int COAL = 3;
-    private static final int FILLING_BUCKETS = 2;
-    // 铜釜（未氧化）每秒收敛 12%，40 秒从 0 升到 98° 上下。
-    private static final int HEAT_TICKS = 800;
-    // 旧灶缺灶石封顶 70°，再加 3° 火候波动也到不了这里。
-    private static final double PAST_OLD_CAP = 95.0;
-    private static final double STAND_CENTER = 0.5;
-    private static final String FRAME_TOLERANCE_BATCH = "meridian_brewing_test:frame_tolerance";
-    private static final String TOLERANT_CONFIG = "meridian-brewing-frame-tolerance-test.properties";
-    private static final String BREWING_CONFIG = "meridian-brewing.properties";
-    private static final List<String> SHIPPED_DEFINITIONS = List.of("meridian_brewing:potion-lv1@1",
-            "meridian_brewing:potion-lv2@2", "meridian_brewing:potion-lv3-auto@3");
-    private static final Rotation[] ROTATIONS = {
-        Rotation.NONE, Rotation.CLOCKWISE_90, Rotation.CLOCKWISE_180, Rotation.COUNTERCLOCKWISE_90
-    };
+    private static final int AFTER_RECHECK = 22;
 
-    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV1_SITE)
-    public void copperCauldronStartsOnShippedLv1(GameTestHelper context) {
-        // E1 #1、#9：一阶结构照 NBT 摆好，营火本来点着，下水、下料、读过药方就能起锅；不用盆栽、灶石。
-        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV1);
-        ServerPlayer player = standingPlayer(context, site);
-        BrewCauldronBlockEntity cauldron = cauldron(context, site);
-        use(cauldron, player, new ItemStack(Items.WATER_BUCKET));
-        use(cauldron, player, item("meridian_brewing:dried_pufferfish"));
-        use(cauldron, player, new ItemStack(Items.GLOWSTONE_DUST));
-        BrewingTestPlayers.readRecipes(player, BrewKind.QI_GATHER);
-        BrewingTestPlayers.stockQi(player);
-        BrewActionResult started = cauldron.startBrew(player);
-        context.assertTrue(started.accepted(), "一阶结构起不了锅：" + BrewTexts.chinese(started.message()));
-        BrewingTestPlayers.close(player);
+    @GameTest(structure = ARENA)
+    public void orangeShellBreaksAndRepairs(GameTestHelper context) {
+        repair(context, "lv1", SMALL);
+    }
+
+    @GameTest(structure = ARENA)
+    public void greenShellBreaksAndRepairs(GameTestHelper context) {
+        repair(context, "lv2", MEDIUM);
+    }
+
+    @GameTest(structure = ARENA)
+    public void blackShellBreaksAndRepairs(GameTestHelper context) {
+        repair(context, "lv3-auto", LARGE);
+    }
+
+    private static void repair(GameTestHelper context, String tier, BlockPos center) {
+        var layout = place(context, tier, center, Mirror.NONE, Rotation.NONE);
+        requireFormed(context, layout);
+        var level = context.getLevel();
+        BlockPos fire = layout.world(layout.pattern().fires().getFirst());
+        var original = level.getBlockState(fire);
+        level.removeBlock(fire, false /* moving */);
+        var broken = BrewingFurnaces.inspect(level, layout.anchor());
+        context.assertTrue(broken != null && broken.check().status() == FurnaceLayout.Status.BROKEN
+                && fire.equals(broken.check().first().pos()), "未指出缺少的营火 " + fire);
+        level.setBlockAndUpdate(fire, original);
+        requireFormed(context, layout);
         context.succeed();
     }
 
-    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV2_SITE)
-    public void coalUsedOnWitchCauldronFeedsBuriedStoveAndLv2Starts(GameTestHelper context) {
-        // E1 #1 和 P1：铁炉座四面埋在砖里够不着，煤对着巫釜用就转给釜下的炉座，加了炭就能起锅。
-        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV2);
-        ServerPlayer player = standingPlayer(context, site);
-        BrewCauldronBlockEntity cauldron = cauldron(context, site);
-        BrewFireBlockEntity stove = (BrewFireBlockEntity) context.getLevel().getBlockEntity(site.fire());
-        player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.COAL, COAL));
-        for (int lump = 0; lump < COAL; lump++) {
-            cauldron.use(player, InteractionHand.MAIN_HAND);
+    @GameTest(structure = ARENA)
+    public void fourRotationsForm(GameTestHelper context) {
+        orientations(context, Mirror.NONE);
+    }
+
+    @GameTest(structure = ARENA)
+    public void fourMirroredRotationsForm(GameTestHelper context) {
+        orientations(context, Mirror.FRONT_BACK);
+    }
+
+    private static void orientations(GameTestHelper context, Mirror mirror) {
+        for (Rotation rotation : Rotation.values()) {
+            var layout = place(context, "lv3-auto", LARGE, mirror, rotation);
+            var found = requireFormed(context, layout);
+            context.assertTrue(found.layout().mirror() == mirror && found.layout().rotation() == rotation,
+                    "三级营火和箱子在此摆法不等价 " + mirror + " " + rotation);
         }
-        context.assertTrue(player.getMainHandItem().isEmpty(),
-                "煤没有全转给炉座，手里还剩 " + player.getMainHandItem().getCount());
-        context.assertTrue(cauldron.cauldron().ingredients().isEmpty(), "煤不该当成药料下进釜里");
-        context.runAfterDelay(OBSERVE_TICKS, () -> {
-            context.assertTrue(stove.heatSource() != HeatSourceKind.NONE, "炉座加了煤还没起火：" + stove.fire());
-            player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.WATER_BUCKET, FILLING_BUCKETS));
-            for (int bucket = 0; bucket < FILLING_BUCKETS; bucket++) {
-                cauldron.use(player, InteractionHand.MAIN_HAND);
-            }
-            use(cauldron, player, item("meridian_brewing:dried_pufferfish"));
-            use(cauldron, player, new ItemStack(Items.GLOWSTONE_DUST));
-            BrewingTestPlayers.readRecipes(player, BrewKind.QI_GATHER);
-            BrewingTestPlayers.stockQi(player);
-            BrewActionResult started = cauldron.startBrew(player);
-            context.assertTrue(started.accepted(), "二阶结构起不了锅：" + BrewTexts.chinese(started.message()));
+        context.succeed();
+    }
+
+    @GameTest(structure = ARENA)
+    public void liquidFootprintMustBeAir(GameTestHelper context) {
+        var layout = place(context, "lv2", MEDIUM, Mirror.NONE, Rotation.NONE);
+        BlockPos liquid = first(layout, Role.LIQUID);
+        context.getLevel().setBlockAndUpdate(liquid, Blocks.GLASS.defaultBlockState());
+        var found = BrewingFurnaces.inspect(context.getLevel(), layout.anchor());
+        context.assertTrue(found != null && found.check().status() == FurnaceLayout.Status.BROKEN
+                && found.check().first().pos().equals(liquid), "液面被占仍成形，或标错了格子");
+        context.succeed();
+    }
+
+    @GameTest(structure = ARENA)
+    public void copperOxidationWaxAndFireStateAreAllowed(GameTestHelper context) {
+        var layout = place(context, "lv1", SMALL, Mirror.NONE, Rotation.NONE);
+        var cell = layout.pattern().cells().stream().filter(c -> c.shown().is(block("waxed_cut_copper")))
+                .findFirst().orElseThrow();
+        var level = context.getLevel();
+        BlockPos fire = first(layout, Role.FIRES);
+        BlockPos floor = first(layout, Role.LIQUID).below();
+        level.setBlockAndUpdate(fire, level.getBlockState(fire).setValue(BlockStateProperties.LIT, false /* lit */));
+        for (Block copper : List.of(block("oxidized_cut_copper"), block("waxed_weathered_cut_copper"))) {
+            var copperState = copper.defaultBlockState();
+            level.setBlockAndUpdate(layout.world(cell), copperState);
+            level.setBlockAndUpdate(floor, copperState);
+            requireFormed(context, layout);
+        }
+        context.succeed();
+    }
+
+    @GameTest(structure = ARENA)
+    public void inputChestCanHoldItemsBesideHopper(GameTestHelper context) {
+        var layout = place(context, "lv3-auto", LARGE, Mirror.NONE, Rotation.NONE);
+        var level = context.getLevel();
+        BlockPos input = first(layout, Role.INPUTS);
+        Direction outward = level.getBlockState(input).getValue(BlockStateProperties.HORIZONTAL_FACING);
+        var hopper = Blocks.HOPPER.defaultBlockState().setValue(HopperBlock.FACING, outward.getOpposite());
+        level.setBlockAndUpdate(input.relative(outward), hopper);
+        var chest = (ChestBlockEntity) level.getBlockEntity(input);
+        chest.setItem(0, new ItemStack(Items.DIRT));
+        requireFormed(context, layout);
+        context.assertTrue(chest.getItem(0).is(Items.DIRT), "认炉时改动了库存");
+        context.succeed();
+    }
+
+    @GameTest(structure = ARENA, maxTicks = TIMEOUT)
+    public void breakingRegisteredRimInvalidatesWithoutInteraction(GameTestHelper context) {
+        var layout = place(context, "lv1", SMALL, Mirror.NONE, Rotation.NONE);
+        requireFormed(context, layout);
+        var level = context.getLevel();
+        level.removeBlock(first(layout, Role.RIM), false /* moving */);
+        context.runAfterDelay(AFTER_RECHECK, () -> {
+            context.assertTrue(FurnaceRegister.of(level).sites().stream()
+                    .noneMatch(site -> site.anchor().equals(layout.anchor())), "拆锅沿后仍然登记成形");
+            context.succeed();
+        });
+    }
+
+    @GameTest(structure = ARENA)
+    public void repeatedInspectionRegistersOnePersistedFurnace(GameTestHelper context) throws IOException {
+        var layout = place(context, "lv3-auto", LARGE, Mirror.FRONT_BACK, Rotation.CLOCKWISE_90);
+        requireFormed(context, layout);
+        var level = context.getLevel();
+        var rim = BrewingFurnaces.inspect(level, first(layout, Role.RIM));
+        context.assertTrue(rim != null && rim.layout().anchor().equals(layout.anchor()), "点锅沿改变了锚点");
+        var register = FurnaceRegister.of(level);
+        long count = register.sites().stream().filter(site -> site.anchor().equals(layout.anchor())).count();
+        context.assertTrue(count == 1, "同炉登记了多次");
+        Path folder = Files.createTempDirectory("brewing-furnace-save");
+        try (var store = storage(folder, level)) {
+            store.set(FurnaceRegister.TYPE, register);
+            store.saveAndJoin();
+        }
+        register.setDirty();
+        try (var reopened = storage(folder, level)) {
+            var read = reopened.get(FurnaceRegister.TYPE);
+            context.assertTrue(read != null && read.sites().contains(FurnaceRegister.Site.of(layout)),
+                    "新存档读取器未读到原等级、图样版本和摆法");
+        }
+        context.succeed();
+    }
+
+    @GameTest(structure = ARENA)
+    public void inspectingRimReportsStateWithoutOpeningMenu(GameTestHelper context) {
+        var layout = place(context, "lv2", MEDIUM, Mirror.NONE, Rotation.NONE);
+        var player = BrewingTestPlayers.create(context);
+        var level = context.getLevel();
+        BlockPos rim = first(layout, Role.RIM);
+        var hit = new BlockHitResult(Vec3.atCenterOf(rim), Direction.UP, rim, false /* inside */);
+        player.setPos(Vec3.atCenterOf(rim.above()));
+        player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+        player.gameMode.useItemOn(player, level, player.getMainHandItem(), InteractionHand.MAIN_HAND, hit);
+        level.setBlockAndUpdate(first(layout, Role.LIQUID), Blocks.GLASS.defaultBlockState());
+        player.gameMode.useItemOn(player, level, player.getMainHandItem(), InteractionHand.MAIN_HAND, hit);
+        context.runAfterDelay(1, () -> {
+            var name = Component.translatable("structure.meridian_brewing.cauldron-v2-lv2");
+            var messages = BrewingTestPlayers.overlays(player).stream().map(sent -> sent.text()).toList();
+            var formed = Component.translatable("message.meridian_brewing.furnace.formed", name);
+            var broken = Component.translatable("message.meridian_brewing.furnace.broken", name);
+            context.assertTrue(messages.contains(formed) && messages.contains(broken),
+                    "动作栏缺少带二阶药炉蓝图名的成形或缺损提示 " + messages);
+            context.assertTrue(player.containerMenu == player.inventoryMenu, "认炉时打开了菜单");
             BrewingTestPlayers.close(player);
             context.succeed();
         });
     }
 
-    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV1_SITE)
-    public void lv1MatchesInAllFourRotations(GameTestHelper context) {
-        // E1 #2：一阶四个朝向。
-        allRotationsMatch(context, BrewSites.Shipped.LV1);
-    }
-
-    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV2_SITE)
-    public void lv2MatchesInAllFourRotations(GameTestHelper context) {
-        // E1 #2：二阶四个朝向。
-        allRotationsMatch(context, BrewSites.Shipped.LV2);
-    }
-
-    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV1_SITE)
-    public void lv1FrameSwappedWithinClassStillMatches(GameTestHelper context) {
-        // E1 #3：一阶的石头格（台阶、墙、半砖都算）全换成整块圆石，铁链换铜链，照样认。
-        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV1);
-        Swapped swapped = swapFrames(context, site);
-        context.assertTrue(swapped.stone() > 0 && swapped.chains() == 2, "一阶外框没换到预期的格子：" + swapped);
-        StructureMatch match = result(context, site).match();
-        context.assertTrue(match.isValid(), "一阶换了同类外框材料就不认了：" + describe(match));
+    @GameTest(structure = ARENA)
+    public void missingChunksStayUnloaded(GameTestHelper context) {
+        var level = context.getLevel();
+        var pattern = FurnacePatterns.all(level.getServer()).getFirst();
+        final int distant = 2_000_000;
+        var anchor = new BlockPos(distant, 0, distant);
+        var layout = new FurnaceLayout(pattern, anchor, Mirror.NONE, Rotation.NONE);
+        context.assertFalse(level.hasChunkAt(anchor), "远处测试区块已加载");
+        context.assertTrue(layout.check(level).status() == FurnaceLayout.Status.UNLOADED, "未加载却给出判定");
+        context.assertFalse(level.hasChunkAt(anchor), "检查时强加载了区块");
         context.succeed();
     }
 
-    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV2_SITE)
-    public void lv2FrameSwappedWithinClassStillMatches(GameTestHelper context) {
-        // E1 #3：二阶的磨制黑石砖、楼梯、台阶、墙全换成整块圆石，照样认。
-        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV2);
-        Swapped swapped = swapFrames(context, site);
-        context.assertTrue(swapped.stone() > 0, "二阶外框没换到石头格：" + swapped);
-        StructureMatch match = result(context, site).match();
-        context.assertTrue(match.isValid(), "二阶换了同类外框材料就不认了：" + describe(match));
-        context.succeed();
+    private static SavedDataStorage storage(Path folder, ServerLevel level) {
+        return new SavedDataStorage(folder, level.getServer().getFixerUpper(), level.registryAccess());
     }
 
-    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV2_SITE)
-    public void lv2WithoutStoveReportsIronStoveBelowCauldron(GameTestHelper context) {
-        // E1 #4：拿掉铁炉座，第一处不符就是釜正下方那格。
-        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV2);
-        context.getLevel().setBlock(site.fire(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-        assertMismatch(context, result(context, site), "巫釜下 1：应为铁炉座", site.fire());
-        context.succeed();
-    }
-
-    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV1_SITE)
-    public void lv1BlockedAboveCauldronReportsMustBeEmpty(GameTestHelper context) {
-        // E1 #5：铜釜正上方 (2,3,2) 必须空，放块石头就不认。
-        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV1);
-        BlockPos above = site.cauldron().above();
-        context.getLevel().setBlock(above, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
-        assertMismatch(context, result(context, site), "铜釜上 1：应为空着", above);
-        context.succeed();
-    }
-
-    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV1_SITE)
-    public void lv1StoneFrameCellAsPlanksReportsAnyStone(GameTestHelper context) {
-        // E1 #6：一格石墙换成木板，木头不是石头类，不认。
-        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV1);
-        BlockPos corner = site.world(1, 1, 1);
-        context.getLevel().setBlock(corner, Blocks.OAK_PLANKS.defaultBlockState(), Block.UPDATE_ALL);
-        assertMismatch(context, result(context, site), "铜釜北 1、西 1、下 1：应为任一石头方块", corner);
-        context.succeed();
-    }
-
-    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV2_SITE)
-    public void copperCauldronInLv2IsNotRecognized(GameTestHelper context) {
-        // E1 #7：铜釜只配一阶，放进二阶的位置不认。
-        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV2);
-        context.getLevel().setBlock(site.cauldron(), BrewingBlocks.COPPER_CAULDRON.defaultBlockState(),
-                Block.UPDATE_ALL);
-        StructureMatch match = result(context, site).match();
-        context.assertTrue(match.status() == StructureMatch.Status.MISMATCH, "铜釜放进二阶被认了：" + describe(match));
-        context.succeed();
-    }
-
-    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV1_SITE)
-    public void witchCauldronInLv1IsNotRecognized(GameTestHelper context) {
-        // E1 #7：巫釜只配二阶，放进一阶的位置不认。
-        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV1);
-        context.getLevel().setBlock(site.cauldron(), BrewingBlocks.WITCH_CAULDRON.defaultBlockState(),
-                Block.UPDATE_ALL);
-        StructureMatch match = result(context, site).match();
-        context.assertTrue(match.status() == StructureMatch.Status.MISMATCH, "巫釜放进一阶被认了：" + describe(match));
-        context.succeed();
-    }
-
-    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV1_SITE)
-    public void lv1SoulCampfireGivesSoulFireButIronBrazierReportsCampfire(GameTestHelper context) {
-        // E1 #8（D1）：一阶只认营火，灵魂营火也是营火，得阴火；换成铁火盆就报应为营火。
-        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV1);
-        ServerLevel level = context.getLevel();
-        level.setBlock(site.fire(), Blocks.SOUL_CAMPFIRE.defaultBlockState(), Block.UPDATE_ALL);
-        BrewCauldronBlockEntity cauldron = cauldron(context, site);
-        context.runAfterDelay(OBSERVE_TICKS, () -> {
-            BrewStructure structure = cauldron.structure();
-            context.assertTrue(structure.match().isValid(), "灵魂营火的一阶没认出来：" + describe(structure.match()));
-            context.assertTrue(structure.heatSource() == HeatSourceKind.SOUL_CAMPFIRE
-                            && structure.heatSource().fireKind() == FireKind.SOUL_FIRE,
-                    "灵魂营火没给阴火：" + structure.heatSource());
-            level.setBlock(site.fire(), BrewingBlocks.IRON_BRAZIER.defaultBlockState(), Block.UPDATE_ALL);
-            BrewStructureMatcher.Result brazier = result(context, site);
-            StructureMatch.Mismatch mismatch = brazier.match().mismatch().orElseThrow(
-                    () -> new IllegalStateException("铁火盆的一阶被认了：" + describe(brazier.match())));
-            // 服务端没有原版方块的中文名，所以比提示的结构：应为“营火”这个方块、在釜正下方一格。
-            BrewText.BlockName campfireBlock = new BrewText.BlockName("minecraft:campfire");
-            BrewText campfire = BrewText.message("structure.expect.block", campfireBlock);
-            context.assertTrue(mismatch.expected().equals(campfire), "铁火盆的一阶没报应为营火：" + mismatch);
-            context.assertTrue(mismatch.east() == 0 && mismatch.up() == -1 && mismatch.south() == 0,
-                    "应为营火报在了别处：" + mismatch);
-            context.succeed();
-        });
-    }
-
-    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV2_SITE)
-    public void lv2CampfireReportsIronStove(GameTestHelper context) {
-        // E1 #8：二阶只认铁炉座，放营火报应为铁炉座。
-        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV2);
-        context.getLevel().setBlock(site.fire(), Blocks.CAMPFIRE.defaultBlockState(), Block.UPDATE_ALL);
-        assertMismatch(context, result(context, site), "巫釜下 1：应为铁炉座", site.fire());
-        context.succeed();
-    }
-
-    @GameTest(maxTicks = HEAT_TICKS + TIMEOUT, structure = BrewSites.LV1_SITE)
-    public void lv1HeatsPastOldHearthCapWithoutPotsOrHearthStones(GameTestHelper context) {
-        // E1 #9：旧灶缺灶石封顶 70°；现在结构对、营火点着，铜釜一路升到 100° 附近。
-        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV1);
-        BrewCauldronBlockEntity cauldron = cauldron(context, site);
-        context.runAfterDelay(HEAT_TICKS, () -> {
-            BrewStructure structure = cauldron.structure();
-            double temperature = cauldron.cauldron().temperature();
-            context.assertTrue(structure.match().isValid() && structure.heatSource() == HeatSourceKind.SUN_CAMPFIRE,
-                    "一阶结构或营火没认出来：" + structure);
-            context.assertTrue(structure.maximumTemperature() == BrewStructure.LIT_MAXIMUM,
-                    "结构有效时温度上限不是 100°：" + structure.maximumTemperature());
-            context.assertTrue(temperature >= PAST_OLD_CAP, "铜釜 40 秒还没升过旧灶的封顶：" + temperature);
-            context.succeed();
-        });
-    }
-
-    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV2_SITE)
-    public void automationBlocksFitListedFrameCellsOnly(GameTestHelper context) {
-        // P2：定义里点名的格（釜四周的台阶、炉座四周的砖）可换成漏斗、投掷器；没点名的外框格不行。
-        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV2);
-        ServerLevel level = context.getLevel();
-        level.setBlock(site.world(5, 1, 4), Blocks.HOPPER.defaultBlockState(), Block.UPDATE_ALL);
-        level.setBlock(site.world(6, 1, 5), Blocks.DROPPER.defaultBlockState(), Block.UPDATE_ALL);
-        level.setBlock(site.world(5, 0, 6), Blocks.HOPPER.defaultBlockState(), Block.UPDATE_ALL);
-        StructureMatch listed = result(context, site).match();
-        context.assertTrue(listed.isValid(), "点名的格换成漏斗、投掷器就不认了：" + describe(listed));
-        BlockPos pillar = site.world(3, 1, 3);
-        level.setBlock(pillar, Blocks.HOPPER.defaultBlockState(), Block.UPDATE_ALL);
-        assertMismatch(context, result(context, site), "巫釜北 2、西 2：应为任一石头方块", pillar);
-        context.succeed();
-    }
-
-    @GameTest(environment = FRAME_TOLERANCE_BATCH, maxTicks = TIMEOUT, structure = BrewSites.LV1_SITE)
-    public void frameToleranceOneForgivesAFrameCellButNotACore(GameTestHelper context) {
-        // 复审第 2 条：外框容差设成 1 时，一阶少一格石墙照样认；少了营火（核心格）还是不认。
-        // 容差是全局配置，所以这条单独一批跑，同一 tick 里改完就换回正式配置。
-        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV1);
-        ServerLevel level = context.getLevel();
-        Path tolerant = FabricLoader.getInstance().getGameDir().resolve(TOLERANT_CONFIG);
-        try {
-            Files.writeString(tolerant, "structure.frame_tolerance=1\n");
-            BrewStructureMatcher.initialize(tolerant);
-            level.setBlock(site.world(1, 1, 1), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-            StructureMatch forgiven = result(context, site).match();
-            context.assertTrue(forgiven.isValid(), "容差 1 时少一格外框就不认了：" + describe(forgiven));
-            level.setBlock(site.fire(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-            // 服务端没有方块的中文名，具体方块写成 ID。
-            assertMismatch(context, result(context, site), "铜釜下 1：应为minecraft:campfire", site.fire());
-        } catch (IOException unwritable) {
-            throw new IllegalStateException("测试配置写不了：" + tolerant, unwritable);
-        } finally {
-            BrewStructureMatcher.initialize(FabricLoader.getInstance().getConfigDir().resolve(BREWING_CONFIG));
+    @GameTest(structure = ARENA)
+    public void retiredTowerHasNoFurnace(GameTestHelper context) {
+        var level = context.getLevel();
+        var id = Identifier.parse("meridian_brewing_test:retired_tower");
+        BlockPos origin = context.absolutePos(CORNER);
+        var template = level.getStructureManager().get(id).orElseThrow();
+        template.placeInWorld(level, origin, origin, new StructurePlaceSettings(), level.getRandom(), Block.UPDATE_ALL);
+        for (var pos : List.of(origin.offset(6, 5, 6), origin.offset(6, 6, 5), origin)) {
+            context.assertTrue(BrewingFurnaces.inspect(level, pos) == null, "旧塔被认作新炉 " + pos);
         }
         context.succeed();
     }
 
-    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV1_SITE)
-    public void brokenDefinitionsAreRejectedAtLoad(GameTestHelper context) {
-        // 复审第 6 条：测试数据包里放了三份坏定义——没有铜箱子、木桶的三阶，只有 3 格燃料的三阶，
-        // 燃料格落在 NBT 外的一阶。读的时候各自打错误日志跳过，剩下的只有随包的三份。
-        List<BrewStructureDefinitions.Definition> loaded = BrewStructureDefinitions.all(context.getLevel().getServer());
-        List<String> ids = loaded.stream().map(definition -> definition.id() + "@" + definition.tier()).toList();
-        context.assertTrue(ids.equals(SHIPPED_DEFINITIONS), "读到的定义不对：" + ids);
-        BrewStructureDefinitions.Definition tower = loaded.getLast();
-        context.assertTrue(tower.fuel().size() == BrewTowerController.FUEL_CELLS, "三阶的燃料格不是 4 格：" + tower.fuel());
+    private static Block block(String name) {
+        return BuiltInRegistries.BLOCK.getValue(Identifier.withDefaultNamespace(name));
+    }
+
+    @GameTest(structure = ARENA)
+    public void oldShroomlightMarksSmallFloorCell(GameTestHelper context) {
+        var layout = place(context, "lv1", SMALL, Mirror.NONE, Rotation.NONE);
+        BlockPos center = layout.anchor().above(SMALL_FLOOR_HEIGHT);
+        replaceAndCheck(context, layout, center, Blocks.SHROOMLIGHT.defaultBlockState());
+    }
+
+    @GameTest(structure = ARENA)
+    public void orangeConcreteMarksSmallFloor(GameTestHelper context) {
+        checkFloor(context, "lv1", SMALL, block("orange_concrete"));
+    }
+
+    @GameTest(structure = ARENA)
+    public void purpleConcreteMarksMediumFloor(GameTestHelper context) {
+        checkFloor(context, "lv2", MEDIUM, block("purple_concrete"));
+    }
+
+    @GameTest(structure = ARENA)
+    public void limeConcreteMarksLargeFloor(GameTestHelper context) {
+        checkFloor(context, "lv3-auto", LARGE, block("lime_concrete"));
+    }
+
+    @GameTest(structure = ARENA)
+    public void missingSmallFloorCellIsMarked(GameTestHelper context) {
+        checkFloor(context, "lv1", SMALL, Blocks.AIR);
+    }
+
+    @GameTest(structure = ARENA)
+    public void missingMediumFloorCellIsMarked(GameTestHelper context) {
+        checkFloor(context, "lv2", MEDIUM, Blocks.AIR);
+    }
+
+    @GameTest(structure = ARENA)
+    public void missingLargeFloorCellIsMarked(GameTestHelper context) {
+        checkFloor(context, "lv3-auto", LARGE, Blocks.AIR);
+    }
+
+    private static void checkFloor(GameTestHelper context, String tier, BlockPos center, Block wrong) {
+        var layout = place(context, tier, center, Mirror.NONE, Rotation.NONE);
+        requireFormed(context, layout);
+        var level = context.getLevel();
+        var replacement = wrong.defaultBlockState();
+        // 从液面足迹逐格向下取样，也能查出图样里漏标的炉身格。
+        var surface = layout.pattern().cells().stream().filter(cell -> cell.role() == Role.LIQUID).toList();
+        context.assertFalse(surface.isEmpty(), "缺少液面足迹 " + tier);
+        for (var cell : surface) {
+            BlockPos floor = layout.world(cell).below();
+            var original = level.getBlockState(floor);
+            assertReplacementFault(context, layout, floor, replacement);
+            level.setBlockAndUpdate(floor, original);
+        }
+        requireFormed(context, layout);
         context.succeed();
     }
 
-    private static void allRotationsMatch(GameTestHelper context, BrewSites.Shipped shipped) {
-        // 同一块场地依次摆四个朝向：底面是方的，转过去占的还是这片格子，后摆的整块盖掉先摆的。
-        for (Rotation rotation : ROTATIONS) {
-            BrewSites.Site site = BrewSites.place(context, shipped, rotation);
-            StructureMatch match = result(context, site).match();
-            context.assertTrue(match.isValid(), shipped + " 转 " + rotation + " 没认出来：" + describe(match));
-        }
+    @GameTest(structure = ARENA)
+    public void wrongBodyMaterialMarksCopperCell(GameTestHelper context) {
+        var layout = place(context, "lv1", SMALL, Mirror.NONE, Rotation.NONE);
+        Block copper = block("waxed_cut_copper");
+        var body = layout.pattern().cells().stream()
+                .filter(cell -> cell.role() == Role.BODY && cell.shown().is(copper)).findFirst().orElseThrow();
+        replaceAndCheck(context, layout, layout.world(body), Blocks.STONE.defaultBlockState());
+    }
+
+    @GameTest(structure = ARENA)
+    public void upsideDownSlabMarksRimCell(GameTestHelper context) {
+        var layout = place(context, "lv1", SMALL, Mirror.NONE, Rotation.NONE);
+        BlockPos pos = first(layout, Role.RIM);
+        var slab = context.getLevel().getBlockState(pos);
+        SlabType reversed = slab.getValue(BlockStateProperties.SLAB_TYPE) == SlabType.TOP
+                ? SlabType.BOTTOM : SlabType.TOP;
+        replaceAndCheck(context, layout, pos, slab.setValue(BlockStateProperties.SLAB_TYPE, reversed));
+    }
+
+    @GameTest(structure = ARENA)
+    public void soulFireMarksOrdinaryFireCell(GameTestHelper context) {
+        var layout = place(context, "lv1", SMALL, Mirror.NONE, Rotation.NONE);
+        replaceMaterial(context, layout, Role.FIRES, Blocks.SOUL_CAMPFIRE);
+    }
+
+    @GameTest(structure = ARENA)
+    public void ordinaryFireMarksSoulFireCell(GameTestHelper context) {
+        var layout = place(context, "lv2", MEDIUM, Mirror.NONE, Rotation.NONE);
+        replaceMaterial(context, layout, Role.FIRES, Blocks.CAMPFIRE);
+    }
+
+    @GameTest(structure = ARENA)
+    public void copperChestMarksWoodenInput(GameTestHelper context) {
+        var layout = place(context, "lv3-auto", LARGE, Mirror.NONE, Rotation.NONE);
+        replaceMaterial(context, layout, Role.INPUTS, block("waxed_copper_chest"));
+    }
+
+    @GameTest(structure = ARENA)
+    public void woodenChestMarksCopperOutput(GameTestHelper context) {
+        var layout = place(context, "lv3-auto", LARGE, Mirror.NONE, Rotation.NONE);
+        replaceMaterial(context, layout, Role.OUTPUTS, Blocks.CHEST);
+    }
+
+    @GameTest(structure = ARENA)
+    public void doubleChestMarksInputHalf(GameTestHelper context) {
+        var layout = place(context, "lv3-auto", LARGE, Mirror.NONE, Rotation.NONE);
+        var level = context.getLevel();
+        BlockPos input = first(layout, Role.INPUTS);
+        var chest = level.getBlockState(input);
+        Direction side = chest.getValue(BlockStateProperties.HORIZONTAL_FACING).getClockWise();
+        var right = chest.setValue(BlockStateProperties.CHEST_TYPE, ChestType.RIGHT);
+        level.setBlock(input.relative(side), right, Block.UPDATE_CLIENTS);
+        replaceAndCheck(context, layout, input, chest.setValue(BlockStateProperties.CHEST_TYPE, ChestType.LEFT));
+    }
+
+    @GameTest(structure = ARENA)
+    public void turnedChestMarksOutputCell(GameTestHelper context) {
+        var layout = place(context, "lv3-auto", LARGE, Mirror.NONE, Rotation.NONE);
+        BlockPos output = first(layout, Role.OUTPUTS);
+        var chest = context.getLevel().getBlockState(output);
+        replaceAndCheck(context, layout, output, chest.rotate(Rotation.CLOCKWISE_90));
+    }
+
+    @GameTest(structure = ARENA)
+    public void extraCampfireMarksHearthCell(GameTestHelper context) {
+        var layout = place(context, "lv1", SMALL, Mirror.NONE, Rotation.NONE);
+        replaceAndCheck(context, layout, first(layout, Role.HEARTH), Blocks.CAMPFIRE.defaultBlockState());
+    }
+
+    private static void replaceMaterial(GameTestHelper context, FurnaceLayout layout, Role role, Block wrong) {
+        // 沿用原朝向，把材质错误与几何错误分别测出来。
+        BlockPos pos = first(layout, role);
+        BlockState replacement = wrong.withPropertiesOf(context.getLevel().getBlockState(pos));
+        replaceAndCheck(context, layout, pos, replacement);
+    }
+
+    private static void replaceAndCheck(GameTestHelper context, FurnaceLayout layout, BlockPos pos, BlockState wrong) {
+        assertReplacementFault(context, layout, pos, wrong);
         context.succeed();
     }
 
-    private static Swapped swapFrames(GameTestHelper context, BrewSites.Site site) {
-        // 只换结构范围内属于石头类、铁链的格；核心（釜、火）和空气不动。
-        ServerLevel level = context.getLevel();
-        BlockState copperChain = block("minecraft:copper_chain").defaultBlockState();
-        int stone = 0;
-        int chains = 0;
-        for (BlockPos pos : site.cells()) {
-            BlockState state = level.getBlockState(pos);
-            if (state.is(BrewingTags.FRAMES.get(FrameClass.STONE))) {
-                level.setBlock(pos, Blocks.COBBLESTONE.defaultBlockState(), Block.UPDATE_ALL);
-                stone++;
-            } else if (state.is(BlockTags.CHAINS)) {
-                level.setBlock(pos, copperChain, Block.UPDATE_ALL);
-                chains++;
-            }
-        }
-        return new Swapped(stone, chains);
+    private static void assertReplacementFault(GameTestHelper context, FurnaceLayout layout, BlockPos pos,
+                                               BlockState wrong) {
+        var level = context.getLevel();
+        level.setBlockAndUpdate(pos, wrong);
+        context.assertTrue(level.getBlockState(pos).equals(wrong), "错放的方块没有留在测试位置 " + pos);
+        var found = BrewingFurnaces.inspect(level, layout.anchor());
+        context.assertTrue(found != null && found.check().status() == FurnaceLayout.Status.BROKEN,
+                "错放 " + wrong + " 后仍成形或找不到炉 " + pos);
+        context.assertTrue(found.check().first().pos().equals(pos), "标记应在 " + pos + "，实际 " + found.check().first());
     }
 
-    private static BrewStructureMatcher.Result result(GameTestHelper context, BrewSites.Site site) {
-        // 和方块实体刷新结构用的是同一个入口：按这只釜的种类找定义，四个朝向都试。
-        ServerLevel level = context.getLevel();
-        Block cauldron = level.getBlockState(site.cauldron()).getBlock();
-        return BrewStructureMatcher.matchCauldron(level, site.cauldron(), cauldron);
+    static BlockPos first(FurnaceLayout layout, Role role) {
+        var cell = layout.pattern().cells().stream().filter(c -> c.role() == role).findFirst().orElseThrow();
+        return layout.world(cell);
     }
 
-    private static void assertMismatch(GameTestHelper context, BrewStructureMatcher.Result result, String expected,
-                                       BlockPos marker) {
-        // 提示文字按中文比；标记粒子要落在不符的那一格。
-        StructureMatch match = result.match();
-        context.assertTrue(match.status() == StructureMatch.Status.MISMATCH, "结构该不符却：" + describe(match));
-        String text = describe(match);
-        context.assertTrue(text.contains(expected), "不符提示不对，应含「" + expected + "」：" + text);
-        BlockPos shown = result.marker().orElseThrow().pos();
-        context.assertTrue(shown.equals(marker), "标记没落在不符那格：" + shown + "，应为 " + marker);
+    private static BrewingFurnaces.Inspection requireFormed(GameTestHelper context, FurnaceLayout layout) {
+        var found = BrewingFurnaces.inspect(context.getLevel(), layout.anchor());
+        context.assertTrue(found != null && found.check().status() == FurnaceLayout.Status.FORMED
+                && found.layout().anchor().equals(layout.anchor()) && found.layout().pattern() == layout.pattern(),
+                "没有认成 " + layout.pattern().id() + " " + layout.mirror() + " " + layout.rotation()
+                        + "，该摆法的首个错误 " + layout.check(context.getLevel()).first());
+        return found;
     }
 
-    private static String describe(StructureMatch match) {
-        // 有不符就给中文提示，没有就给状态名。
-        return match.problem().map(BrewTexts::chinese).orElse(match.status().name());
+    static FurnaceLayout place(GameTestHelper context, String suffix, BlockPos center,
+                                       Mirror mirror, Rotation rotation) {
+        var placement = new Placement(context.absolutePos(CORNER), mirror, rotation);
+        return placeAt(context.getLevel(), suffix, center, placement);
     }
 
-    private static ServerPlayer standingPlayer(GameTestHelper context, BrewSites.Site site) {
-        // 站在结构里那格台子上，离釜不到 3 格，起锅的距离检查能过。
-        ServerPlayer player = BrewingTestPlayers.create(context);
-        BlockPos stand = site.stand();
-        player.setPos(stand.getX() + STAND_CENTER, stand.getY(), stand.getZ() + STAND_CENTER);
-        return player;
-    }
+    record Placement(BlockPos corner, Mirror mirror, Rotation rotation) {}
 
-    private static BrewCauldronBlockEntity cauldron(GameTestHelper context, BrewSites.Site site) {
-        return (BrewCauldronBlockEntity) context.getLevel().getBlockEntity(site.cauldron());
-    }
-
-    private static void use(BrewCauldronBlockEntity cauldron, ServerPlayer player, ItemStack stack) {
-        // 主手拿着对釜右键，走方块实体的投料入口。
-        player.setItemInHand(InteractionHand.MAIN_HAND, stack);
-        cauldron.use(player, InteractionHand.MAIN_HAND);
-    }
-
-    private static ItemStack item(String id) {
-        return new ItemStack(BuiltInRegistries.ITEM.getValue(Identifier.parse(id)));
-    }
-
-    private static Block block(String id) {
-        // 注册表查不到时返回空气，这里直接报错，免得把格子换成空气还以为换成了铜链。
-        Block block = BuiltInRegistries.BLOCK.getValue(Identifier.parse(id));
-        if (block == Blocks.AIR) {
-            throw new IllegalStateException("没有这种方块：" + id);
-        }
-        return block;
-    }
-
-    private record Swapped(int stone, int chains) {
+    static FurnaceLayout placeAt(ServerLevel level, String suffix, BlockPos center, Placement placement) {
+        Mirror mirror = placement.mirror();
+        Rotation rotation = placement.rotation();
+        BlockPos corner = placement.corner();
+        var id = Identifier.parse("meridian_brewing:cauldron-v2-" + suffix);
+        var template = level.getStructureManager().get(id).orElseThrow();
+        var pattern = FurnacePatterns.all(level.getServer()).stream().filter(p -> p.id().equals(id))
+                .findFirst().orElseThrow();
+        var box = template.getBoundingBox(BlockPos.ZERO, rotation, BlockPos.ZERO, mirror);
+        BlockPos origin = corner.offset(-box.minX(), -box.minY(), -box.minZ());
+        var settings = new StructurePlaceSettings()
+                .setMirror(mirror)
+                .setRotation(rotation);
+        template.placeInWorld(level, origin, origin, settings, level.getRandom(), Block.UPDATE_ALL);
+        BlockPos anchor = origin.offset(StructureTemplate.transform(center, mirror, rotation, BlockPos.ZERO));
+        return new FurnaceLayout(pattern, anchor, mirror, rotation);
     }
 }

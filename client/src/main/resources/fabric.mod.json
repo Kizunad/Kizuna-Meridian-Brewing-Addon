@@ -3,7 +3,7 @@
   "id": "meridian_brewing_client",
   "version": "${version}",
   "name": "Kizuna's Meridian Brewing Addon - Client",
-  "description": "炼药器具放置模型、枯木染色与药塔窗口",
+  "description": "炼药器具放置模型、枯木染色与药方书",
   "authors": ["Kizunad"],
   "license": "PolyForm-Noncommercial-1.0.0",
   "environment": "client",

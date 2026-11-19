@@ -219,7 +219,14 @@ public final class BrewCauldron {
         if (slot == IngredientSlot.PROPELLANT) {
             form = BrewForm.SPLASH;
         }
-        ingredients.put(slot, batch);
+        IngredientBatch previous = ingredients.get(slot);
+        IngredientBatch combined = batch;
+        if (previous != null) {
+            long oldest = Math.min(previous.preparedGameDay(), batch.preparedGameDay());
+            int total = previous.count() + batch.count();
+            combined = new IngredientBatch(batch.itemId(), batch.preparation(), oldest, total);
+        }
+        ingredients.put(slot, combined);
         if (state == BrewCauldronState.WATER) {
             state = BrewCauldronState.RAW;
         }
@@ -248,6 +255,9 @@ public final class BrewCauldron {
         if (missingIngredients.isPresent()) {
             return missingIngredients;
         }
+        if (vessel == VesselKind.AUTOMATIC_FURNACE) {
+            return Optional.of(BrewText.message("furnace.worker"));
+        }
         return structure.problemFor(recipe.kind(), recipe.fireKind());
     }
 
@@ -263,7 +273,7 @@ public final class BrewCauldron {
         overheatSeconds = 0.0;
         evaporationSeconds = 0.0;
         scorchCount = 0;
-        remainingBottles = vessel.waterCapacity();
+        remainingBottles = 0;
         return BrewActionResult.accepted(BrewText.message("cauldron.start.done", recipeName(recipe.kind())));
     }
 
@@ -311,6 +321,7 @@ public final class BrewCauldron {
         BrewForm collectedForm = form;
         BrewScore score = BrewScoring.calculate(toInput(currentGameDay));
         remainingBottles--;
+        waterUnits = Math.max(0, waterUnits - 1);
         int remaining = remainingBottles;
         if (remainingBottles == 0) {
             resetBrewState();
@@ -333,7 +344,7 @@ public final class BrewCauldron {
                 || state == BrewCauldronState.SCORCHED) {
             return Optional.of(BrewActionResult.returned(stateBlocksIngredients(), batch));
         }
-        if (ingredients.containsKey(slot)) {
+        if (batch.count() > needed(slot)) {
             return Optional.of(BrewActionResult.returned(
                     BrewText.message("cauldron.ingredient.slot_taken", slotName(slot)), batch));
         }
@@ -346,6 +357,16 @@ public final class BrewCauldron {
         if (state != BrewCauldronState.BREWING && !startIngredient) {
             return Optional.of(BrewActionResult.returned(
                     BrewText.message("cauldron.ingredient.late_needs_brewing", slotName(slot)), batch));
+        }
+        if (!startIngredient) {
+            IngredientPlan plan = recipe.ingredients();
+            TimingWindow window = plan.accessoryWindow();
+            if (slot == IngredientSlot.CATALYST) {
+                window = plan.catalystWindow();
+            }
+            if (brewElapsedSeconds < window.startSeconds()) {
+                return Optional.of(BrewActionResult.returned(BrewText.message("cauldron.ingredient.early"), batch));
+            }
         }
         return Optional.empty();
     }
@@ -374,6 +395,14 @@ public final class BrewCauldron {
         return Optional.empty();
     }
 
+    public int needed(IngredientSlot slot) {
+        IngredientBatch present = ingredients.get(slot);
+        if (present == null) {
+            return vessel.batch().sets();
+        }
+        return Math.max(0, vessel.batch().sets() - present.count());
+    }
+
     private Optional<BrewText> missingIngredients() {
         boolean splash = form == BrewForm.SPLASH || !recipe.kind().supports(BrewUse.DRINK);
         EnumSet<IngredientSlot> required = EnumSet.of(
@@ -381,7 +410,7 @@ public final class BrewCauldron {
         if (splash) {
             required.add(IngredientSlot.PROPELLANT);
         }
-        if (ingredients.keySet().containsAll(required)) {
+        if (required.stream().allMatch(slot -> needed(slot) == 0)) {
             return Optional.empty();
         }
         String missing = splash ? "cauldron.start.missing_splash" : "cauldron.start.missing_drink";
@@ -457,6 +486,7 @@ public final class BrewCauldron {
         updateEvaporation(elapsed);
         brewElapsedSeconds = nextElapsed;
         if (state == BrewCauldronState.BREWING && brewElapsedSeconds >= BREW_SECONDS) {
+            remainingBottles = Math.min(waterUnits, vessel.batch().bottles());
             state = BrewCauldronState.BREWED;
         }
     }

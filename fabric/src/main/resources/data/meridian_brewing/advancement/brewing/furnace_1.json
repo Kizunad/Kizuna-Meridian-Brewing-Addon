@@ -5,7 +5,7 @@
       "id": "meridian_brewing:copper_cauldron"
     },
     "title": {
-      "translate": "advancements.meridian_brewing.brewing.furnace_1.title"
+      "translate": "structure.meridian_brewing.cauldron-v2-lv1"
     },
     "description": {
       "translate": "advancements.meridian_brewing.brewing.furnace_1.description"

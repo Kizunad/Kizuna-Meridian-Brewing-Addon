@@ -3,31 +3,22 @@ package dev.kizuna.meridian.brewing.server;
 import java.util.Locale;
 import java.util.Optional;
 
-/**
- * 一次结构检查的纯数据快照：釜下的火源，加上釜所在结构和 NBT 定义比对的结果。
- *
- * <p>结构不符就起不了锅，熬制中坏了就中断；不再有旧灶“缺灶石封顶 70°”的中间状态。</p>
- */
-public record BrewStructure(HeatSourceKind heatSource, StructureMatch match) {
+public record BrewStructure(HeatSourceKind heatSource) {
     public static final double LIT_MAXIMUM = 100.0;
 
     public BrewStructure {
-        if (heatSource == null || match == null) {
-            throw new IllegalArgumentException("结构快照不完整");
+        if (heatSource == null) {
+            throw new IllegalArgumentException("缺少火源状态");
         }
     }
 
-    /** 结构有效、火源为 {@code heatSource} 的快照；规则单测和熬好的釜冷却时用。 */
+    /** 釜下火源为 {@code heatSource} 的快照；规则单测和熬好的釜冷却时用。 */
     public static BrewStructure built(HeatSourceKind heatSource) {
-        return new BrewStructure(heatSource, StructureMatch.valid());
+        return new BrewStructure(heatSource);
     }
 
-    /** 按药方要的火种看这套结构缺什么；齐了返回空。先报结构，再报火。 */
+    /** 按药方所需火种检查釜下的实际火源。 */
     public Optional<BrewText> problemFor(BrewKind kind, FireKind expectedFire) {
-        Optional<BrewText> structureProblem = match.problem();
-        if (structureProblem.isPresent()) {
-            return structureProblem;
-        }
         if (heatSource == HeatSourceKind.NONE) {
             return Optional.of(BrewText.message("structure.no_fire"));
         }

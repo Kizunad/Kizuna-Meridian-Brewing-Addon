@@ -44,26 +44,4 @@ public enum HeatSourceKind {
         return fluctuationDegrees;
     }
 
-    /** 铁炉座（以及同档的药塔火室）某个火种、某档的火源；0 档就是没火。 */
-    public static HeatSourceKind stove(FireKind fireKind, int level) {
-        // 火室和铁炉座用同一组 75 / 85 / 93 / 100° 数值，不另造。
-        if (fireKind == FireKind.SOUL_FIRE) {
-            return switch (level) {
-                case 0 -> NONE;
-                case 1 -> SOUL_STOVE_1;
-                case 2 -> SOUL_STOVE_2;
-                case 3 -> SOUL_STOVE_3;
-                case 4 -> SOUL_STOVE_4;
-                default -> throw new IllegalArgumentException("炉座没有这一档：" + level);
-            };
-        }
-        return switch (level) {
-            case 0 -> NONE;
-            case 1 -> SUN_STOVE_1;
-            case 2 -> SUN_STOVE_2;
-            case 3 -> SUN_STOVE_3;
-            case 4 -> SUN_STOVE_4;
-            default -> throw new IllegalArgumentException("炉座没有这一档：" + level);
-        };
-    }
 }

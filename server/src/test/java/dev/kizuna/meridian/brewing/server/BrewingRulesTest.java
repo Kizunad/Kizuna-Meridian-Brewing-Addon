@@ -124,7 +124,7 @@ public final class BrewingRulesTest {
         BrewCollectionResult result = cauldron.collectBottle(3);
         assertEquals(BrewCollectionKind.POTION, result.kind());
         assertEquals(Optional.of(BrewQuality.SUPERIOR), result.score().orElseThrow().quality());
-        assertEquals(VesselKind.WITCH_CAULDRON.waterCapacity() - 1, result.remainingBottles());
+        assertEquals(0, result.remainingBottles());
         assertEquals("message.meridian_brewing.cauldron.collect.potion", result.message().key());
     }
 
@@ -154,11 +154,11 @@ public final class BrewingRulesTest {
         assertEquals(3, copper.waterUnits());
         assertTrue(!copper.addWater(1).accepted());
         BrewCauldron witch = new BrewCauldron(VesselKind.WITCH_CAULDRON, BrewForm.DRINK);
-        witch.addWater(3);
+        witch.addWater(1);
         BrewActionResult topUp = witch.addWater(3);
         assertTrue(topUp.accepted());
-        assertEquals(List.of(1, 4, 4), topUp.message().args());
-        assertEquals(4, witch.waterUnits());
+        assertEquals(List.of(1, 2, 2), topUp.message().args());
+        assertEquals(2, witch.waterUnits());
     }
 
     @Test
@@ -201,28 +201,13 @@ public final class BrewingRulesTest {
     }
 
     @Test
-    public void structureMismatchBlocksStartBeforeFire() {
+    public void singleCauldronNeedsMatchingFire() {
         BrewCauldron cauldron = new BrewCauldron(VesselKind.WITCH_CAULDRON, BrewForm.DRINK);
         cauldron.addWater(1);
         cauldron.addIngredient(IngredientSlot.PRIMARY, IngredientBatch.prepared("dry_moss", 0));
         cauldron.addIngredient(IngredientSlot.BASE, IngredientBatch.raw("minecraft:glowstone_dust"));
-        StructureMatch.Mismatch mismatch = new StructureMatch.Mismatch(
-                BrewText.message("structure.anchor.tier2"), 1, -1, 0,
-                BrewText.message("structure.frame.stone"), "minecraft:dirt");
-        BrewStructure broken = new BrewStructure(HeatSourceKind.NONE, StructureMatch.mismatch(mismatch));
-
-        BrewText problem = cauldron.startProblem(broken).orElseThrow();
-        assertEquals("message.meridian_brewing.structure.mismatch", problem.key());
-        BrewText offset = (BrewText) problem.args().get(1);
-        assertEquals("message.meridian_brewing.structure.offset.2", offset.key());
-        assertEquals("message.meridian_brewing.structure.dir.east", ((BrewText) offset.args().get(0)).key());
-        assertEquals("message.meridian_brewing.structure.dir.down", ((BrewText) offset.args().get(1)).key());
-        assertEquals(new BrewText.BlockName("minecraft:dirt"), problem.args().get(3));
         assertEquals("message.meridian_brewing.structure.no_fire",
                 cauldron.startProblem(BrewStructure.built(HeatSourceKind.NONE)).orElseThrow().key());
-        assertEquals("message.meridian_brewing.structure.unloaded",
-                cauldron.startProblem(new BrewStructure(HeatSourceKind.SUN_BRAZIER_2, StructureMatch.unloaded()))
-                        .orElseThrow().key());
         assertTrue(cauldron.startProblem(STABLE_HEAT).isEmpty());
     }
 
@@ -250,9 +235,6 @@ public final class BrewingRulesTest {
         BrewCollectionResult result = cauldron.collectBottle(3);
         assertEquals(BrewCollectionKind.POTION, result.kind());
         assertEquals(Optional.of(BrewQuality.SUPERIOR), result.score().orElseThrow().quality());
-        // 丹露不进药塔：塔里能选的还是原来六种。
-        assertTrue(Arrays.stream(BrewKind.towerKinds()).noneMatch(BrewKind::elixir));
-        assertEquals(BrewKind.values().length - BrewKind.elixirKinds().length, BrewKind.towerKinds().length);
     }
 
     @Test
@@ -285,7 +267,7 @@ public final class BrewingRulesTest {
         assertEquals(3, VesselKind.COPPER_CAULDRON.waterCapacity());
         assertEquals(15.0, VesselKind.COPPER_CAULDRON.waterCoolingDegrees(), 0.0001);
         assertEquals(1.0, VesselKind.COPPER_CAULDRON.qiCost(), 0.0001);
-        assertEquals(4, VesselKind.WITCH_CAULDRON.waterCapacity());
+        assertEquals(2, VesselKind.WITCH_CAULDRON.waterCapacity());
         assertEquals(10.0, VesselKind.WITCH_CAULDRON.waterCoolingDegrees(), 0.0001);
         assertEquals(1.3, VesselKind.WITCH_CAULDRON.qiCost(), 0.0001);
         CopperCauldronState state = new CopperCauldronState(

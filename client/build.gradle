@@ -1,6 +1,6 @@
 plugins { id 'net.fabricmc.fabric-loom' }
 
-description = '炼药的客户端表现：器具放置模型、枯木染色与药塔窗口；不进服务端路径。'
+description = '炼药的客户端表现，包括器具放置模型、枯木染色和药方书。'
 
 repositories {
     maven { url = 'https://maven.fabricmc.net/' }
@@ -24,8 +24,6 @@ dependencies {
     compileOnly project(':fabric')
     compileOnly project(':server')
     testImplementation libs.junit4
-    // 窗口取数逻辑的测试要用服务端的药方表和药塔开工清单。
-    testImplementation project(':server')
 }
 test {
     useJUnit()

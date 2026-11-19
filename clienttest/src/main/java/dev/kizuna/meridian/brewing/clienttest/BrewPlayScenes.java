@@ -4,10 +4,13 @@ import com.mojang.blaze3d.platform.Window;
 import com.mojang.logging.LogUtils;
 import dev.kizuna.meridian.brewing.fabric.BrewCauldronBlockEntity;
 import dev.kizuna.meridian.brewing.fabric.BrewFireBlockEntity;
+import dev.kizuna.meridian.brewing.fabric.BrewItemStacks;
 import dev.kizuna.meridian.brewing.fabric.BrewingTechniqueContract;
 import dev.kizuna.meridian.brewing.server.BrewCauldron;
 import dev.kizuna.meridian.brewing.server.BrewCauldronState;
+import dev.kizuna.meridian.brewing.server.BrewKind;
 import dev.kizuna.meridian.brewing.server.BrewQiTally;
+import dev.kizuna.meridian.brewing.server.BrewScoring;
 import dev.kizuna.meridian.technique.fabric.TechniqueFabric;
 import dev.kizuna.meridian.technique.protocol.pb.TechniqueMessages.CastOutcome;
 import dev.kizuna.meridian.technique.protocol.pb.TechniqueMessages.CastRequest;
@@ -66,15 +69,11 @@ final class BrewPlayScenes {
     private static final List<String> EFFECTS = List.of("depletion", "armor_rot", "insect_lure", "qi_gather",
             "bitter_yellow", "charm_stagger", "charm_control");
     private static final int EFFECT_SECONDS = 300;
-    /**
-     * 随包二阶结构：NBT 原点放在 (-5, 0, -5)，巫釜 (5,1,5) 正好落在 (0,1,0)、铁炉座在 (0,0,0)。
-     * 炉座四面围着外框，加炭、拨灰都对着釜点，转给釜下的炉座。人站在釜南面两格的台上。
-     */
-    private static final String LV2_TEMPLATE = BREWING + "potion-lv2";
-    private static final BlockPos LV2_ORIGIN = new BlockPos(-5, 0, -5);
+    /** 巫釜在铁炉座上方，镜头从南面看釜。 */
     private static final BlockPos CAULDRON = new BlockPos(0, 1, 0);
-    private static final Vec3 STAND_EYE = new Vec3(0.5, 2.62, 2.5);
-    private static final Vec3 OVERVIEW_EYE = new Vec3(0.5, 4.5, 9.5);
+    private static final BlockPos STOVE_STAND = new BlockPos(0, 0, 2);
+    private static final BlockPos STOVE_OVERVIEW = new BlockPos(2, 0, 3);
+    private static final int WITCH_WATER = 2;
     private static final BlockPos CRATE = BlockPos.ZERO;
     private static final Vec3 CRATE_EYE = new Vec3(0.5, 1.62, 2.3);
     /** 漏斗链：箱子、漏斗、晒药匾自上而下，底下的漏斗和出口箱子埋在地面里，旁边一块红石块先锁住底下的漏斗。 */
@@ -91,9 +90,7 @@ final class BrewPlayScenes {
     /** 漏斗 8 tick 搬一件：六块苔藓块、两块泥土要搬八轮，五份干苔要搬五轮，都留出余量。 */
     private static final int CHAIN_TICKS = 100;
     private static final int TICKS_PER_SECOND = 20;
-    /** 一档火 75°：釜温 2 秒多升过 40°，泡满 10 秒留出余量。 */
-    private static final int SOAK_TICKS = 15 * TICKS_PER_SECOND;
-    /** 二档火 85°：巫釜每秒追上温差的两成，15 秒后离 85° 不到 1°，落在苦黄膏 82–90° 的火候带里。 */
+    /** 药渣场景先用四档火把釜烧热，再起熬。 */
     private static final int HEAT_TICKS = 15 * TICKS_PER_SECOND;
     /** 四档火 100°：比火候带上沿高 8° 以上就每 3 秒焦一次，用来熬出药渣。 */
     private static final int SCORCH_COAL = 4;
@@ -239,21 +236,25 @@ final class BrewPlayScenes {
     }
 
     private static void bitterYellow(ClientGameTestContext context, Stage stage) {
-        // 二阶结构里巫釜坐在铁炉座上；先注水下料，一档火泡够 10 秒，再升二档开熬。加炭、拨灰都对着釜点。
+        // 地面上的铁炉座托着巫釜，玩家站在炉南两格，注水、下料和拨灰都点釜身。
         buildStove(stage);
-        Vec3 eye = stage.at(STAND_EYE);
-        Vec3 cauldron = stage.center(CAULDRON);
-        overview(stage, "brew_01_setup");
-        stage.look(eye, cauldron);
-        useWith(stage, "minecraft:water_bucket", "brew_02_water_bucket");
-        useWith(stage, WATER_BOTTLE, "brew_03_water_bottle");
+        stage.hideHud();
+        stage.look(stage.eye(STOVE_OVERVIEW), stage.center(CAULDRON));
+        stage.shoot("brew_01_portable_witch_cauldron");
+        stage.showHud();
+        faceCauldron(stage);
+        useWith(stage, WATER_BOTTLE, "brew_02_water_bottle");
+        requireWater(stage, 1);
+        useWith(stage, "minecraft:water_bucket", "brew_03_fill_with_bucket");
+        requireWater(stage, WITCH_WATER);
         // 主料定药方，底料要在主料之后下。
         useWith(stage, BREWING + "dry_moss", "brew_04_main");
         useWith(stage, "minecraft:glowstone_dust", "brew_05_base");
         useWith(stage, "minecraft:coal", "brew_06_fire_one");
-        stage.pause(SOAK_TICKS);
+        waitCauldron(stage, "泡足十秒", BREW_TIMEOUT_TICKS, pot -> pot.soakSeconds() >= BrewScoring.SOAK_SECONDS);
         useWith(stage, "minecraft:coal", "brew_07_fire_two");
-        stage.pause(HEAT_TICKS);
+        waitCauldron(stage, "进入苦黄膏火候带", BREW_TIMEOUT_TICKS,
+                pot -> pot.recipe().orElseThrow().heatBand().contains(pot.temperature()));
         cast(stage);
         progressShot(stage, STARTED_SECONDS, "brew_08_started");
         progressShot(stage, ACCESSORY_SECONDS, "brew_09_accessory_window");
@@ -264,27 +265,23 @@ final class BrewPlayScenes {
         progressShot(stage, CATALYST_SECONDS, "brew_11_catalyst_window");
         offHand(stage, "minecraft:cobweb", "brew_12_catalyst_added");
         progressShot(stage, ALMOST_DONE_SECONDS, "brew_13_almost_done");
-        waitCauldron(stage, "熬成", BREW_TIMEOUT_TICKS,
-                cauldronState -> cauldronState.state() != BrewCauldronState.BREWING);
-        stage.pause(MESSAGE_TICKS);
-        stage.shoot("brew_14_brewed");
+        brewedShot(stage, "brew_14_brewed");
         // 熬成后熬药式还有 1 秒收势，这期间主手仍被锁住；等它收完再拨灰降回一档，釜温落到 79° 以下再舀，收药分拿满。
         stage.pause(RECOVERY_TICKS);
         useWith(stage, "minecraft:iron_shovel", "brew_15_fire_down");
         waitCauldron(stage, "釜温降到可舀", COOL_TIMEOUT_TICKS,
                 cauldronState -> cauldronState.temperature() < COLLECT_BELOW_DEGREES);
         useWith(stage, "minecraft:glass_bottle", "brew_16_collect_potion");
+        requireEmptyPot(stage);
         potionTooltip(context, stage);
     }
 
     private static void scrap(Stage stage) {
         // 同样的料，四档火直接开熬、不下辅料引药，熬糊了趁热舀：总分不到 20，舀出来是药渣。
         buildStove(stage);
-        Vec3 eye = stage.at(STAND_EYE);
-        Vec3 cauldron = stage.center(CAULDRON);
-        stage.look(eye, cauldron);
-        useWith(stage, "minecraft:water_bucket", "scrap_01_water");
-        useWith(stage, WATER_BOTTLE, "scrap_02_water_bottle");
+        faceCauldron(stage);
+        useWith(stage, "minecraft:water_bucket", "scrap_01_fill_with_bucket");
+        requireWater(stage, WITCH_WATER);
         useWith(stage, BREWING + "dry_moss", "scrap_03_main");
         useWith(stage, "minecraft:glowstone_dust", "scrap_04_base");
         for (int coal = 0; coal < SCORCH_COAL; coal++) {
@@ -296,28 +293,50 @@ final class BrewPlayScenes {
         stage.pause(HEAT_TICKS);
         cast(stage);
         progressShot(stage, ACCESSORY_SECONDS, "scrap_06_scorching");
-        waitCauldron(stage, "熬糊的一锅结束", BREW_TIMEOUT_TICKS,
-                cauldronState -> cauldronState.state() != BrewCauldronState.BREWING);
-        stage.pause(MESSAGE_TICKS);
-        stage.shoot("scrap_07_brewed");
+        brewedShot(stage, "scrap_07_brewed");
         // 和苦黄膏一样，等熬药式 1 秒收势结束、主手解锁再舀。
         stage.pause(RECOVERY_TICKS);
         useWith(stage, "minecraft:glass_bottle", "scrap_08_collect_residue");
+        requireEmptyPot(stage);
+        stage.onServer(server -> {
+            var inventory = server.getPlayerList().getPlayers().getFirst().getInventory();
+            var residue = BuiltInRegistries.ITEM.getOptional(Identifier.parse(BREWING + "brew_residue")).orElseThrow();
+            if (inventory.countItem(residue) != 1) {
+                throw new AssertionError("舀完这锅应拿到一份药渣");
+            }
+        });
     }
 
     private static void buildStove(Stage stage) {
         stage.clear();
         stage.play();
         stage.command("clear @a");
-        stage.template(LV2_ORIGIN, LV2_TEMPLATE);
+        stage.place(CAULDRON.below(), BREWING + "iron_stove");
+        stage.place(CAULDRON, BREWING + "witch_cauldron");
     }
 
-    private static void overview(Stage stage, String name) {
-        // 从南面高处看整套二阶结构，不画手和快捷栏。
-        stage.hideHud();
-        stage.look(stage.at(OVERVIEW_EYE), stage.center(CAULDRON));
-        stage.shoot(name);
-        stage.showHud();
+    private static void faceCauldron(Stage stage) {
+        stage.look(stage.eye(STOVE_STAND), stage.center(CAULDRON));
+    }
+
+    private static void requireWater(Stage stage, int expected) {
+        if (stage.computeOnServer(server -> cauldron(stage, server).waterUnits()) != expected) {
+            throw new AssertionError("添水后应有 " + expected + " 份水，实际为 " + describe(stage));
+        }
+    }
+
+    private static void brewedShot(Stage stage, String shot) {
+        waitCauldron(stage, "巫釜熬成一瓶", BREW_TIMEOUT_TICKS,
+                pot -> pot.state() == BrewCauldronState.BREWED && pot.remainingBottles() == 1);
+        stage.pause(MESSAGE_TICKS);
+        stage.shoot(shot);
+        log(stage, shot);
+    }
+
+    private static void requireEmptyPot(Stage stage) {
+        if (stage.computeOnServer(server -> cauldron(stage, server).state()) != BrewCauldronState.EMPTY) {
+            throw new AssertionError("舀出唯一一瓶后应当清锅，实际为 " + describe(stage));
+        }
     }
 
     private static void useWith(Stage stage, String item, String shot) {
@@ -342,7 +361,7 @@ final class BrewPlayScenes {
     }
 
     private static void offHandAtFire(Stage stage, double seconds, String item, String shot) {
-        // 炉座围在外框里，副手拿炭或铲子对着釜右键一下，转给釜下的炉座；熬制不会断。
+        // 副手拿炭或铲子点釜，操作会转给釜下的铁炉座。
         waitCauldron(stage, "熬到第 " + seconds + " 秒", BREW_TIMEOUT_TICKS,
                 cauldronState -> cauldronState.brewElapsedSeconds() >= seconds);
         stage.hand(OFF_HAND, item);
@@ -431,7 +450,8 @@ final class BrewPlayScenes {
         context.getInput().pressKey(options -> options.keyInventory);
         context.waitForScreen(CreativeModeInventoryScreen.class);
         selectTab(context, BuiltInRegistries.CREATIVE_MODE_TAB.getValueOrThrow(CreativeModeTabs.INVENTORY));
-        hover(context, CREATIVE_WIDTH, CREATIVE_HEIGHT, stack -> stack.is(Items.POTION));
+        hover(context, CREATIVE_WIDTH, CREATIVE_HEIGHT, stack -> stack.is(Items.POTION)
+                && BrewItemStacks.isBrew(stack) && BrewItemStacks.kind(stack) == BrewKind.BITTER_YELLOW);
         stage.settle();
         stage.shoot("brew_17_potion_tooltip");
         context.setScreen(() -> null);

@@ -1,9 +1,0 @@
-{
-  "replace": false,
-  "values": [
-    "minecraft:hopper",
-    "minecraft:dropper",
-    "minecraft:dispenser",
-    "minecraft:comparator"
-  ]
-}

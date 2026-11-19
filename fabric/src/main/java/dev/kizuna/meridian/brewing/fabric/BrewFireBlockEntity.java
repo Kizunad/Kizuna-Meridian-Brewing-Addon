@@ -78,6 +78,9 @@ public final class BrewFireBlockEntity extends BlockEntity implements WorldlyCon
         if (level == null || level.isClientSide()) {
             return InteractionResult.SUCCESS;
         }
+        if (player.isSpectator() || !level.mayInteract(player, worldPosition)) {
+            return InteractionResult.FAIL;
+        }
         if (player instanceof ServerPlayer serverPlayer) {
             Optional<BrewActionResult> techniqueResult = BrewingRuntime.tryTechniqueFire(
                     serverPlayer, hand, worldPosition);
@@ -131,7 +134,7 @@ public final class BrewFireBlockEntity extends BlockEntity implements WorldlyCon
     private BrewActionResult useStack(ItemStack stack) {
         // 持物决定调火操作，物品消耗和容器返还由调用方在成功后统一处理。
         if (isFuel(stack)) {
-            return fire.addFuel("minecraft:coal");
+            return fire.addFuel(fuelUnits(stack));
         }
         if (stack.is(ItemTags.SHOVELS)) {
             return fire.lowerLevel();
@@ -179,7 +182,17 @@ public final class BrewFireBlockEntity extends BlockEntity implements WorldlyCon
     }
 
     private static boolean isFuel(ItemStack stack) {
-        return stack.is(Items.COAL) || stack.is(Items.CHARCOAL);
+        return fuelUnits(stack) > 0;
+    }
+
+    static int fuelUnits(ItemStack stack) {
+        if (stack.is(Items.COAL_BLOCK)) {
+            return BrewFireState.COAL_BLOCK_UNITS;
+        }
+        if (stack.is(Items.COAL) || stack.is(Items.CHARCOAL) || stack.is(ItemTags.LOGS_THAT_BURN)) {
+            return 1;
+        }
+        return 0;
     }
 
     private void tick(Level currentLevel) {
@@ -232,8 +245,7 @@ public final class BrewFireBlockEntity extends BlockEntity implements WorldlyCon
         if (fuel.isEmpty()) {
             return;
         }
-        String itemId = BuiltInRegistries.ITEM.getKey(fuel.getItem()).toString();
-        if (fire.addFuel(itemId).accepted()) {
+        if (fire.addFuel(fuelUnits(fuel)).accepted()) {
             fuel.shrink(1);
             BrewSounds.atBlock(level, worldPosition, BrewSounds.BRAZIER_STOKE);
         }

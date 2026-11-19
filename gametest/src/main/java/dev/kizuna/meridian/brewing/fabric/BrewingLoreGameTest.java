@@ -1,9 +1,7 @@
 package dev.kizuna.meridian.brewing.fabric;
 
-import dev.kizuna.meridian.brewing.server.BrewActionResult;
 import dev.kizuna.meridian.brewing.server.BrewKind;
 import dev.kizuna.meridian.brewing.server.BrewQuality;
-import dev.kizuna.meridian.brewing.server.BrewText;
 import dev.kizuna.meridian.brewing.server.BrewUse;
 import dev.kizuna.meridian.brewing.server.RecipeKnowledge;
 import dev.kizuna.meridian.brewing.test.BrewingTestPlayers;
@@ -13,12 +11,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
-import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
@@ -31,8 +26,7 @@ import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.block.Block;
 
 /**
- * 游戏里的讲解和药炉提示：药方羊皮纸翻开自己那一篇，字迹模糊的不翻；《熬药总纲》翻开总纲、能合成；
- * 釜不在药炉里时，提示接上它该进哪一座药炉、结构蓝图里照哪张图样摆。
+ * 游戏里的药方、总纲和单口釜提示。
  *
  * <p>翻没翻开看服务端真正发给客户端的翻书包，客户端怎么排页由截图场景看。</p>
  */
@@ -42,13 +36,6 @@ public final class BrewingLoreGameTest {
     private static final int PACKET_TICKS = 1;
     private static final String LEARNED_KEY = "message.meridian_brewing.recipe.learned";
     private static final String ILLEGIBLE_KEY = "message.meridian_brewing.recipe.illegible";
-    private static final String DESCRIBE_KEY = "message.meridian_brewing.cauldron.describe";
-    private static final String HINT_KEY = "message.meridian_brewing.structure.hint.tier";
-    private static final BlockPos CAULDRON = new BlockPos(1, 1, 1);
-    private static final int COPPER_TIER = 1;
-    private static final int WITCH_TIER = 2;
-    private static final int COPPER_BUCKETS = 1;
-    private static final int WITCH_BUCKETS = 2;
 
     @GameTest(maxTicks = TIMEOUT)
     public void everyRecipeScrollOpensItsOwnLore(GameTestHelper context) {
@@ -111,26 +98,12 @@ public final class BrewingLoreGameTest {
     }
 
     @GameTest(maxTicks = TIMEOUT)
-    public void loneCopperCauldronNamesTheTierOneFurnace(GameTestHelper context) {
-        // 铜釜孤零零放在地上：空手看釜和起锅被拒，第一处不符后面都接上「该坐进一阶药炉」和蓝图图样。
-        loneCauldronNamesItsFurnace(context, BrewingBlocks.COPPER_CAULDRON, COPPER_BUCKETS, COPPER_TIER);
-    }
-
-    @GameTest(maxTicks = TIMEOUT)
-    public void loneWitchCauldronNamesTheTierTwoFurnace(GameTestHelper context) {
-        // 巫釜孤零零放在地上：同上，说的是二阶药炉。
-        loneCauldronNamesItsFurnace(context, BrewingBlocks.WITCH_CAULDRON, WITCH_BUCKETS, WITCH_TIER);
-    }
-
-    @GameTest(maxTicks = TIMEOUT)
-    public void apparatusTooltipsNameTheirFurnace(GameTestHelper context) {
-        // 铜釜、巫釜写属于哪一座药炉和蓝图图样，铁炉座写是二阶的火，铁火盆写只用来合成铁炉座；
-        // 铜釜另写氧化和上蜡，晒药匾写什么时候才晒。
+    public void apparatusTooltipsDescribeStandaloneUse(GameTestHelper context) {
         assertTooltip(context, BrewingBlocks.COPPER_CAULDRON,
-                List.of("apparatus.copper_cauldron", "apparatus.copper_cauldron.layout",
+                List.of("apparatus.copper_cauldron",
                         "apparatus.copper_cauldron.oxidation", "apparatus.copper_cauldron.wax"));
         assertTooltip(context, BrewingBlocks.WITCH_CAULDRON,
-                List.of("apparatus.witch_cauldron", "apparatus.witch_cauldron.layout"));
+                List.of("apparatus.witch_cauldron"));
         assertTooltip(context, BrewingBlocks.IRON_STOVE, List.of("apparatus.iron_stove"));
         assertTooltip(context, BrewingBlocks.IRON_BRAZIER, List.of("apparatus.iron_brazier"));
         assertTooltip(context, BrewingBlocks.HERB_CRATE, List.of("apparatus.herb_crate"));
@@ -147,40 +120,6 @@ public final class BrewingLoreGameTest {
         context.assertTrue(keys.contains("tooltip.meridian_brewing.charm.follow")
                 && keys.contains("tooltip.meridian_brewing.charm.wake"), "魅惑药水的提示没写规矩：" + keys);
         context.succeed();
-    }
-
-    private static void loneCauldronNamesItsFurnace(GameTestHelper context, Block block, int buckets, int tier) {
-        // 先空手看一眼，再下水、下聚气汤的料、读药方起锅；两句话都要带这一阶的提示键。
-        context.setBlock(CAULDRON, block);
-        BrewCauldronBlockEntity cauldron = (BrewCauldronBlockEntity) context.getLevel()
-                .getBlockEntity(context.absolutePos(CAULDRON));
-        ServerPlayer player = BrewingTestPlayers.create(context);
-        String hintKey = HINT_KEY + tier;
-        player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
-        cauldron.use(player, InteractionHand.MAIN_HAND);
-        player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.WATER_BUCKET, buckets));
-        for (int bucket = 0; bucket < buckets; bucket++) {
-            cauldron.use(player, InteractionHand.MAIN_HAND);
-        }
-        useOn(cauldron, player, item("meridian_brewing:dried_pufferfish"));
-        useOn(cauldron, player, new ItemStack(Items.GLOWSTONE_DUST));
-        BrewingTestPlayers.readRecipes(player, BrewKind.QI_GATHER);
-        BrewActionResult refused = cauldron.startBrew(player);
-        context.assertFalse(refused.accepted(), "孤零零的釜起锅了");
-        String refusedText = BrewTexts.chinese(refused.message());
-        String furnace = BrewTexts.chinese(BrewText.message("structure.hint.tier" + tier));
-        context.assertTrue(refusedText.endsWith(furnace), "起锅被拒没说该进哪一座药炉：" + refusedText);
-        context.runAfterDelay(PACKET_TICKS, () -> {
-            List<Set<String>> described = BrewingTestPlayers.overlays(player).stream()
-                    .map(sent -> BrewingTestPlayers.translationKeys(sent.text()))
-                    .filter(keys -> keys.contains(DESCRIBE_KEY))
-                    .toList();
-            context.assertTrue(described.size() == 1, "空手看釜该说一次釜的状态：" + described);
-            context.assertTrue(described.getFirst().contains(hintKey),
-                    "空手看釜没说该进哪一座药炉：" + described.getFirst());
-            BrewingTestPlayers.close(player);
-            context.succeed();
-        });
     }
 
     private static void assertCrafts(GameTestHelper context, ServerLevel level, List<ItemStack> ingredients) {
@@ -244,16 +183,5 @@ public final class BrewingLoreGameTest {
         // 主手拿着用一下，和玩家右键空气一样走物品的使用入口。
         player.setItemInHand(InteractionHand.MAIN_HAND, stack);
         stack.getItem().use(player.level(), player, InteractionHand.MAIN_HAND);
-    }
-
-    private static void useOn(BrewCauldronBlockEntity cauldron, ServerPlayer player, ItemStack stack) {
-        // 主手拿着对釜右键，走方块实体的投料入口。
-        player.setItemInHand(InteractionHand.MAIN_HAND, stack);
-        cauldron.use(player, InteractionHand.MAIN_HAND);
-    }
-
-    private static ItemStack item(String id) {
-        // 按注册 ID 取一份物品，炮制药材在 fabric 模块里注册。
-        return new ItemStack(BuiltInRegistries.ITEM.getValue(Identifier.parse(id)));
     }
 }

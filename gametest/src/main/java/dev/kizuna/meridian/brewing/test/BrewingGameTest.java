@@ -107,8 +107,9 @@ public final class BrewingGameTest {
     private static final long CATALYST_TICK = 440L;
     private static final long COLLECTION_TICK = 660L;
     private static final double READY_DRYING_SECONDS = 1_200.0;
-    private static final int WATER_BUCKET_UNITS = 3;
-    private static final int FILLING_BUCKETS = 2;
+    private static final int IRON_BOTTLES = 1;
+    private static final int COPPER_BOTTLES = 2;
+    private static final int BREW_FIRE_LEVEL = 3;
 
     @GameTest(maxTicks = DEFAULT_TIMEOUT)
     public void registersEffectsAndPotions(GameTestHelper context) {
@@ -179,15 +180,13 @@ public final class BrewingGameTest {
     }
 
     @GameTest(maxTicks = DEFAULT_TIMEOUT, structure = BrewSites.LV2_SITE)
-    public void worldCauldronRecognizesShippedStructure(GameTestHelper context) {
-        // 摆随包二阶结构，方块实体第一次 tick 就拿世界方块和 NBT 定义比；炉座还没加炭，结构有效但缺火。
+    public void unlitStandaloneStoveCannotStartBrewing(GameTestHelper context) {
         ServerLevel level = context.getLevel();
         BlockPos cauldronPos = BrewSites.place(context, BrewSites.Shipped.LV2).cauldron();
         context.runAfterDelay(OBSERVE_TICKS, () -> {
             BlockEntity entity = level.getBlockEntity(cauldronPos);
             context.assertTrue(entity instanceof BrewCauldronBlockEntity, "巫釜方块实体未创建");
             BrewStructure structure = ((BrewCauldronBlockEntity) entity).structure();
-            context.assertTrue(structure.match().isValid(), "随包二阶结构没有被认出来：" + structure);
             context.assertTrue(structure.problemFor(BrewKind.QI_GATHER, FireKind.SUN_FIRE).orElseThrow().key()
                             .equals("message.meridian_brewing.structure.no_fire"),
                     "结构对了以后应该只缺火：" + structure);
@@ -197,32 +196,27 @@ public final class BrewingGameTest {
 
     @GameTest(maxTicks = COMPLETE_BREW_TIMEOUT, structure = BrewSites.LV2_SITE)
     public void worldCauldronStartsThroughBlockEntityAndCollectsPotion(GameTestHelper context) {
+        brewAndCollect(context, VesselKind.WITCH_CAULDRON, IRON_BOTTLES);
+    }
+
+    @GameTest(maxTicks = COMPLETE_BREW_TIMEOUT, structure = BrewSites.LV2_SITE)
+    public void standaloneCopperBrewsAndCollectsPotion(GameTestHelper context) {
+        brewAndCollect(context, VesselKind.COPPER_CAULDRON, COPPER_BOTTLES);
+    }
+
+    private static void brewAndCollect(GameTestHelper context, VesselKind vessel, int bottles) {
         ServerLevel level = context.getLevel();
         ServerPlayer player = BrewingTestPlayers.create(context);
         BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV2);
         BlockPos cauldronPos = site.cauldron();
+        if (vessel == VesselKind.COPPER_CAULDRON) {
+            var copper = BuiltInRegistries.BLOCK.getValue(id("copper_cauldron"));
+            level.setBlockAndUpdate(cauldronPos, copper.defaultBlockState());
+        }
         BlockPos stand = site.stand();
         player.setPos(stand.getX() + 0.5, stand.getY(), stand.getZ() + 0.5);
 
-        BrewFireBlockEntity fire = (BrewFireBlockEntity) level.getBlockEntity(cauldronPos.below());
-        for (int fuel = 0; fuel < 3; fuel++) {
-            player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.COAL));
-            fire.use(player, InteractionHand.MAIN_HAND);
-        }
-        BrewCauldronBlockEntity cauldron = (BrewCauldronBlockEntity) level.getBlockEntity(cauldronPos);
-        // 一桶 3 份，巫釜盛 4 份：第一桶倒满 3 份，第二桶只倒得进 1 份，桶照样倒空。
-        ItemStack waterBuckets = new ItemStack(Items.WATER_BUCKET, FILLING_BUCKETS);
-        player.setItemInHand(InteractionHand.MAIN_HAND, waterBuckets);
-        for (int bucket = 0; bucket < FILLING_BUCKETS; bucket++) {
-            cauldron.use(player, InteractionHand.MAIN_HAND);
-        }
-        int capacity = VesselKind.WITCH_CAULDRON.waterCapacity();
-        context.assertTrue(cauldron.cauldron().waterUnits() == capacity,
-                "两桶水没有倒满巫釜：" + cauldron.cauldron().waterUnits());
-        // 最后一桶会原位变成空桶；模拟切换物品前先把容器收入背包。
-        ItemStack returnedBucket = player.getMainHandItem();
-        player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
-        player.addItem(returnedBucket);
+        var cauldron = fillPortable(context, player, cauldronPos, vessel);
         useCauldronItem(cauldron, player, itemStack("meridian_brewing:dried_pufferfish"));
         useCauldronItem(cauldron, player, new ItemStack(Items.GLOWSTONE_DUST));
         BrewingTestPlayers.readRecipes(player, BrewKind.QI_GATHER);
@@ -234,16 +228,44 @@ public final class BrewingGameTest {
         context.runAfterDelay(CATALYST_TICK, () -> useCauldronItem(
                 cauldron, player, new ItemStack(Items.NAUTILUS_SHELL)));
         context.runAfterDelay(COLLECTION_TICK, () -> {
-            useCauldronItem(cauldron, player, new ItemStack(Items.GLASS_BOTTLE));
+            var bottlesInHand = new ItemStack(Items.GLASS_BOTTLE, bottles + 1);
+            player.setItemInHand(InteractionHand.MAIN_HAND, bottlesInHand);
+            for (int attempt = 0; attempt <= bottles; attempt++) {
+                cauldron.use(player, InteractionHand.MAIN_HAND);
+            }
+            int filled = player.getInventory().countItem(Items.POTION);
+            context.assertTrue(bottlesInHand.getCount() == 1 && filled == bottles,
+                    "便携锅装瓶数超过上限或未达到上限 " + bottles);
             ItemStack potion = findItem(player, Items.POTION);
             context.assertTrue(BrewItemStacks.isBrew(potion), "完整世界流程没有产出巫药");
             context.assertTrue(BrewItemStacks.quality(potion) != null, "产出药水缺少品质组件");
             context.assertTrue(creativeTabHolds(level, potion),
                     "炼药创造页里没有和熬出来一样的这瓶药：" + potion.getComponentsPatch());
-            context.assertTrue(player.getInventory().countItem(Items.BUCKET) == FILLING_BUCKETS,
-                    "水桶没有换回空桶");
+            BrewingTestPlayers.close(player);
             context.succeed();
         });
+    }
+
+    private static BrewCauldronBlockEntity fillPortable(GameTestHelper context, ServerPlayer player, BlockPos pos,
+                                                       VesselKind vessel) {
+        var level = context.getLevel();
+        if (vessel == VesselKind.COPPER_CAULDRON) {
+            level.setBlockAndUpdate(pos.below(), Blocks.CAMPFIRE.defaultBlockState());
+        } else {
+            var fire = (BrewFireBlockEntity) level.getBlockEntity(pos.below());
+            for (int fuel = 0; fuel < BREW_FIRE_LEVEL; fuel++) {
+                player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.COAL));
+                fire.use(player, InteractionHand.MAIN_HAND);
+            }
+        }
+        BrewCauldronBlockEntity cauldron = (BrewCauldronBlockEntity) level.getBlockEntity(pos);
+        useCauldronItem(cauldron, player, new ItemStack(Items.WATER_BUCKET));
+        int capacity = vessel.waterCapacity();
+        context.assertTrue(cauldron.cauldron().waterUnits() == capacity,
+                "没有倒满单口釜：" + cauldron.cauldron().waterUnits());
+        // 返还的末桶仍在所选热键格，先核对库存再换手投料。
+        context.assertTrue(player.getInventory().countItem(Items.BUCKET) == 1, "注水未归还所有空桶");
+        return cauldron;
     }
 
     @GameTest(maxTicks = DEFAULT_TIMEOUT)
@@ -323,7 +345,7 @@ public final class BrewingGameTest {
         BrewCauldronBlockEntity restoredCauldron = new BrewCauldronBlockEntity(
                 cauldronPos, level.getBlockState(cauldronPos), VesselKind.WITCH_CAULDRON);
         restoredCauldron.loadCustomOnly(input(level, save(level, cauldron)));
-        context.assertTrue(restoredCauldron.cauldron().waterUnits() == WATER_BUCKET_UNITS,
+        context.assertTrue(restoredCauldron.cauldron().waterUnits() == VesselKind.WITCH_CAULDRON.waterCapacity(),
                 "巫釜水量没有经过存档往返");
         BrewFireBlockEntity restoredFire = new BrewFireBlockEntity(
                 firePos, level.getBlockState(firePos), BrewFireSource.STOVE);
@@ -492,9 +514,10 @@ public final class BrewingGameTest {
         scorched.addIngredient(IngredientSlot.CATALYST,
                 IngredientBatch.raw("wither_rose"));
         scorched.tick(21.0, soulHeat);
-        context.assertTrue(scorched.state() == BrewCauldronState.SCORCHED
-                        || scorched.scorchCount() > 0,
-                "过热没有记录焦罚或糊锅");
+        context.assertTrue(scorched.state() == BrewCauldronState.SCORCHED && scorched.waterUnits() == 0,
+                "蒸干没有糊锅");
+        var dry = scorched.collectBottle(CURRENT_GAME_DAY);
+        context.assertTrue(dry.kind() == BrewCollectionKind.NOTHING, "蒸干还装出药");
         context.succeed();
     }
 

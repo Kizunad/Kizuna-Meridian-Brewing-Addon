@@ -1,8 +1,0 @@
-{
-  "template": "meridian_brewing:potion-lv1",
-  "tier": 3,
-  "anchor": [2, 2, 2],
-  "required_air": [],
-  "fuel": [],
-  "automation": []
-}

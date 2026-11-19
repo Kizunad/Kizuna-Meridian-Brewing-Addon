@@ -5,7 +5,7 @@
       "id": "minecraft:barrel"
     },
     "title": {
-      "translate": "advancements.meridian_brewing.brewing.furnace_3.title"
+      "translate": "structure.meridian_brewing.cauldron-v2-lv3-auto"
     },
     "description": {
       "translate": "advancements.meridian_brewing.brewing.furnace_3.description"

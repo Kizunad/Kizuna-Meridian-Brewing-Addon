@@ -8,6 +8,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.fabricmc.fabric.api.client.gametest.v1.screenshot.TestScreenshotOptions;
 import net.minecraft.client.CameraType;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
@@ -23,7 +24,6 @@ final class Stage {
     private static final double EYE_HEIGHT = 1.62;
     private static final int SETTLE_TICKS = 10;
     private static final int CLEAR_RADIUS = 16;
-    // 三阶药塔 15 格高，清到 16 格才不留上一场的顶。
     private static final int CLEAR_HEIGHT = 16;
     private static final boolean CLEAR_SENT_HISTORY = false;
     private static final String ONLY_PROPERTY = "meridian.brewing.clienttest.only";
@@ -104,11 +104,6 @@ final class Stage {
         command("setblock " + coordinates(origin.offset(offset)) + " " + state);
     }
 
-    void template(BlockPos offset, String id) {
-        // 原版 /place template：NBT 原点落在这一格，不转不镜像，和玩家在游戏里摆结构一样。
-        command("place template " + id + " " + coordinates(origin.offset(offset)));
-    }
-
     void fill(BlockPos from, BlockPos to, String state) {
         command("fill " + coordinates(origin.offset(from)) + " " + coordinates(origin.offset(to)) + " " + state);
     }
@@ -135,13 +130,17 @@ final class Stage {
     }
 
     void look(Vec3 eye, Vec3 target) {
+        aim(eye, target);
+        settle();
+    }
+
+    void aim(Vec3 eye, Vec3 target) {
         // 原版朝向：偏航 0 朝 +Z，俯仰为正时低头；tp 给的是脚底坐标，眼睛在其上方 1.62 格。
         Vec3 direction = target.subtract(eye);
         double yaw = Math.toDegrees(Math.atan2(-direction.x, direction.z));
         double pitch = Math.toDegrees(Math.atan2(-direction.y, direction.horizontalDistance()));
         command(String.format(Locale.ROOT, "tp @a %.3f %.3f %.3f %.2f %.2f",
                 eye.x, eye.y - EYE_HEIGHT, eye.z, yaw, pitch));
-        settle();
     }
 
     void selectHotbar(int slot) {
@@ -265,6 +264,10 @@ final class Stage {
         world.getServer().runCommand(command);
     }
 
+    void runFunction(String id) {
+        command("execute positioned " + coordinates(origin) + " run function " + id);
+    }
+
     void settle() {
         // 等服务端结果同步到客户端、手持切换动画走完，再等区块网格重建。
         context.waitTicks(SETTLE_TICKS);
@@ -276,12 +279,14 @@ final class Stage {
     }
 
     void shoot(String name) {
-        // 命令回显会留在聊天栏里盖住快捷栏，配方解锁提示会盖住右上角，拍之前都清掉；玩家发过的消息历史不清。
-        context.runOnClient(client -> {
-            client.gui.hud.getChat().clearMessages(CLEAR_SENT_HISTORY);
-            client.gui.toastManager().clear();
-        });
+        context.runOnClient(Stage::clearScreenshotMessages);
         context.takeScreenshot(TestScreenshotOptions.of(name).disableCounterPrefix());
+    }
+
+    static void clearScreenshotMessages(Minecraft client) {
+        // 清除画面上的命令回显和进度弹窗，保留动作栏和玩家消息历史。
+        client.gui.hud.getChat().clearMessages(CLEAR_SENT_HISTORY);
+        client.gui.toastManager().clear();
     }
 
     private static String coordinates(BlockPos pos) {

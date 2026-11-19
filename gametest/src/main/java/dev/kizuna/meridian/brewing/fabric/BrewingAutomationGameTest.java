@@ -55,8 +55,7 @@ public final class BrewingAutomationGameTest {
     private static final int RAW_MOSS = 4;
     private static final int DRIED_MOSS = 3;
     private static final int HOPPER_COAL = 6;
-    private static final int WATER_BUCKET_UNITS = 3;
-    private static final int WITCH_CAULDRON_WATER = 4;
+    private static final int WITCH_CAULDRON_WATER = 2;
     private static final int FIRE_SIGNAL = 3;
     private static final long PREPARED_DAY = 4L;
     private static final String CAULDRON = "witch_cauldron";
@@ -168,20 +167,20 @@ public final class BrewingAutomationGameTest {
         context.runAfterDelay(DISPENSE_TICKS, () -> {
             context.assertTrue(count(dispenser, Items.GLASS_BOTTLE) == 1, "空釜把发射器的玻璃瓶用掉或吐掉了");
             context.assertTrue(droppedItems(context, cauldronPos) == 0, "发射器把玻璃瓶吐到了地上");
-            dispenser.setItem(0, new ItemStack(Items.WATER_BUCKET));
+            dispenser.setItem(0, PotionContents.createItemStack(Items.POTION, Potions.WATER));
             context.pulseRedstone(switchPos, PULSE_TICKS);
         });
         context.runAfterDelay(DISPENSE_TICKS * 2, () -> {
-            context.assertTrue(entity.cauldron().waterUnits() == WATER_BUCKET_UNITS,
-                    "发射器的水桶没有注三份水：" + entity.cauldron().waterUnits());
-            context.assertTrue(count(dispenser, Items.BUCKET) == 1, "空桶没有回到发射器");
-            dispenser.setItem(0, PotionContents.createItemStack(Items.POTION, Potions.WATER));
+            context.assertTrue(entity.cauldron().waterUnits() == 1, "发射器的水瓶没有注一份水");
+            context.assertTrue(count(dispenser, Items.GLASS_BOTTLE) == 1, "空瓶没有回到发射器");
+            dispenser.setItem(0, new ItemStack(Items.WATER_BUCKET));
             context.pulseRedstone(switchPos, PULSE_TICKS);
         });
         context.runAfterDelay(DISPENSE_TICKS * 3, () -> {
             context.assertTrue(entity.cauldron().waterUnits() == WITCH_CAULDRON_WATER,
-                    "发射器的水瓶没有注一份水：" + entity.cauldron().waterUnits());
-            context.assertTrue(count(dispenser, Items.GLASS_BOTTLE) == 1, "水瓶倒完的玻璃瓶没有回到发射器");
+                    "发射器的水桶没有补满铁锅：" + entity.cauldron().waterUnits());
+            context.assertTrue(count(dispenser, Items.BUCKET) == 1, "水桶倒完的空桶没有回到发射器");
+            dispenser.setItem(0, new ItemStack(Items.GLASS_BOTTLE));
             brewCold(entity, player, BrewKind.QI_GATHER);
             context.assertTrue(entity.cauldron().state() == BrewCauldronState.BREWED, "冷熬 30 秒没有熬成");
             context.pulseRedstone(switchPos, PULSE_TICKS);
@@ -249,8 +248,6 @@ public final class BrewingAutomationGameTest {
             context.assertTrue(entity.cauldron().ingredients().keySet().equals(PRIMARY_AND_BASE),
                     "漏斗没把主料、底料送进铜釜：" + entity.cauldron().ingredients().keySet());
             context.assertTrue(hopper.isEmpty(), "漏斗里还剩东西");
-            context.assertTrue(entity.structure().match().isValid(),
-                    "北边放了漏斗，一阶结构就不认了：" + entity.structure().match());
             BrewingTestPlayers.close(player);
             context.succeed();
         });
@@ -258,8 +255,7 @@ public final class BrewingAutomationGameTest {
 
     @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV2_SITE)
     public void lv2SideHopperAndDropperFeedStartIngredientsButKeepTheAccessory(GameTestHelper context) {
-        // P2：巫釜北边那格外框换成漏斗、西边那格换成投掷器，结构照样认。漏斗里的主料、底料下锅，
-        // 辅料留在漏斗里；投掷器一个脉冲投一份火药。
+        // 巫釜北边的漏斗投入主料和底料，辅料留在漏斗里。西边的投掷器每个脉冲投一份火药。
         BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV2);
         ServerPlayer player = BrewingTestPlayers.create(context);
         BrewCauldronBlockEntity entity = cauldronAt(context, site);
@@ -284,8 +280,6 @@ public final class BrewingAutomationGameTest {
             context.assertTrue(dropper.isEmpty(), "投掷器里的火药没投进去");
             context.assertTrue(droppedItems(context, inTest(context, site.cauldron())) == 0,
                     "有东西被吐到了地上");
-            context.assertTrue(entity.structure().match().isValid(),
-                    "侧格换成漏斗、投掷器，二阶结构就不认了：" + entity.structure().match());
             BrewingTestPlayers.close(player);
             context.succeed();
         });

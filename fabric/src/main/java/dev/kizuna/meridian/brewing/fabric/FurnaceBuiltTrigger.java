@@ -15,7 +15,7 @@ import net.minecraft.server.level.ServerPlayer;
 /**
  * 进度触发器 {@code meridian_brewing:furnace_built}：玩家守着一座整座对上的药炉时触发，报这座药炉的阶数。
  *
- * <p>一、二阶在玩家看釜、起锅、熬药式推进时现比结构；三阶在玩家打开药塔时。条件 {@code tier} 是阶数范围，省略就是任意一阶。</p>
+ * <p>玩家空手查看已成形的药炉时触发。条件 {@code tier} 是阶数范围，省略就是任意一阶。</p>
  */
 final class FurnaceBuiltTrigger extends SimpleCriterionTrigger<FurnaceBuiltTrigger.Instance> {
     static final Identifier ID = Identifier.fromNamespaceAndPath(BrewingFabric.MOD_ID, "furnace_built");

@@ -56,8 +56,6 @@ final class BrewBodyEffects {
         Path config = FabricLoader.getInstance().getConfigDir().resolve("meridian-brewing.properties");
         thresholds = BrewThresholds.load(config);
         BrewQiPayment.initialize(config);
-        BrewStructureMatcher.initialize(config);
-        BrewTowers.initialize(config);
         BrewElixirs.initialize(config);
         VanillaDamageFabric.registerPartArmorModifier(BrewArmorEffects::multiplier);
         BrewNausea.initialize();

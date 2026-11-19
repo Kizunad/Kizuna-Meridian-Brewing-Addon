@@ -44,31 +44,6 @@ final class BrewQiPayment {
         BrewEnvironment.initialize();
     }
 
-    static BrewQiSettings settings() {
-        // 药塔自己记账，只要这份配置。
-        return settings;
-    }
-
-    /** 药塔开工前：只看环境这三十秒能给多少；没有环境真元区域（下界、末地）时直接说。 */
-    static Optional<BrewText> ambientStartProblem(Level level, BlockPos pos, double total) {
-        // 塔不扣人的真元，所以不加自身余额；估算方式和熬药式的环境那一半相同。
-        Optional<RegionView> region = BrewEnvironment.region(level, pos);
-        if (region.isEmpty()) {
-            return Optional.of(BrewText.message("tower.qi.no_region"));
-        }
-        double ambient = ambientEstimate(region.orElseThrow());
-        if (ambient + TOLERANCE >= total) {
-            return Optional.empty();
-        }
-        return Optional.of(BrewText.message("tower.qi.short", amount(total), amount(ambient)));
-    }
-
-    /** 药塔这一秒向环境取 {@code amount} 元，返回实际取到的；取用的真元由 Human 放回原区域。 */
-    static double drawAmbient(String drawId, Level level, BlockPos pos, double amount) {
-        // 和熬药式同一个取用入口，同一个 ID 重试只回首次结果。
-        return BrewEnvironment.draw(drawId, level, pos, amount).totalQi();
-    }
-
     static BrewQiTally tally(VesselKind vessel) {
         // 起熬时开一本新账，带上宽限；关掉耗元时总数为零，每秒什么都不取。
         return BrewQiTally.start(settings.brewCost(vessel), settings.graceSeconds());

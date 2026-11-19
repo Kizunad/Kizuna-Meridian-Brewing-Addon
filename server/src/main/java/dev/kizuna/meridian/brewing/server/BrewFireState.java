@@ -4,7 +4,8 @@ package dev.kizuna.meridian.brewing.server;
 public final class BrewFireState {
     public static final int MIN_LEVEL = 1;
     public static final int MAX_LEVEL = 4;
-    public static final double FUEL_SECONDS_PER_LEVEL = 60.0;
+    public static final double FUEL_SECONDS_PER_LEVEL = VesselKind.WITCH_CAULDRON.batch().fuelSeconds();
+    public static final int COAL_BLOCK_UNITS = 9;
     private static final String COAL_ID = "minecraft:coal";
     private static final String CHARCOAL_ID = "minecraft:charcoal";
 
@@ -63,7 +64,17 @@ public final class BrewFireState {
     }
 
     public BrewActionResult addFuel(String itemId) {
-        if (!COAL_ID.equals(itemId) && !CHARCOAL_ID.equals(itemId)) {
+        if (COAL_ID.equals(itemId) || CHARCOAL_ID.equals(itemId)) {
+            return addFuel(1);
+        }
+        if ("minecraft:coal_block".equals(itemId)) {
+            return addFuel(COAL_BLOCK_UNITS);
+        }
+        return BrewActionResult.returned(BrewText.message("fire.fuel.wrong"));
+    }
+
+    public BrewActionResult addFuel(int units) {
+        if (units <= 0) {
             return BrewActionResult.returned(BrewText.message("fire.fuel.wrong"));
         }
         if (source == BrewFireSource.CAMPFIRE) {
@@ -73,7 +84,7 @@ public final class BrewFireState {
             return BrewActionResult.returned(BrewText.message("fire.level.max", MAX_LEVEL));
         }
         level++;
-        fuelSeconds += FUEL_SECONDS_PER_LEVEL;
+        fuelSeconds += units * FUEL_SECONDS_PER_LEVEL;
         return BrewActionResult.accepted(BrewText.message("fire.level.up", level));
     }
 
@@ -91,7 +102,6 @@ public final class BrewFireState {
     public BrewActionResult extinguish() {
         if (source != BrewFireSource.CAMPFIRE) {
             level = 0;
-            fuelSeconds = 0.0;
             return BrewActionResult.accepted(BrewText.message("fire.extinguished"));
         }
         return BrewActionResult.returned(BrewText.message("fire.campfire_block"));
@@ -104,12 +114,9 @@ public final class BrewFireState {
         if (source == BrewFireSource.CAMPFIRE || level == 0) {
             return;
         }
-        fuelSeconds = Math.max(0.0, fuelSeconds - seconds);
-        while (fuelSeconds <= 0.0 && level > 0) {
-            level--;
-            if (level > 0) {
-                fuelSeconds += FUEL_SECONDS_PER_LEVEL;
-            }
+        fuelSeconds = Math.max(0.0, fuelSeconds - seconds * level);
+        if (fuelSeconds == 0.0) {
+            level = 0;
         }
     }
 

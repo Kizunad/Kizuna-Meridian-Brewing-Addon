@@ -3,36 +3,26 @@ package dev.kizuna.meridian.brewing.fabric;
 import dev.kizuna.meridian.brewing.server.BrewKind;
 import dev.kizuna.meridian.brewing.server.BrewQuality;
 import dev.kizuna.meridian.brewing.server.BrewUse;
-import dev.kizuna.meridian.brewing.test.BrewSites;
 import dev.kizuna.meridian.brewing.test.BrewingTestPlayers;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.advancements.AdvancementHolder;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.alchemy.PotionContents;
 import net.minecraft.world.item.alchemy.Potions;
 import net.minecraft.world.item.crafting.Recipe;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.Vec3;
 
 /**
  * 「修行」页的炼药线：熬药式、药方、头一锅、三座药炉各由自己的事件完成，事件之前都还没完成；
@@ -40,18 +30,12 @@ import net.minecraft.world.phys.Vec3;
  */
 public final class BrewingAdvancementGameTest {
     private static final int TIMEOUT = 100;
-    private static final String TOWER_BATCH = "meridian_brewing_test:tower";
     private static final Identifier BASICS = id("brewing/basics");
     private static final Identifier RECIPE = id("brewing/recipe");
     private static final Identifier FIRST_BREW = id("brewing/first_brew");
-    private static final Identifier FURNACE_1 = id("brewing/furnace_1");
-    private static final Identifier FURNACE_2 = id("brewing/furnace_2");
-    private static final Identifier FURNACE_3 = id("brewing/furnace_3");
     private static final Identifier RECIPE_ROOT = Identifier.parse("minecraft:recipes/root");
     private static final String RECIPE_UNLOCK_PREFIX = "recipes/";
     private static final int BREWING_RECIPES = 27;
-    /** 药塔北面那块认塔用的玻璃，NBT 里的相对位置；和药塔测试点的是同一格。 */
-    private static final BlockPos ENTRY_GLASS = new BlockPos(6, 6, 5);
     private static final List<Unlock> SAMPLE_UNLOCKS = List.of(
             new Unlock("minecraft:copper_ingot", "copper_cauldron"),
             new Unlock("minecraft:oak_planks", "herb_crate"),
@@ -101,64 +85,6 @@ public final class BrewingAdvancementGameTest {
             give(player, BrewItemStacks.create(BrewKind.QI_GATHER, BrewQuality.COMMON, BrewUse.DRINK));
             requireDone(context, player, FIRST_BREW, "拿到聚气汤没完成头一锅");
         } finally {
-            BrewingTestPlayers.close(player);
-        }
-        context.succeed();
-    }
-
-    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV1_SITE)
-    public void lookingAtShippedLv1CompletesFirstFurnaceOnly(GameTestHelper context) {
-        // 铜釜上压着石头时空手看釜不算；搬开再看一次，一阶完成、二阶仍未完成。
-        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV1);
-        ServerPlayer player = standingPlayer(context, site);
-        BrewCauldronBlockEntity cauldron = cauldron(context, site);
-        BlockPos above = site.cauldron().above();
-        try {
-            context.getLevel().setBlock(above, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
-            cauldron.use(player, InteractionHand.MAIN_HAND);
-            requireOpen(context, player, FURNACE_1, "结构不符时看釜就完成了一阶药炉");
-            context.getLevel().setBlock(above, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-            cauldron.use(player, InteractionHand.MAIN_HAND);
-            requireDone(context, player, FURNACE_1, "守着整座一阶药炉看釜没完成一阶药炉");
-            requireOpen(context, player, FURNACE_2, "一阶药炉完成了二阶药炉");
-        } finally {
-            BrewingTestPlayers.close(player);
-        }
-        context.succeed();
-    }
-
-    @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV2_SITE)
-    public void lookingAtShippedLv2CompletesSecondFurnaceOnly(GameTestHelper context) {
-        // 二阶只算二阶，不顺带完成一阶。
-        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV2);
-        ServerPlayer player = standingPlayer(context, site);
-        try {
-            requireOpen(context, player, FURNACE_2, "没看釜就完成了二阶药炉");
-            cauldron(context, site).use(player, InteractionHand.MAIN_HAND);
-            requireDone(context, player, FURNACE_2, "守着整座二阶药炉看釜没完成二阶药炉");
-            requireOpen(context, player, FURNACE_1, "二阶药炉完成了一阶药炉");
-        } finally {
-            BrewingTestPlayers.close(player);
-        }
-        context.succeed();
-    }
-
-    @GameTest(environment = TOWER_BATCH, maxTicks = TIMEOUT, structure = BrewSites.LV3_SITE)
-    public void openingShippedTowerCompletesThirdFurnace(GameTestHelper context) {
-        // 空手右键塔上的玻璃认塔开窗才完成；完了删掉这座塔的记录。
-        BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV3);
-        ServerPlayer player = standingPlayer(context, site);
-        ServerLevel level = context.getLevel();
-        Set<UUID> before = towerIds(level);
-        try {
-            requireOpen(context, player, FURNACE_3, "没开药塔就完成了三阶药塔");
-            InteractionResult used = rightClickNorth(player, site.world(ENTRY_GLASS));
-            context.assertTrue(player.containerMenu instanceof BrewTowerMenu, "右键玻璃没开药塔窗口：" + used);
-            requireDone(context, player, FURNACE_3, "打开药塔没完成三阶药塔");
-        } finally {
-            Set<UUID> added = towerIds(level);
-            added.removeAll(before);
-            added.forEach(BrewTowerSavedData.of(level)::remove);
             BrewingTestPlayers.close(player);
         }
         context.succeed();
@@ -220,34 +146,6 @@ public final class BrewingAdvancementGameTest {
         // 和捡起来一样进背包；背包变动在菜单同步时报给进度。
         player.getInventory().add(stack);
         player.inventoryMenu.broadcastChanges();
-    }
-
-    private static ServerPlayer standingPlayer(GameTestHelper context, BrewSites.Site site) {
-        // 站在结构里够得着釜或塔的那一格，主手空着。
-        ServerPlayer player = BrewingTestPlayers.create(context);
-        Vec3 stand = Vec3.atBottomCenterOf(site.stand());
-        player.setPos(stand.x, stand.y, stand.z);
-        return player;
-    }
-
-    private static BrewCauldronBlockEntity cauldron(GameTestHelper context, BrewSites.Site site) {
-        return (BrewCauldronBlockEntity) context.getLevel().getBlockEntity(site.cauldron());
-    }
-
-    private static InteractionResult rightClickNorth(ServerPlayer player, BlockPos pos) {
-        // 空手对着这格的北面右键，和站在塔北面点玻璃一样。
-        var hit = new BlockHitResult(Vec3.atCenterOf(pos), Direction.NORTH, pos, false /* inside */);
-        return player.gameMode.useItemOn(player, player.level(), player.getMainHandItem(), InteractionHand.MAIN_HAND,
-                hit);
-    }
-
-    private static Set<UUID> towerIds(ServerLevel level) {
-        // 这个维度现有的塔号；认塔前后一比就知道新建的是哪座。
-        Set<UUID> ids = new HashSet<>();
-        for (BrewTowerSavedData.Tower tower : BrewTowerSavedData.of(level).towers()) {
-            ids.add(tower.id());
-        }
-        return ids;
     }
 
     private static void requireDone(GameTestHelper context, ServerPlayer player, Identifier id, String message) {

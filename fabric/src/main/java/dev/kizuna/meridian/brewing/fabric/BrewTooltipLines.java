@@ -38,9 +38,9 @@ public final class BrewTooltipLines {
     private static final int DECIMALS = 2;
     private static final double PERCENT = 100.0;
     private static final Map<String, List<String>> APPARATUS_LINES = Map.of(
-            "copper_cauldron", List.of("apparatus.copper_cauldron", "apparatus.copper_cauldron.layout",
+            "copper_cauldron", List.of("apparatus.copper_cauldron",
                     "apparatus.copper_cauldron.oxidation", "apparatus.copper_cauldron.wax"),
-            "witch_cauldron", List.of("apparatus.witch_cauldron", "apparatus.witch_cauldron.layout"),
+            "witch_cauldron", List.of("apparatus.witch_cauldron"),
             "iron_stove", List.of("apparatus.iron_stove"),
             "iron_brazier", List.of("apparatus.iron_brazier"),
             "herb_crate", List.of("apparatus.herb_crate"));

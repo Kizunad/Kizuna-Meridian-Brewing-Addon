@@ -73,20 +73,18 @@ public final class BrewingCastGameTest {
     private static final long OFF_HAND_FEEDS = 3;
 
     @GameTest(maxTicks = SHORT_TIMEOUT, structure = BrewSites.LV2_SITE)
-    public void realCastRejectsIncompleteStructureWithReason(GameTestHelper context) {
-        // 药材齐备但釜南面那格外框换成了泥土，拒绝必须来自真实目录事件并回到施放结果。
-        // 玩家站在北边看釜，换北面那格会先挡住视线，所以换背面那格。
+    public void realCastRejectsMissingFireWithReason(GameTestHelper context) {
         Fixture fixture = fixture(context);
-        context.getLevel().setBlockAndUpdate(fixture.pos().south(), Blocks.DIRT.defaultBlockState());
+        context.getLevel().setBlockAndUpdate(fixture.pos().below(), Blocks.AIR.defaultBlockState());
         cast(context, fixture);
         context.runAfterDelay(STARTED_TICK, () -> {
             TechniqueCastEnded ended = ended(context, fixture, TechniqueCastEndReason.FAILED);
             context.assertTrue(ended.outcome().getFailure() == TechniqueFailure.EFFECT_REJECTED,
-                    "结构不全没有返回 EFFECT_REJECTED");
-            context.assertTrue(ended.outcome().getReason().contains("南 1：应为任一石头方块"),
-                    "结构拒绝没有说哪一格不对：" + ended.outcome().getReason());
+                    "缺火没有返回 EFFECT_REJECTED");
+            context.assertTrue(ended.outcome().getReason().contains("火"),
+                    "缺火提示不符：" + ended.outcome().getReason());
             context.assertTrue(fixture.cauldron().cauldron().state() == BrewCauldronState.RAW,
-                    "结构拒绝仍启动了巫釜");
+                    "缺火仍启动了巫釜");
             finish(context, fixture);
         });
     }
@@ -99,6 +97,8 @@ public final class BrewingCastGameTest {
         context.runAfterDelay(STARTED_TICK, () -> {
             assertBrewing(context, fixture);
             assertClip(context, fixture.player(), BREW_CLIP, List.of(Boolean.TRUE));
+        });
+        context.runAfterDelay(PROGRESS_OBSERVED_TICK, () -> {
             BrewingC4cGameTest.assertOffHandOperations(context, fixture.player(), fixture.cauldron(),
                     context.getLevel(), fixture.pos());
             fixture.player().setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.STICK));
@@ -183,15 +183,15 @@ public final class BrewingCastGameTest {
     }
 
     @GameTest(maxTicks = TIMEOUT, structure = BrewSites.LV1_SITE)
-    public void lookingAtFireUnderCauldronKeepsBrewingButFrameInterrupts(GameTestHelper context) {
-        // 一阶结构里营火东面露着一格空：低头从那格看营火仍算看着这只釜，周期事件照常推进；改看旁边的外框照旧打断。
+    public void lookingAtFireUnderCauldronKeepsBrewingButStoneInterrupts(GameTestHelper context) {
+        // 低头看釜下的营火会继续施法，转头看旁边的石块会打断。
         BrewSites.Site site = BrewSites.place(context, BrewSites.Shipped.LV1);
         Fixture fixture = campfireFixture(context, site);
         cast(context, fixture);
         context.runAfterDelay(PROGRESSED_TICK, () -> {
             assertBrewing(context, fixture);
             double elapsed = fixture.cauldron().cauldron().brewElapsedSeconds();
-            // 人悬在结构东面那格（NBT (4,0,2)）上方半格，离釜心约 2.8 格；眼睛低于营火上面那层台阶，视线从空格穿进去。
+            // 从营火东面的空处看向火源侧面。
             BlockPos outside = site.world(4, 0, 2);
             BlockPos gap = site.world(3, 1, 2);
             ServerPlayer player = fixture.player();
@@ -204,8 +204,9 @@ public final class BrewingCastGameTest {
                 double gained = fixture.cauldron().cauldron().brewElapsedSeconds() - elapsed;
                 context.assertTrue(gained >= GAZE_STEPS, "看火期间熬制没有推进：" + gained);
                 BrewCauldron.Snapshot before = fixture.cauldron().cauldron().snapshot();
-                BlockPos frame = site.world(3, 0, 2);
-                player.lookAt(EntityAnchorArgument.Anchor.EYES, Vec3.upFromBottomCenterOf(frame, 1.0));
+                BlockPos stone = site.world(3, 0, 2);
+                context.getLevel().setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
+                player.lookAt(EntityAnchorArgument.Anchor.EYES, Vec3.upFromBottomCenterOf(stone, 1.0));
                 context.runAfterDelay(INTERRUPTION_WAIT, () -> {
                     ended(context, fixture, TechniqueCastEndReason.FAILED);
                     assertInterrupted(context, fixture, before);
@@ -273,7 +274,7 @@ public final class BrewingCastGameTest {
     }
 
     private static Fixture fixture(GameTestHelper context) {
-        // 摆随包二阶结构、通过方块交互备料，然后学会生产目录里的熬药卷，不手工构造效果事件。
+        // 在铁炉座上放巫釜，通过方块交互备料，再学会生产目录里的熬药卷。
         ServerPlayer player = BrewingTestPlayers.create(context);
         player.setGameMode(GameType.SURVIVAL);
         BrewCauldronBlockEntity cauldron = BrewingC4cGameTest.placeCauldron(context, player);

@@ -24,10 +24,9 @@ public final class BrewingFabric implements ModInitializer {
         BrewingRuntime.register();
         BrewRecipeCommands.register();
         BrewingDispensers.register();
-        BrewStructureDefinitions.register();
+        FurnacePatterns.register();
         BrewStructureMarkers.register();
-        BrewTowerMenu.register();
-        BrewTowers.register();
+        BrewingFurnaces.register();
         RecipeLearnedTrigger.register();
         FurnaceBuiltTrigger.register();
         BrewBodyEffects.initialize();

@@ -5,7 +5,7 @@
       "id": "meridian_brewing:witch_cauldron"
     },
     "title": {
-      "translate": "advancements.meridian_brewing.brewing.furnace_2.title"
+      "translate": "structure.meridian_brewing.cauldron-v2-lv2"
     },
     "description": {
       "translate": "advancements.meridian_brewing.brewing.furnace_2.description"

@@ -8,12 +8,12 @@
     "fabric-client-gametest": [
       "dev.kizuna.meridian.brewing.clienttest.BrewingModelsClientTest",
       "dev.kizuna.meridian.brewing.clienttest.WitchHutClientTest",
-      "dev.kizuna.meridian.brewing.clienttest.BrewStructureClientTest",
       "dev.kizuna.meridian.brewing.clienttest.BrewLoreClientTest",
       "dev.kizuna.meridian.brewing.clienttest.WitchCastClientTest",
       "dev.kizuna.meridian.brewing.clienttest.CharmAllyClientTest",
       "dev.kizuna.meridian.brewing.clienttest.CharmPrelaunchClientTest",
       "dev.kizuna.meridian.brewing.clienttest.StatusIconsClientTest",
+      "dev.kizuna.meridian.brewing.clienttest.FurnacesClientTest",
       "dev.kizuna.meridian.brewing.clienttest.ElixirClientTest"
     ]
   },

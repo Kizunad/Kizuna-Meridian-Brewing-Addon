@@ -5,7 +5,7 @@ import java.util.EnumSet;
 import java.util.Optional;
 import java.util.Set;
 
-/** 六种首版巫药和五行丹露的稳定身份和可用方式。新种类只往后加：序号进了已学药方的位图和药塔的选择。 */
+/** 六种首版巫药和五行丹露的稳定身份和可用方式。已学药方按序号存位图，新种类只能追加。 */
 public enum BrewKind {
     DEPLETION("depletion", "枯竭药水", 0xA08A4A, FireKind.SOUL_FIRE,
             EnumSet.of(BrewUse.SPLASH, BrewUse.THROW, BrewUse.FAN, BrewUse.MIST)),
@@ -76,12 +76,6 @@ public enum BrewKind {
     public Set<BrewUse> uses() {
         // 返回不可变集合，避免调用方改变药方能力。
         return uses;
-    }
-
-    /** 药塔里能熬的：六种巫药，丹露不进塔。顺序和序号一致，塔的按钮、已选药方都按这个下标记。 */
-    public static BrewKind[] towerKinds() {
-        // 丹露不占用药塔的方子按钮。
-        return Arrays.stream(values()).filter(kind -> !kind.elixir()).toArray(BrewKind[]::new);
     }
 
     public static BrewKind[] elixirKinds() {
