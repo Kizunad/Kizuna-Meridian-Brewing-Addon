@@ -1,5 +1,7 @@
 package dev.kizuna.meridian.brewing.server;
 
+import java.util.Optional;
+
 /** 一张药方的主料、辅料、引药和投料时窗。 */
 public record IngredientPlan(
         String preparedPrimary,
@@ -12,6 +14,14 @@ public record IngredientPlan(
         requireText(preparedPrimary, "主料");
         requireText(accessory, "辅料");
         requireText(catalyst, "引药");
+    }
+
+    public Optional<TimingWindow> window(IngredientSlot slot) {
+        return switch (slot) {
+            case ACCESSORY -> Optional.of(accessoryWindow);
+            case CATALYST -> Optional.of(catalystWindow);
+            default -> Optional.empty();
+        };
     }
 
     private static void requireText(String value, String label) {

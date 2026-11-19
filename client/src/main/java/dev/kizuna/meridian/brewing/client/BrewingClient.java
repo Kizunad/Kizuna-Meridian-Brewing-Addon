@@ -14,7 +14,7 @@ import org.joml.Vector3fc;
 
 /**
  * 炼药客户端入口：铁火盆、铁炉座和药刀用 Bong 的 .bbmodel 经 BS3D 放置模型绘制，枯木按方块颜色压暗，
- * 本机换成药刀时当场播甩腕开刃，药方讲解和《熬药总纲》用原版书本界面翻开。
+ * 本机换成药刀时当场播甩腕开刃，药方讲解和《熬药总纲》用原版书本界面翻开，成形的大炉空手点开炼药窗口。
  *
  * <p>放置模型与方块、物品同 ID；药刀开合由模型里的 open 剪辑按进度画。方块和方块实体类型都在 fabric 模块注册，
  * 这里只按注册 ID 查找。
@@ -44,6 +44,9 @@ public final class BrewingClient implements ClientModInitializer {
         HerbKnifeDrawClient.register();
         BrewTooltips.register();
         BrewLoreBook.register();
+        FurnaceClientData.register();
+        FurnaceScreen.register();
+        RecipeBookScreen.register();
     }
 
     static Identifier id(String path) {

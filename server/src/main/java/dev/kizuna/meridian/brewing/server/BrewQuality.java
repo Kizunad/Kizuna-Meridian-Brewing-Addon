@@ -1,5 +1,7 @@
 package dev.kizuna.meridian.brewing.server;
 
+import java.nio.file.Path;
+
 /** 巫药的四档品质，品质组件保存 ordinal 值。 */
 public enum BrewQuality {
     POOR(0, 20, 39, "劣质"),
@@ -8,6 +10,11 @@ public enum BrewQuality {
     SUPERIOR(3, 80, Integer.MAX_VALUE, "优质");
 
     private final int componentValue;
+
+    public static BrewQuality portableAutomaticLimit(Path config) {
+        return BrewConfig.load(config, "便携锅自动品质", (properties, missing) ->
+                valueOf(BrewConfig.value(properties, "portable.auto_max_quality", missing)));
+    }
     private final int minimumScore;
     private final int maximumScore;
     private final String displayName;

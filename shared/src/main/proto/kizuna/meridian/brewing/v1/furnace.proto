@@ -1,0 +1,86 @@
+syntax = "proto3";
+package kizuna.meridian.brewing.v1;
+option java_package = "dev.kizuna.meridian.brewing.protocol.pb";
+option java_multiple_files = true;
+
+// 默认为无操作，剂型须显式传入；药方 ID 使用卷轴上的注册路径。
+message FurnaceRequest {
+  int32 menu = 1;
+  int64 version = 2;
+  oneof action {
+    FurnaceChoice select = 3;
+    bool reclaim = 4;
+    string book = 5;
+    bool furnace_steps = 6;
+  }
+}
+message FurnaceChoice { string recipe = 1; string form = 2; }
+message FurnaceCatalog { string vessel = 1; repeated string visible = 2; }
+message FurnaceOrders {
+  int64 version = 1;
+  FurnaceChoice next = 2;
+  FurnaceChoice actual = 3;
+  bool busy = 4;
+  int64 batch = 5;
+}
+message FurnaceDose {
+  string slot = 1;
+  string item = 2;
+  int32 added = 3;
+  int32 required = 4;
+  // 本批这味料未投齐且已过最后可投秒数。
+  bool missed = 5;
+  // 已错过最佳时机，但这口手熬釜还在熬，可补投。
+  bool late_allowed = 6;
+}
+message FurnaceClock {
+  string phase = 1;
+  string current_step = 2;
+  repeated FurnaceDose doses = 3;
+  string fire = 4;
+  int32 grade = 5;
+  int64 fuel = 6;
+  double temperature = 7;
+  double elapsed = 8;
+  double window_start = 9;
+  double window_end = 10;
+  int32 water = 11;
+  int32 bottles = 12;
+  repeated string missing = 13;
+  optional string worker = 14;
+  // 锅里的料还没开熬、观看者也认得这张方，取回请求才会被接受。
+  bool reclaimable = 15;
+  bool continuous_fire = 16;
+  bool manual = 17;
+}
+// full 时替换全部，其余包仅替换出现的整组（包括显式为空的组）。
+message FurnaceView {
+  int32 menu = 1;
+  bool full = 2;
+  FurnaceCatalog catalog = 3;
+  FurnaceOrders orders = 4;
+  FurnaceClock clock = 5;
+}
+message BrewStep {
+  string action = 1;
+  string condition = 2;
+  string item = 3;
+  int32 count = 4;
+  string fire = 5;
+  int32 grade = 6;
+  double from_seconds = 7;
+  double to_seconds = 8;
+  double low_temperature = 9;
+  double high_temperature = 10;
+}
+message BrewTimeline {
+  int32 menu = 1;
+  FurnaceChoice choice = 2;
+  string vessel = 3;
+  repeated BrewStep steps = 4;
+  string current_step = 5;
+  int64 batch = 6;
+  int64 version = 7;
+  // 药卷的独立演示及木棍接管的便携锅为真。
+  bool manual = 8;
+}

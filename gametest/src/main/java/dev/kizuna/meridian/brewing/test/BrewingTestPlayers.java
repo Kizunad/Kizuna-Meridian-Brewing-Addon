@@ -34,6 +34,8 @@ import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
 import net.minecraft.core.particles.ColorParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
 import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.network.chat.Component;
@@ -350,6 +352,15 @@ public final class BrewingTestPlayers {
         } catch (InvalidProtocolBufferException invalid) {
             throw new IllegalStateException("测试收到损坏的 PA 载荷", invalid);
         }
+    }
+
+    public static void acceptLoginPosition(ServerPlayer player) {
+        // 原版在传送确认前不处理点方块包；按监听器实际发出的传送号回执。
+        List.copyOf(CONNECTIONS.get(player.getUUID()).packets()).stream()
+                .filter(ClientboundPlayerPositionPacket.class::isInstance)
+                .map(ClientboundPlayerPositionPacket.class::cast)
+                .forEach(packet -> player.connection.handleAcceptTeleportPacket(
+                        new ServerboundAcceptTeleportationPacket(packet.id())));
     }
 
     public static String disconnectReason(ServerPlayer player) {

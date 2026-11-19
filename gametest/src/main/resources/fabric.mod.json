@@ -29,6 +29,8 @@
       "dev.kizuna.meridian.brewing.fabric.BrewingWitchHutGameTest",
       "dev.kizuna.meridian.brewing.fabric.BrewingStructureGameTest",
       "dev.kizuna.meridian.brewing.fabric.FurnacePortsGameTest",
+      "dev.kizuna.meridian.brewing.fabric.FurnaceMenuGameTest",
+      "dev.kizuna.meridian.brewing.fabric.PortableMenuGameTest",
       "dev.kizuna.meridian.brewing.fabric.BrewingLoreGameTest",
       "dev.kizuna.meridian.brewing.fabric.BrewingSaveGameTest",
       "dev.kizuna.meridian.brewing.fabric.BrewingAdvancementGameTest",

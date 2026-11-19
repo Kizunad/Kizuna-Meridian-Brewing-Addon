@@ -1,0 +1,8 @@
+{
+  "screen.meridian_brewing.furnace.batch_title": "%s · %s 套料，可装 %s 瓶",
+  "screen.meridian_brewing.furnace.manual": "手熬中",
+  "screen.meridian_brewing.furnace.automatic": "自动熬制中",
+  "screen.meridian_brewing.furnace.continuous": "营火常燃",
+  "screen.meridian_brewing.furnace.late": "%s：错过最佳时机，仍可晚投",
+  "screen.meridian_brewing.furnace.closed": "%s：已经不能投"
+}

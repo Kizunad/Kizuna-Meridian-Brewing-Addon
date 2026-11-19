@@ -146,7 +146,7 @@ public final class BrewFireState {
         if (source == BrewFireSource.BRAZIER) {
             return brazierHeatSource();
         }
-        return stoveHeatSource();
+        return stoveHeatSource(fireKind, level);
     }
 
     private HeatSourceKind brazierHeatSource() {
@@ -166,7 +166,10 @@ public final class BrewFireState {
         };
     }
 
-    private HeatSourceKind stoveHeatSource() {
+    public static HeatSourceKind stoveHeatSource(FireKind fireKind, int level) {
+        if (level == 0) {
+            return HeatSourceKind.NONE;
+        }
         return switch (fireKind) {
             case SUN_FIRE -> switch (level) {
                 case 1 -> HeatSourceKind.SUN_STOVE_1;

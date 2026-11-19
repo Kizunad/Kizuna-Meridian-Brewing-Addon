@@ -14,6 +14,9 @@
       "dev.kizuna.meridian.brewing.clienttest.CharmPrelaunchClientTest",
       "dev.kizuna.meridian.brewing.clienttest.StatusIconsClientTest",
       "dev.kizuna.meridian.brewing.clienttest.FurnacesClientTest",
+      "dev.kizuna.meridian.brewing.clienttest.FurnaceWindowClientTest",
+      "dev.kizuna.meridian.brewing.clienttest.RecipeBookClientTest",
+      "dev.kizuna.meridian.brewing.clienttest.PortableWindowClientTest",
       "dev.kizuna.meridian.brewing.clienttest.ElixirClientTest"
     ]
   },

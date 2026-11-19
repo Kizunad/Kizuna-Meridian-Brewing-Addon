@@ -45,6 +45,11 @@ final class BrewBodyEffects {
     private static final ResourceKey<DamageType> DEPLETION_DAMAGE = ResourceKey.create(Registries.DAMAGE_TYPE,
             Identifier.fromNamespaceAndPath(BrewingFabric.MOD_ID, "depletion"));
     private static BrewThresholds thresholds;
+    private static BrewQuality portableLimit;
+
+    static BrewQuality portableLimit() {
+        return portableLimit;
+    }
 
     private BrewBodyEffects() {
         // 运行时只持有配置，药效事实随权威身体保存。
@@ -55,6 +60,7 @@ final class BrewBodyEffects {
         BrewBodyHost.initialize();
         Path config = FabricLoader.getInstance().getConfigDir().resolve("meridian-brewing.properties");
         thresholds = BrewThresholds.load(config);
+        portableLimit = BrewQuality.portableAutomaticLimit(config);
         BrewQiPayment.initialize(config);
         BrewElixirs.initialize(config);
         VanillaDamageFabric.registerPartArmorModifier(BrewArmorEffects::multiplier);

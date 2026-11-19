@@ -23,6 +23,7 @@ dependencies {
     // 巫药提示的句子和数字由 fabric 模块按物品拼好，客户端只把它插进提示；两个模块装在同一份完整装配里。
     compileOnly project(':fabric')
     compileOnly project(':server')
+    compileOnly 'dev.kizuna.meridian:fabric'
     testImplementation libs.junit4
 }
 test {

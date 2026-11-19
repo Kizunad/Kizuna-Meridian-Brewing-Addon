@@ -5,6 +5,7 @@ import dev.kizuna.meridian.brewing.server.BrewCauldron;
 import dev.kizuna.meridian.brewing.server.BrewCollectionKind;
 import dev.kizuna.meridian.brewing.server.BrewForm;
 import dev.kizuna.meridian.brewing.server.BrewUse;
+import dev.kizuna.meridian.brewing.server.BrewQuality;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -14,10 +15,14 @@ record BrewBottle(BrewActionResult result, ItemStack output) {
     private static final long DAY_TICKS = 24_000L;
 
     static BrewBottle collect(BrewCauldron cauldron, Level level, BlockPos pos) {
+        return collect(cauldron, level, pos, BrewQuality.SUPERIOR);
+    }
+
+    static BrewBottle collect(BrewCauldron cauldron, Level level, BlockPos pos, BrewQuality ceiling) {
         var recipe = cauldron.recipe();
         BrewForm form = cauldron.form();
         long day = Math.floorDiv(level.getOverworldClockTime(), DAY_TICKS);
-        var collected = cauldron.collectBottle(day);
+        var collected = cauldron.collectBottle(day, ceiling);
         if (collected.kind() == BrewCollectionKind.NOTHING) {
             return new BrewBottle(BrewActionResult.returned(collected.message()), ItemStack.EMPTY);
         }

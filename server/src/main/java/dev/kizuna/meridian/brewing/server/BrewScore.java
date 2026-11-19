@@ -13,4 +13,11 @@ public record BrewScore(
         int totalScore,
         Optional<BrewQuality> quality,
         CatalystRequirement catalystRequirement) {
+    public BrewScore limitedTo(BrewQuality ceiling) {
+        if (quality.isEmpty() || quality.orElseThrow().compareTo(ceiling) <= 0) {
+            return this;
+        }
+        return new BrewScore(ingredientScore, soakScore, heatScore, timingScore, collectionScore, scorchPenalty,
+                totalScore, Optional.of(ceiling), catalystRequirement);
+    }
 }

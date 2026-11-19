@@ -1,5 +1,8 @@
 package dev.kizuna.meridian.brewing.clienttest;
 
+import dev.kizuna.meridian.brewing.client.FurnaceClientData;
+import dev.kizuna.meridian.brewing.fabric.FurnaceMenu;
+import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
 import java.lang.reflect.Field;
 import java.util.List;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -34,20 +37,20 @@ public final class FurnacesClientTest implements FabricClientGameTest {
     private static final int SOUTH = 32;
     private static final BlockPos BROKEN_RIM = new BlockPos(35, 10, 16);
     private static final BlockPos WRONG_COPPER = new BlockPos(2, 6, 6);
-    private static final String FORMED = "message.meridian_brewing.furnace.formed";
+    private static final String FORMED = "menu";
     private static final String BROKEN = "message.meridian_brewing.furnace.broken";
     private static final Field MESSAGE = hudField("overlayMessageString");
     private static final Field REMAINING = hudField("overlayMessageTime");
     // 均相对摆炉函数的原点。近景朝向锅沿外侧，脚下和镜头到锅沿之间都有净空。
-    private static final Shot SMALL = new Shot("lv1", new BlockPos(2, 7, 7), new Vec3(-10, 11, 15),
+    static final Shot SMALL = new Shot("lv1", new BlockPos(2, 7, 7), new Vec3(-10, 11, 15),
             new Vec3(5, 4, 6), new Vec3(-1.5, 8.7, 7.3));
-    private static final Shot MEDIUM = new Shot("lv2", new BlockPos(18, 8, 3), new Vec3(23, 13, -14),
+    static final Shot MEDIUM = new Shot("lv2", new BlockPos(18, 8, 3), new Vec3(23, 13, -14),
             new Vec3(18, 4, 7), new Vec3(18.5, 10.1, -0.2));
-    private static final Shot LARGE = new Shot("lv3-auto", new BlockPos(36, 10, 16), new Vec3(46, 17, 33),
+    static final Shot LARGE = new Shot("lv3-auto", new BlockPos(36, 10, 16), new Vec3(46, 17, 33),
             new Vec3(36, 6, 10), new Vec3(36.5, 12.2, 19.7));
     private static final List<Shot> SHOTS = List.of(SMALL, MEDIUM, LARGE);
 
-    private record Shot(String suffix, BlockPos rim, Vec3 farEye, Vec3 center, Vec3 nearEye) {}
+    record Shot(String suffix, BlockPos rim, Vec3 farEye, Vec3 center, Vec3 nearEye) {}
 
     @Override
     public void runTest(ClientGameTestContext context) {
@@ -92,7 +95,7 @@ public final class FurnacesClientTest implements FabricClientGameTest {
         LOGGER.info("furnaces {} {} frames {}–{}", shot.suffix(), label, first, film.frame());
     }
 
-    private static Stage prepare(ClientGameTestContext context, TestSingleplayerContext world) {
+    static Stage prepare(ClientGameTestContext context, TestSingleplayerContext world) {
         // 旁观镜头可以垂直看进锅口，角色身体不会挡住锅底。
         Stage stage = Stage.prepare(context, world);
         stage.guiScale(GUI_SCALE);
@@ -107,7 +110,7 @@ public final class FurnacesClientTest implements FabricClientGameTest {
         return stage;
     }
 
-    private static void enterCreativeFlight(Stage stage) {
+    static void enterCreativeFlight(Stage stage) {
         // 玩家飞近锅沿后，实际空手右键触发服务端检查。
         stage.play();
         stage.onServer(server -> {
@@ -117,7 +120,7 @@ public final class FurnacesClientTest implements FabricClientGameTest {
         });
     }
 
-    private static void approach(Stage stage, Shot shot) {
+    static void approach(Stage stage, Shot shot) {
         Vec3 start = stage.at(shot.farEye());
         Vec3 end = stage.at(shot.nearEye());
         Vec3 center = stage.at(shot.center());
@@ -149,6 +152,10 @@ public final class FurnacesClientTest implements FabricClientGameTest {
         context.waitFor(client -> client.hitResult instanceof BlockHitResult hit && hit.getBlockPos().equals(rim),
                 ACTION_TIMEOUT);
         stage.use();
+        if (FORMED.equals(key)) {
+            inspectMenu(context, stage, film, shot);
+            return;
+        }
         var name = Component.translatable("structure.meridian_brewing.cauldron-v2-" + shot.suffix());
         Component expected = Component.translatable(key, name);
         context.waitFor(client -> visible(client.gui.hud, expected), ACTION_TIMEOUT);
@@ -166,6 +173,35 @@ public final class FurnacesClientTest implements FabricClientGameTest {
         LOGGER.info("furnaces {} {} frames {}–{}", shot.suffix(), key, first + 1, last);
     }
 
+    private static void inspectMenu(ClientGameTestContext context, Stage stage, FurnaceFilm film, Shot shot) {
+        // 点击经网络到达集成服务器，等服务端处理完右键再读这一轮的菜单号。
+        for (int tick = 0; tick < ACTION_TIMEOUT; tick++) {
+            if (stage.computeOnServer(server ->
+                    server.getPlayerList().getPlayers().getFirst().containerMenu instanceof FurnaceMenu)) {
+                break;
+            }
+            context.waitTick();
+        }
+        int id = stage.computeOnServer(server -> {
+            var menu = server.getPlayerList().getPlayers().getFirst().containerMenu;
+            if (!(menu instanceof FurnaceMenu)) {
+                throw new AssertionError("成形的炉没有开窗");
+            }
+            return menu.containerId;
+        });
+        context.waitFor(client -> FurnaceClientData.view(id).isPresent(), ACTION_TIMEOUT);
+        holdShot(stage, film, shot, "menu");
+        context.runOnClient(client -> {
+            if (client.player.containerMenu instanceof FurnaceMenu) {
+                client.player.closeContainer();
+            } else {
+                // 未装画面时原版只开服务端菜单，按收到的菜单号关窗。
+                client.getConnection().send(new ServerboundContainerClosePacket(id));
+            }
+        });
+        stage.settle();
+    }
+
     private static Field hudField(String name) {
         // 原版 HUD 没有公开动作栏的读接口，只在客户端场景中读取实际文字和倒计时。
         try {
@@ -177,7 +213,7 @@ public final class FurnacesClientTest implements FabricClientGameTest {
         }
     }
 
-    private static boolean visible(Hud hud, Component expected) {
+    static boolean visible(Hud hud, Component expected) {
         try {
             return !hud.isHidden() && REMAINING.getInt(hud) > 0 && expected.equals(MESSAGE.get(hud));
         } catch (IllegalAccessException failure) {

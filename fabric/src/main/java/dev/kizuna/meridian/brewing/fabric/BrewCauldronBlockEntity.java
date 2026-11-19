@@ -3,9 +3,9 @@ package dev.kizuna.meridian.brewing.fabric;
 import dev.kizuna.meridian.brewing.server.BrewActionResult;
 import dev.kizuna.meridian.brewing.server.BrewCauldron;
 import dev.kizuna.meridian.brewing.server.BrewCauldronState;
-import dev.kizuna.meridian.brewing.server.BrewForm;
 import dev.kizuna.meridian.brewing.server.BrewKind;
 import dev.kizuna.meridian.brewing.server.BrewProgress;
+import dev.kizuna.meridian.brewing.server.BrewQuality;
 import dev.kizuna.meridian.brewing.server.BrewQiTally;
 import dev.kizuna.meridian.brewing.server.BrewRecipe;
 import dev.kizuna.meridian.brewing.server.BrewSaveMarks;
@@ -21,6 +21,7 @@ import dev.kizuna.meridian.brewing.server.PreparationKind;
 import dev.kizuna.meridian.brewing.server.VesselKind;
 import java.util.EnumSet;
 import java.util.Locale;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -31,6 +32,7 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.Container;
 import net.minecraft.world.ContainerHelper;
@@ -68,6 +70,7 @@ import net.minecraft.world.level.storage.ValueOutput;
  */
 public final class BrewCauldronBlockEntity extends BlockEntity implements WorldlyContainer {
     private static final double SECONDS_PER_TICK = 0.05;
+    private static final int TICKS_PER_SECOND = 20;
     private static final double TECHNIQUE_MAX_DISTANCE = 3.0;
     private static final double TECHNIQUE_MAX_DISTANCE_SQUARED =
             TECHNIQUE_MAX_DISTANCE * TECHNIQUE_MAX_DISTANCE;
@@ -86,6 +89,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
 
     private final VesselKind vessel;
     private final BrewCauldron cauldron;
+    private final FurnaceBatch batch;
     private BrewStructure structure;
     private long copperOxidationTicks;
     private UUID techniqueCaster;
@@ -97,7 +101,8 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
     public BrewCauldronBlockEntity(BlockPos pos, BlockState state, VesselKind vessel) {
         super(BrewingBlocks.BREW_CAULDRON_ENTITY, pos, state);
         this.vessel = vessel;
-        this.cauldron = new BrewCauldron(vessel, BrewForm.DRINK);
+        this.batch = new FurnaceBatch(vessel);
+        this.cauldron = batch.cauldron;
         this.structure = BrewStructure.built(HeatSourceKind.NONE);
         if (vessel == VesselKind.COPPER_CAULDRON) {
             // 用 /setblock 或结构放下的铜釜带着外观氧化级，规则状态从它起算。
@@ -120,6 +125,10 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
         return cauldron;
     }
 
+    FurnaceBatch batch() {
+        return batch;
+    }
+
     public BrewStructure structure() {
         // 暴露结构快照供服务端状态观察和 GameTest 验证，不允许调用方修改方块实体。
         return structure;
@@ -135,6 +144,15 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
         }
         boolean controlledByCaster = techniqueControlledBy(player);
         ItemStack stack = player.getItemInHand(hand);
+        if (hand == InteractionHand.MAIN_HAND && stack.isEmpty() && player instanceof ServerPlayer viewer) {
+            var station = new PortableStation(viewer.level(), this);
+            if (station.available()) {
+                FurnaceMenu.open(viewer, station, worldPosition, getBlockState().getBlock().getName());
+            } else {
+                BrewTexts.sendOverlay(viewer, BrewText.message("structure.no_fire"));
+            }
+            return InteractionResult.SUCCESS;
+        }
         // 煤、铲子、沙子是给火的：二阶的铁炉座四面埋在砖里够不着，对着釜用就转给釜下的火源（P1 甲）。
         if (BrewFireBlockEntity.tendsFire(stack)
                 && level.getBlockEntity(worldPosition.below()) instanceof BrewFireBlockEntity fire) {
@@ -166,6 +184,9 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
         if (caster == null || !level.mayInteract(caster, worldPosition)) {
             return BrewActionResult.returned(BrewText.message("no_permission"));
         }
+        if (batch.active != null) {
+            return BrewActionResult.returned(BrewText.message("furnace.automatic_in_charge"));
+        }
         refreshHeatSource();
         Optional<BrewText> problem = cauldron.startProblem(structure);
         if (problem.isEmpty()) {
@@ -179,6 +200,9 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
         }
         BrewActionResult result = cauldron.startBrew(structure);
         if (result.accepted()) {
+            batch.batchNumber++;
+            batch.version++;
+            batch.refundable.clear();
             setChanged();
         }
         return result;
@@ -264,8 +288,12 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
             return;
         }
         NonNullList<ItemStack> drops = NonNullList.create();
-        for (IngredientBatch batch : cauldron.ingredients().values()) {
-            drops.add(itemStack(batch));
+        if (batch.refundable.isEmpty()) {
+            for (IngredientBatch dose : cauldron.ingredients().values()) {
+                drops.add(itemStack(dose));
+            }
+        } else {
+            drops.addAll(batch.refundable);
         }
         Containers.dropContents(level, worldPosition, drops);
     }
@@ -278,14 +306,34 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
         ticks++;
         refreshHeatSource();
         addStagedIngredient();
-        if (!techniqueControlled()) {
-            tickCauldron(SECONDS_PER_TICK);
-        }
+        tickCooking((ServerLevel) currentLevel);
         if (vessel == VesselKind.COPPER_CAULDRON) {
             tickCopperOxidation();
             showCopperOxidation();
         }
         markIfChanged();
+    }
+
+    private void tickCooking(ServerLevel server) {
+        var state = cauldron.state();
+        if (techniqueControlled()) {
+            batch.waiting = "manual";
+            return;
+        }
+        if (state != BrewCauldronState.BREWING || batch.active == null) {
+            tickCauldron(SECONDS_PER_TICK);
+        }
+        if (state != BrewCauldronState.RAW && (state != BrewCauldronState.BREWING || batch.active == null)) {
+            batch.waiting = "";
+            return;
+        }
+        if (ticks % TICKS_PER_SECOND == 0 && (batch.next != null || batch.active != null)) {
+            var previousPayment = batch.tally;
+            FurnaceCooking.advance(new PortableStation(server, this), structure);
+            if (batch.tally != previousPayment) {
+                setChanged();
+            }
+        }
     }
 
     @Override
@@ -379,6 +427,9 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
         BrewActionResult interruption = cauldron.interruptBrew();
         techniqueCaster = null;
         qiTally = null;
+        if (interruption.accepted() && batch.refundable.isEmpty()) {
+            batch.restoreRefunds(List.of());
+        }
         setChanged();
         if (interruption.accepted()) {
             return BrewActionResult.returned(reason);
@@ -442,6 +493,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
         }
         BrewActionResult scrubbed = cauldron.scrubWithWater();
         if (scrubbed.accepted()) {
+            finishBatch();
             BrewSounds.atBlock(level, worldPosition, BrewSounds.CAULDRON_SCRUB);
         }
         return scrubbed;
@@ -514,7 +566,23 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
 
     /** 舀一瓶。收药可能清空釜内配方，先留下药方和剂型再舀；没舀到时产物为空。 */
     private BrewBottle collect() {
-        return BrewBottle.collect(cauldron, level, worldPosition);
+        var limit = BrewQuality.SUPERIOR;
+        if (batch.active != null) {
+            limit = BrewBodyEffects.portableLimit();
+        }
+        var bottle = BrewBottle.collect(cauldron, level, worldPosition, limit);
+        if (bottle.result().accepted() && cauldron.state() == BrewCauldronState.EMPTY) {
+            finishBatch();
+        }
+        return bottle;
+    }
+
+    private void finishBatch() {
+        batch.active = null;
+        batch.tally = null;
+        batch.refundable.clear();
+        batch.waiting = "";
+        batch.version++;
     }
 
     private BrewActionResult describeState(Player player) {
@@ -536,12 +604,25 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
             return BrewActionResult.returned(notAnIngredient(itemId));
         }
         IngredientSlot selectedSlot = slot.orElseThrow();
-        IngredientBatch batch = ingredientBatch(stack, selectedSlot, itemId);
-        BrewActionResult added = cauldron.addIngredient(selectedSlot, batch);
+        if (!acceptsIngredient(selectedSlot, itemId)) {
+            return BrewActionResult.returned(BrewText.message("furnace.refused"));
+        }
+        IngredientBatch dose = ingredientBatch(stack, selectedSlot, itemId);
+        BrewActionResult added = cauldron.addIngredient(selectedSlot, dose);
         if (added.accepted()) {
+            if (batch.active == null && cauldron.state() == BrewCauldronState.RAW) {
+                batch.refundable.add(stack.copyWithCount(1));
+            }
             BrewSounds.atBlock(level, worldPosition, BrewSounds.CAULDRON_ADD);
         }
         return added;
+    }
+
+    private boolean acceptsIngredient(IngredientSlot slot, String id) {
+        if (cauldron.state() == BrewCauldronState.BREWING && batch.active == null) {
+            return true;
+        }
+        return batch.acceptsIngredient(slot, id);
     }
 
     private void addStagedIngredient() {
@@ -565,7 +646,8 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
             return false;
         }
         IngredientSlot selectedSlot = slot.orElseThrow();
-        return cauldron.ingredientProblem(selectedSlot, ingredientBatch(stack, selectedSlot, itemId)).isEmpty();
+        return acceptsIngredient(selectedSlot, itemId)
+                && cauldron.ingredientProblem(selectedSlot, ingredientBatch(stack, selectedSlot, itemId)).isEmpty();
     }
 
     @Override
@@ -725,6 +807,9 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
     protected void loadAdditional(ValueInput input) {
         super.loadAdditional(input);
         cauldron.restore(BrewCauldronSnapshots.read(input, cauldron.copperState()));
+        batch.readOrders(input.childOrEmpty("furnace_orders"));
+        batch.refundable.clear();
+        batch.restoreRefunds(input.read("refundable", ItemStack.CODEC.listOf()).orElse(List.of()));
         copperOxidationTicks = input.getLongOr("copper_oxidation_ticks", 0L);
         staged.clear();
         ContainerHelper.loadAllItems(input, staged);
@@ -735,6 +820,10 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
     protected void saveAdditional(ValueOutput output) {
         super.saveAdditional(output);
         BrewCauldronSnapshots.write(output, cauldron.snapshot());
+        batch.writeOrders(output.child("furnace_orders"));
+        if (!batch.refundable.isEmpty()) {
+            output.store("refundable", ItemStack.CODEC.listOf(), batch.refundable);
+        }
         output.putLong("copper_oxidation_ticks", copperOxidationTicks);
         ContainerHelper.saveAllItems(output, staged);
     }

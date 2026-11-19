@@ -2,16 +2,21 @@ package dev.kizuna.meridian.brewing.clienttest;
 
 import java.lang.reflect.Field;
 import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.fabricmc.fabric.api.client.gametest.v1.screenshot.TestScreenshotOptions;
 import net.minecraft.client.CameraType;
+import com.mojang.blaze3d.platform.Window;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.navigation.ScreenPosition;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
@@ -28,6 +33,10 @@ final class Stage {
     private static final boolean CLEAR_SENT_HISTORY = false;
     private static final String ONLY_PROPERTY = "meridian.brewing.clienttest.only";
     private static final String ALL_SCENES = "all";
+    /** 重载资源包最多等这么多 tick。 */
+    private static final int RELOAD_TICKS = 1200;
+    private static final int LEFT_BUTTON = 0;
+    private static final int CLICK_TICKS = 3;
     private final ClientGameTestContext context;
     private final TestSingleplayerContext world;
     private final BlockPos origin;
@@ -262,6 +271,48 @@ final class Stage {
 
     void command(String command) {
         world.getServer().runCommand(command);
+    }
+
+    void language(String code) {
+        // 和在语言设置里换语言一样：记下选择、重载资源，等重载和加载遮罩都结束再往下。
+        CompletableFuture<Void> reload = context.computeOnClient(client -> {
+            client.options.languageCode = code;
+            client.getLanguageManager().setSelected(code);
+            return client.reloadResourcePacks();
+        });
+        context.waitFor(client -> reload.isDone() && client.gui.overlay() == null, RELOAD_TICKS);
+    }
+
+    void click(ScreenPosition point) {
+        // 按界面坐标点一下鼠标左键：先把光标挪过去，下一刻按下再松开，走真实的鼠标事件。
+        hover(point);
+        context.getInput().pressMouse(LEFT_BUTTON);
+        context.waitTicks(CLICK_TICKS);
+    }
+
+    void hover(ScreenPosition point) {
+        double scale = context.computeOnClient(client -> {
+            Window window = client.getWindow();
+            return (double) window.getScreenWidth() / window.getGuiScaledWidth();
+        });
+        context.getInput().setCursorPos(point.x() * scale, point.y() * scale);
+        context.waitTick();
+    }
+
+    void clickButton(String key) {
+        // 按文字找当前画面上那颗看得见、按得动的按钮，点它的正中；找不到就是画面不对。
+        String label = Component.translatable(key).getString();
+        ScreenPosition center = context.computeOnClient(client -> {
+            for (var child : client.gui.screen().children()) {
+                if (child instanceof AbstractWidget widget && widget.visible && widget.active
+                        && widget.getMessage().getString().equals(label)) {
+                    return new ScreenPosition(widget.getX() + widget.getWidth() / 2,
+                            widget.getY() + widget.getHeight() / 2);
+                }
+            }
+            throw new AssertionError("画面上没有能按的「" + label + "」");
+        });
+        click(center);
     }
 
     void runFunction(String id) {

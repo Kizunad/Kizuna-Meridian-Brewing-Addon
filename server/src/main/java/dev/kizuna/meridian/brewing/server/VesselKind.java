@@ -22,6 +22,10 @@ public enum VesselKind {
         return batch;
     }
 
+    public boolean portable() {
+        return this == COPPER_CAULDRON || this == WITCH_CAULDRON;
+    }
+
     private final Batch batch;
     private final double convergencePerSecond;
     private final double waterCoolingDegrees;

@@ -1,0 +1,8 @@
+{
+  "screen.meridian_brewing.furnace.batch_title": "%s · %s ingredient sets, %s bottles",
+  "screen.meridian_brewing.furnace.manual": "Stirring by hand",
+  "screen.meridian_brewing.furnace.automatic": "Brewing automatically",
+  "screen.meridian_brewing.furnace.continuous": "Steady campfire",
+  "screen.meridian_brewing.furnace.late": "%s: past the best time, can still be added",
+  "screen.meridian_brewing.furnace.closed": "%s: can no longer be added"
+}

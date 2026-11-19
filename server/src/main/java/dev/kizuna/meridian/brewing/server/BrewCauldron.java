@@ -178,6 +178,19 @@ public final class BrewCauldron {
                 poured, waterUnits, vessel.waterCapacity()));
     }
 
+    /** 备料退回后只清药材，保留原有的水和温度。 */
+    public void reclaimIngredients() {
+        if (state != BrewCauldronState.RAW) {
+            throw new IllegalStateException("只能退回尚未开熬的料");
+        }
+        ingredients.clear();
+        ingredientTimes.clear();
+        recipe = null;
+        form = BrewForm.DRINK;
+        soakSeconds = 0;
+        state = BrewCauldronState.WATER;
+    }
+
     public BrewActionResult scrubWithWater() {
         if (state != BrewCauldronState.SCORCHED) {
             return BrewActionResult.returned(BrewText.message("cauldron.scrub.not_scorched"));
@@ -309,6 +322,10 @@ public final class BrewCauldron {
     }
 
     public BrewCollectionResult collectBottle(long currentGameDay) {
+        return collectBottle(currentGameDay, BrewQuality.SUPERIOR);
+    }
+
+    public BrewCollectionResult collectBottle(long currentGameDay, BrewQuality ceiling) {
         if (state == BrewCauldronState.SCORCHED) {
             return new BrewCollectionResult(BrewCollectionKind.NOTHING, Optional.empty(), 0,
                     BrewText.message("cauldron.state_blocks.scorched"));
@@ -319,7 +336,7 @@ public final class BrewCauldron {
         }
         BrewKind kind = recipe.kind();
         BrewForm collectedForm = form;
-        BrewScore score = BrewScoring.calculate(toInput(currentGameDay));
+        BrewScore score = BrewScoring.calculate(toInput(currentGameDay)).limitedTo(ceiling);
         remainingBottles--;
         waterUnits = Math.max(0, waterUnits - 1);
         int remaining = remainingBottles;

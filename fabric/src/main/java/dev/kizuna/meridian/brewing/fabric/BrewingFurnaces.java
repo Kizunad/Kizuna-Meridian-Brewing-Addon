@@ -55,28 +55,24 @@ final class BrewingFurnaces {
             if (found.check().status() != Status.FORMED) {
                 return InteractionResult.PASS;
             }
-            return FurnacePorts.of(level, found.layout()).use(viewer, hand, clicked);
+            var result = FurnacePorts.of(level, found.layout()).use(viewer, hand, clicked);
+            if (result != InteractionResult.PASS) {
+                ((FurnaceHandUse) viewer.connection).meridianBrewing$claimHand(hand);
+            }
+            return result;
         }
         if (hand != InteractionHand.MAIN_HAND) {
             return InteractionResult.PASS;
         }
         Pattern pattern = found.layout().pattern();
-        String key = "message.meridian_brewing.furnace.broken";
         if (found.check().status() == Status.FORMED) {
-            key = "message.meridian_brewing.furnace.formed";
             FurnaceBuiltTrigger.TRIGGER.trigger(viewer, pattern.tier());
+            FurnaceMenu.open(viewer, found.layout(), clicked);
         } else {
             BrewStructureMarkers.show(viewer, found.check().first());
+            var name = Component.translatable(pattern.id().toLanguageKey("structure"));
+            viewer.sendOverlayMessage(Component.translatable("message.meridian_brewing.furnace.broken", name));
         }
-        var name = Component.translatable(pattern.id().toLanguageKey("structure"));
-        var message = Component.translatable(key, name);
-        if (found.check().status() == Status.FORMED) {
-            var ports = FurnacePorts.of(level, found.layout());
-            if (!ports.batch().empty()) {
-                message.append(" · ").append(ports.describe());
-            }
-        }
-        viewer.sendOverlayMessage(message);
         return InteractionResult.SUCCESS;
     }
 

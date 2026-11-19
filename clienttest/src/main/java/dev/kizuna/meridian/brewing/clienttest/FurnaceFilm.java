@@ -17,6 +17,7 @@ final class FurnaceFilm implements AutoCloseable {
     private static FurnaceFilm active;
     private final ClientGameTestContext context;
     private final Path directory;
+    private final String prefix;
     private int captured;
     private int saved;
 
@@ -29,7 +30,13 @@ final class FurnaceFilm implements AutoCloseable {
     }
 
     FurnaceFilm(ClientGameTestContext context) {
+        this(context, "furnaces");
+    }
+
+    /** 帧文件名是「前缀_五位序号.png」，几段录像各用各的前缀。 */
+    FurnaceFilm(ClientGameTestContext context, String prefix) {
         this.context = context;
+        this.prefix = prefix;
         directory = context.computeOnClient(client -> client.gameDirectory.toPath().resolve("screenshots"));
         try {
             Files.createDirectories(directory);
@@ -47,7 +54,7 @@ final class FurnaceFilm implements AutoCloseable {
         renderer.extract(DeltaTracker.ONE, true /* renderLevel */);
         renderer.render(DeltaTracker.ONE, true /* renderLevel */);
         RenderSystem.getDevice().createCommandEncoder().submit();
-        Path file = directory.resolve(String.format(Locale.ROOT, "furnaces_%05d.png", ++captured));
+        Path file = directory.resolve(String.format(Locale.ROOT, "%s_%05d.png", prefix, ++captured));
         Screenshot.takeScreenshot(renderer.mainRenderTarget(), image -> {
             try (image) {
                 image.writeToFile(file);

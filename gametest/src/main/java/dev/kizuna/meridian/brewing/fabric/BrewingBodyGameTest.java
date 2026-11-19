@@ -416,7 +416,7 @@ public final class BrewingBodyGameTest {
         });
     }
 
-    private static void pauseAfterLogin(GameTestHelper context, ServerPlayer player, Runnable paused) {
+    static void pauseAfterLogin(GameTestHelper context, ServerPlayer player, Runnable paused) {
         // 先让登录恢复跑完再撤通道，暂停落在运行途中，而不是登录恢复那一 tick。
         context.runAfterDelay(RESUME_TICKS, () -> {
             pause(player);

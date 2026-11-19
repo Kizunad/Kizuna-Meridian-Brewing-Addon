@@ -379,7 +379,7 @@ final class BrewPlayScenes {
         log(stage, shot);
     }
 
-    private static void cast(Stage stage) {
+    static void cast(Stage stage) {
         // 主手拿木棍对着釜，经功法库公开入口起手；身体版本和式的版本从服务端取，和 GameTest 相同。
         stage.hand(MAIN_HAND, STIRRER);
         stage.settle();

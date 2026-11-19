@@ -175,7 +175,7 @@ public final class BrewingStructureGameTest {
     }
 
     @GameTest(structure = ARENA)
-    public void inspectingRimReportsStateWithoutOpeningMenu(GameTestHelper context) {
+    public void intactRimOpensMenuAndBrokenRimReportsFault(GameTestHelper context) {
         var layout = place(context, "lv2", MEDIUM, Mirror.NONE, Rotation.NONE);
         var player = BrewingTestPlayers.create(context);
         var level = context.getLevel();
@@ -184,6 +184,8 @@ public final class BrewingStructureGameTest {
         player.setPos(Vec3.atCenterOf(rim.above()));
         player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
         player.gameMode.useItemOn(player, level, player.getMainHandItem(), InteractionHand.MAIN_HAND, hit);
+        context.assertTrue(player.containerMenu instanceof FurnaceMenu, "成形后没有打开炉窗");
+        player.closeContainer();
         level.setBlockAndUpdate(first(layout, Role.LIQUID), Blocks.GLASS.defaultBlockState());
         player.gameMode.useItemOn(player, level, player.getMainHandItem(), InteractionHand.MAIN_HAND, hit);
         context.runAfterDelay(1, () -> {
@@ -191,8 +193,8 @@ public final class BrewingStructureGameTest {
             var messages = BrewingTestPlayers.overlays(player).stream().map(sent -> sent.text()).toList();
             var formed = Component.translatable("message.meridian_brewing.furnace.formed", name);
             var broken = Component.translatable("message.meridian_brewing.furnace.broken", name);
-            context.assertTrue(messages.contains(formed) && messages.contains(broken),
-                    "动作栏缺少带二阶药炉蓝图名的成形或缺损提示 " + messages);
+            context.assertTrue(!messages.contains(formed) && messages.contains(broken),
+                    "动作栏应只报带二阶蓝图名的缺损提示 " + messages);
             context.assertTrue(player.containerMenu == player.inventoryMenu, "认炉时打开了菜单");
             BrewingTestPlayers.close(player);
             context.succeed();

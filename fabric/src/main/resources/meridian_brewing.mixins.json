@@ -4,6 +4,8 @@
   "package": "dev.kizuna.meridian.brewing.fabric.mixin",
   "compatibilityLevel": "JAVA_25",
   "mixins": [
+    "BrewUseFlagsAccessor",
+    "FurnaceHandUseMixin",
     "PotionContentsBrewMixin",
     "ThrownSplashPotionBrewMixin",
     "BrewingStandBrewMixin",

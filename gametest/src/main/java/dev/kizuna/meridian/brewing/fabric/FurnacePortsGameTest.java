@@ -12,6 +12,7 @@ import dev.kizuna.meridian.brewing.server.BrewCauldronState;
 import dev.kizuna.meridian.brewing.server.BrewStructure;
 import dev.kizuna.meridian.brewing.server.HeatSourceKind;
 import dev.kizuna.meridian.brewing.server.IngredientSlot;
+import dev.kizuna.meridian.brewing.server.VesselKind;
 import dev.kizuna.meridian.brewing.test.BrewingTestPlayers;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -21,6 +22,9 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.protocol.game.ServerboundClientTickEndPacket;
+import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
+import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
@@ -51,6 +55,121 @@ public final class FurnacePortsGameTest {
     private static final int HIGH_FIRE = 4;
     private static final int CHUNK_WIDTH = 16;
     private static final BrewStructure HEAT = BrewStructure.built(HeatSourceKind.SUN_STOVE_2);
+    private static final float STRAIGHT_DOWN = 90;
+    private static final int BUCKET_UNITS = 3;
+
+    @GameTest(structure = ARENA)
+    public void creativeHandoffsConsumeTheFollowingUse(GameTestHelper context) {
+        var layout = green(context);
+        var player = BrewingTestPlayers.create(context);
+        player.setGameMode(GameType.CREATIVE);
+        var clicks = new Clicks(player);
+        var rim = first(layout, Role.RIM);
+        var ports = FurnacePorts.of(context.getLevel(), layout);
+        var pot = ports.batch().cauldron;
+        var bottle = PotionContents.createItemStack(Items.POTION, Potions.WATER);
+        clicks.offer(rim, new ItemStack(Items.WATER_BUCKET));
+        context.assertTrue(pot.waterUnits() == BUCKET_UNITS, "创造水桶没有交到炉里");
+        var level = player.level();
+        context.assertTrue(level.getFluidState(rim).isEmpty() && level.getFluidState(rim.above()).isEmpty(),
+                "创造水桶交接后仍执行了原版倒水");
+        context.assertTrue(layout.check(level).status() == FurnaceLayout.Status.FORMED, "倒水后炉体损坏");
+        clicks.offer(rim, bottle);
+        context.assertTrue(pot.waterUnits() == BUCKET_UNITS + 1 && !player.isUsingItem(), "注入水瓶后又开始喝水");
+        var fire = first(layout, Role.FIRES);
+        var above = level.getBlockState(fire.above());
+        clicks.offer(fire, new ItemStack(Items.OAK_LOG));
+        context.assertTrue(ports.batch().fuelSeconds() == GREEN_FUEL && level.getBlockState(fire.above()) == above,
+                "创造原木没有只添一次燃料");
+        clicks.offer(rim, primary(GREEN_SETS));
+        clicks.offer(rim, new ItemStack(Items.GLOWSTONE_DUST, GREEN_SETS));
+        context.assertTrue(pot.startBrew(HEAT).accepted(), "主料和底料未交齐");
+        var recipe = pot.recipe().orElseThrow();
+        pot.tick(recipe.ingredients().accessoryWindow().startSeconds(), HEAT);
+        clicks.offer(rim, new ItemStack(Items.HONEY_BOTTLE, GREEN_SETS));
+        context.assertTrue(pot.needed(IngredientSlot.ACCESSORY) == 0 && !player.isUsingItem(), "投蜂蜜后又开始喝蜂蜜");
+        pot.tick(BrewCauldron.BREW_SECONDS, HEAT);
+        int before = pot.remainingBottles();
+        clicks.offer(rim, new ItemStack(Items.GLASS_BOTTLE));
+        context.assertTrue(pot.remainingBottles() == before - 1 && player.getInventory().countItem(Items.POTION) == 1
+                && player.getMainHandItem().is(Items.GLASS_BOTTLE), "创造空瓶没有只取一瓶药");
+        BrewingTestPlayers.close(player);
+        context.succeed();
+    }
+
+    @GameTest(structure = ARENA)
+    public void separateCreativeClicksKeepVanillaUse(GameTestHelper context) {
+        var layout = green(context);
+        var player = BrewingTestPlayers.create(context);
+        player.setGameMode(GameType.CREATIVE);
+        var clicks = new Clicks(player);
+        var rim = first(layout, Role.RIM);
+        clicks.block(rim, new ItemStack(Items.WATER_BUCKET));
+        player.connection.handleClientTickEnd(ServerboundClientTickEndPacket.INSTANCE);
+        clicks.item();
+        var level = player.level();
+        context.assertTrue(!level.getFluidState(rim).isEmpty() || !level.getFluidState(rim.above()).isEmpty(),
+                "下一次独立使用水桶被炉口拦截或射线没有命中锅沿");
+        var plain = context.absolutePos(BlockPos.ZERO).above();
+        level.setBlockAndUpdate(plain, Blocks.STONE.defaultBlockState());
+        clicks.offer(plain, new ItemStack(Items.WATER_BUCKET));
+        context.assertTrue(!level.getFluidState(plain.above()).isEmpty(), "普通方块放行后没有倒水");
+        BrewingTestPlayers.close(player);
+        context.succeed();
+    }
+
+    @GameTest
+    public void portableCreativeBucketsFinishAtTheBlock(GameTestHelper context) {
+        var player = BrewingTestPlayers.create(context);
+        player.setGameMode(GameType.CREATIVE);
+        var level = player.level();
+        var pos = context.absolutePos(BlockPos.ZERO.above());
+        player.setPos(Vec3.atCenterOf(pos.above()));
+        for (var block : List.of(BrewingBlocks.COPPER_CAULDRON, BrewingBlocks.WITCH_CAULDRON)) {
+            level.setBlockAndUpdate(pos, block.defaultBlockState());
+            var stack = new ItemStack(Items.WATER_BUCKET);
+            player.setItemInHand(InteractionHand.MAIN_HAND, stack);
+            var hit = new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false /* inside */);
+            var result = player.gameMode.useItemOn(player, level, stack, InteractionHand.MAIN_HAND, hit);
+            var entity = (BrewCauldronBlockEntity) level.getBlockEntity(pos);
+            var kind = block == BrewingBlocks.COPPER_CAULDRON ? VesselKind.COPPER_CAULDRON : VesselKind.WITCH_CAULDRON;
+            context.assertTrue(result.consumesAction() && entity.cauldron().waterUnits() == kind.waterCapacity()
+                    && stack.is(Items.WATER_BUCKET) && level.getFluidState(pos.above()).isEmpty(),
+                    "创造水桶未在便携锅的方块交互完成");
+        }
+        BrewingTestPlayers.close(player);
+        context.succeed();
+    }
+
+    private static final class Clicks {
+        private final ServerPlayer player;
+        private int sequence;
+
+        Clicks(ServerPlayer player) {
+            this.player = player;
+            BrewingTestPlayers.acceptLoginPosition(player);
+        }
+
+        void offer(BlockPos pos, ItemStack stack) {
+            block(pos, stack);
+            item();
+            player.connection.handleClientTickEnd(ServerboundClientTickEndPacket.INSTANCE);
+        }
+
+        void block(BlockPos pos, ItemStack stack) {
+            player.setPos(Vec3.atCenterOf(pos.above()));
+            player.setXRot(STRAIGHT_DOWN);
+            player.setItemInHand(InteractionHand.MAIN_HAND, stack);
+            var hit = new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false /* inside */);
+            var packet = new ServerboundUseItemOnPacket(InteractionHand.MAIN_HAND, hit, ++sequence);
+            player.connection.handleUseItemOn(packet);
+        }
+
+        void item() {
+            var packet = new ServerboundUseItemPacket(InteractionHand.MAIN_HAND, ++sequence, 0, STRAIGHT_DOWN);
+            player.connection.handleUseItem(packet);
+        }
+    }
 
     @GameTest(structure = ARENA)
     public void acceptsOnlyNeededPartOfStack(GameTestHelper context) {

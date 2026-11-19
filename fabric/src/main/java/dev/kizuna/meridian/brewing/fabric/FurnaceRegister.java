@@ -9,6 +9,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.saveddata.SavedData;
@@ -42,12 +43,15 @@ final class FurnaceRegister extends SavedData {
     private record Stock(Site site, FurnaceBatch batch) {
         static final Codec<Stock> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Site.CODEC.fieldOf("site").forGetter(Stock::site),
-                CompoundTag.CODEC.fieldOf("batch").forGetter(stock -> stock.batch().save())
+                CompoundTag.CODEC.fieldOf("batch").forGetter(stock -> stock.batch().save()),
+                ItemStack.CODEC.listOf().optionalFieldOf("refundable", List.of())
+                        .forGetter(stock -> stock.batch().refundable)
         ).apply(instance, Stock::read));
 
-        private static Stock read(Site site, CompoundTag tag) {
+        private static Stock read(Site site, CompoundTag tag, List<ItemStack> refundable) {
             var batch = new FurnaceBatch(site.tier());
             batch.load(tag);
+            batch.restoreRefunds(refundable);
             return new Stock(site, batch);
         }
     }
