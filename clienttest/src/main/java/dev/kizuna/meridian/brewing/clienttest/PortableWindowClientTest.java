@@ -135,7 +135,7 @@ final class PortableWindowScene {
         stage.click(FurnaceWindowClientTest.recipeCenter(play, RECIPE));
         await(clock -> clock.getDosesCount() > 0);
         shot("03_selected");
-        demo("自动", "炉子自己开熬");
+        demo("自动", "水、火、料齐备：自动开始熬制");
         close();
         use("minecraft:water_bucket");
         use("minecraft:iron_nugget");
@@ -152,7 +152,7 @@ final class PortableWindowScene {
         use("minecraft:quartz");
         open();
         await(clock -> clock.getDosesList().stream().anyMatch(dose -> dose.getMissed() && !dose.getLateAllowed()));
-        warning("已经不能投", "06_closed");
+        warning("：已错过，无法加入", "06_closed");
         await(clock -> clock.getBottles() == vessel.batch().bottles());
         shot("07_brewed");
         close();
@@ -210,9 +210,9 @@ final class PortableWindowScene {
         open();
         BrewPlayScenes.cast(stage);
         await(clock -> clock.getManual() && clock.getPhase().equals("BREWING"));
-        demo("手熬", "施熬药式");
+        demo("手熬", "水、火、料齐备：施放熬药式开始熬制");
         await(clock -> clock.getDosesList().stream().anyMatch(dose -> dose.getLateAllowed()));
-        warning("错过最佳时机，仍可晚投", "09_late_allowed");
+        warning("：已过最佳时机，仍可加入（品质降低）", "09_late_allowed");
         close();
     }
 

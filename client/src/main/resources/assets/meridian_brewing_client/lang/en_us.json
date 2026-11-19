@@ -3,6 +3,6 @@
   "screen.meridian_brewing.furnace.manual": "Stirring by hand",
   "screen.meridian_brewing.furnace.automatic": "Brewing automatically",
   "screen.meridian_brewing.furnace.continuous": "Steady campfire",
-  "screen.meridian_brewing.furnace.late": "%s: past the best time, can still be added",
-  "screen.meridian_brewing.furnace.closed": "%s: can no longer be added"
+  "screen.meridian_brewing.furnace.late": "%s: can still be added after the ideal time (lower quality)",
+  "screen.meridian_brewing.furnace.closed": "%s: timing window missed, cannot be added"
 }

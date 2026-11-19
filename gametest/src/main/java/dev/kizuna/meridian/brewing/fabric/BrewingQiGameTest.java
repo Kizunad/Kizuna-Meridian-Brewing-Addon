@@ -56,7 +56,8 @@ public final class BrewingQiGameTest {
     private static final double LOW_SELF = 1.0;
     private static final double DRAINED_SELF = 0.1;
     private static final double WITCH_BREW = 7.8;
-    private static final String SHORT_AT_START = "真元不够起熬：这锅要 7.8 元，环境约能给 0.0，自身有 1.0，还缺 6.8";
+    private static final String SHORT_AT_START =
+            "真元不足，无法开始熬制：需要 7.8，环境约 0.0，自身 1.0，缺 6.8";
 
     @GameTest(environment = AMBIENT_BATCH, maxTicks = TIMEOUT, structure = BrewSites.LV2_SITE)
     public void ambientPaysWhileRegionHasRate(GameTestHelper context) {

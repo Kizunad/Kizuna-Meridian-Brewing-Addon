@@ -99,7 +99,8 @@ public final class RecipeBookClientTest implements FabricClientGameTest {
         List<String> sentences = pane(play, pane -> pane.sentences().stream().map(Component::getString).toList());
         sentences.forEach(sentence -> LOGGER.info("[药方书] 步骤：{}", sentence));
         expect(sentences.size() == HAND_STEPS, "聚气汤手熬应有十步，实际 " + sentences.size());
-        expect(sentences.get(START_STEP).contains("施熬药式"), "独立演示的起熬步骤应为手熬");
+        String start = sentences.get(START_STEP);
+        expect(start.equals("水、火、料齐备：施放熬药式开始熬制，阳火调至 4 档"), "药方书的起熬步骤不符：" + start);
         expect(pane(play, BrewStepsPane::realStep) == NO_REAL_STEP, "独立演示不该有炉里的进度");
         expect(pane(play, pane -> pane.timeline().getMenu()) == 0, "药方书的步骤不该带菜单号");
         play.context().waitFor(client -> steps(client).pane().demoStep() == START_STEP,

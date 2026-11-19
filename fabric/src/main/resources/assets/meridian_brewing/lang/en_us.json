@@ -99,7 +99,7 @@
   "message.meridian_brewing.cauldron.scrub.done": "Cauldron scrubbed clean",
   "message.meridian_brewing.cauldron.primary.unknown": "%s is not the main herb of any recipe",
   "message.meridian_brewing.cauldron.ingredient.added": "Added %s: %s",
-  "message.meridian_brewing.cauldron.ingredient.slot_taken": "The %s is already in",
+  "message.meridian_brewing.cauldron.ingredient.slot_taken": "More %s than required",
   "message.meridian_brewing.cauldron.ingredient.brewing_only_late": "Already brewing; the %s can no longer go in. Only accessory and catalyst go in now",
   "message.meridian_brewing.cauldron.ingredient.late_needs_brewing": "The %s goes in after brewing starts",
   "message.meridian_brewing.cauldron.ingredient.wrong": "%s is not an ingredient of %s",
