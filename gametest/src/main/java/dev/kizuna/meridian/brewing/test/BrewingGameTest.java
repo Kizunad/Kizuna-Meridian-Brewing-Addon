@@ -429,7 +429,7 @@ public final class BrewingGameTest {
         context.assertTrue(!player.getEffect(bitterEffect).isVisible() && player.getEffect(bitterEffect).showIcon(),
                 "药效要不出粒子、有图标");
 
-        var target = context.spawn(EntityTypes.ZOMBIE,
+        var target = context.spawn(EntityTypes.COW,
                 new BlockPos(STRUCTURE_X, STRUCTURE_Y, STRUCTURE_Z));
         float initialHealth = target.getHealth();
         ItemStack depletion = BrewItemStacks.create(
@@ -570,10 +570,10 @@ public final class BrewingGameTest {
         BlockPos origin = context.absolutePos(new BlockPos(STRUCTURE_X, STRUCTURE_Y, STRUCTURE_Z));
         ItemStack brew = BrewItemStacks.create(BrewKind.DEPLETION, BrewQuality.POOR, BrewUse.SPLASH);
         level.setBlockAndUpdate(origin, Blocks.GRASS_BLOCK.defaultBlockState());
-        var zombie = context.spawn(EntityTypes.ZOMBIE, new BlockPos(STRUCTURE_X, STRUCTURE_Y + 1, STRUCTURE_Z));
+        var cow = context.spawn(EntityTypes.COW, new BlockPos(STRUCTURE_X, STRUCTURE_Y + 1, STRUCTURE_Z));
         boolean previousMobGriefing = level.getGameRules().get(GameRules.MOB_GRIEFING);
         level.getGameRules().set(GameRules.MOB_GRIEFING, false /* mobGriefing */, level.getServer());
-        BrewingRuntime.splash(level, brew, Vec3.atCenterOf(origin), zombie);
+        BrewingRuntime.splash(level, brew, Vec3.atCenterOf(origin), cow);
         context.runAfterDelay(WITHERING_OBSERVE_TICKS, () -> {
             try {
                 context.assertTrue(level.getBlockState(origin).is(Blocks.GRASS_BLOCK),
