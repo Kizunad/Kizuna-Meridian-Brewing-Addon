@@ -18,8 +18,8 @@ import org.slf4j.LoggerFactory;
 
 /**
  * 给人看的一段连续帧（每个客户端刻一帧，每秒 20 帧）：飞到一阶炉的锅沿，空手点开炼药窗口，选苦黄膏；关窗到炉底添炭、
- * 用锹把火压到两档，回锅沿添两桶水、下干苔和荧石粉；再开窗看它自己开熬，点「看炼法」看一会儿再返回；
- * 到时窗投蜂蜜瓶和蛛网，开着窗等它熬成，拿玻璃瓶在锅口收六瓶药。最后翻开苦黄膏的药方，翻到末页点「看炼法」，
+ * 用锹把火压到两档，回锅沿添两桶水、下干苔和荧石粉；再开窗看它自己开熬，点「炼法」看一会儿再返回；
+ * 到时窗投蜂蜜瓶和蛛网，开着窗等它熬成，拿玻璃瓶在锅口收六瓶药。最后翻开苦黄膏的药方，翻到末页点「炼法」，
  * 看演示放几步再返回书页。
  *
  * <p>开窗、选方、添水、投料、加炭、压火、收药、翻书、点按钮全是真实的右键、按键和鼠标点击，玩家是生存模式、
@@ -146,7 +146,7 @@ final class FurnaceWindowFilm {
     }
 
     private void watchStart() {
-        // 空手再开窗：炉子自己开熬，进度在走；点看炼法看一会儿，返回，关窗。
+        // 空手再开窗：炉子自己开熬，进度在走；点炼法看一会儿，返回，关窗。
         hold(EMPTY);
         FurnaceWindowClientTest.open(play, FurnacesClientTest.SMALL);
         play.stage().pause(WATCH_TICKS);
@@ -156,7 +156,7 @@ final class FurnaceWindowFilm {
                 && screen.steps().isPresent(), TIMEOUT);
         play.context().getInput().setCursorPos(0, 0);
         play.stage().pause(STEPS_TICKS);
-        cut("看炼法");
+        cut("炼法");
         play.stage().clickButton(KEY + "steps.back");
         play.stage().pause(SWAP_TICKS);
         cut("返回炉窗");
@@ -196,7 +196,7 @@ final class FurnaceWindowFilm {
     }
 
     private void book() {
-        // 抬头翻开苦黄膏的药方，一页页翻到末页，点看炼法，看演示放几步，返回书页。
+        // 抬头翻开苦黄膏的药方，一页页翻到末页，点炼法，看演示放几步，返回书页。
         Vec3 eye = play.stage().at(FurnacesClientTest.SMALL.nearEye());
         play.stage().command("clear @a");
         fly(eye, eye, Vec3.atCenterOf(rim), eye.add(SKY_OFFSET));
@@ -215,7 +215,7 @@ final class FurnaceWindowFilm {
         play.context().waitForScreen(BrewStepsScreen.class);
         play.context().getInput().setCursorPos(0, 0);
         play.stage().pause(BrewStepsPane.STEP_TICKS * BOOK_DEMO_STEPS);
-        cut("书里看炼法");
+        cut("书中炼法");
         play.stage().clickButton(KEY + "steps.back");
         play.context().waitForScreen(RecipeBookScreen.class);
         play.context().getInput().setCursorPos(0, 0);

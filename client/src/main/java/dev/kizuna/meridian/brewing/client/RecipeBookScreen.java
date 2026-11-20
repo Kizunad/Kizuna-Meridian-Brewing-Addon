@@ -9,7 +9,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 
 /**
- * 药方卷轴翻开的书：原版书本界面，只在最后一页多一颗「看炼法」。
+ * 药方卷轴翻开的书：原版书本界面，只在最后一页多一颗「炼法」。
  *
  * <p>按钮摆在翻页箭头那一排、正文最后一行的下方：末页没有「下一页」箭头，那块地方空着，不压正文；
  * 只有一页的药方翻开就在末页，直接看得到。原版不公开当前页码，这里跟着翻页、跳页各记一份，只用来决定按钮显不显示。</p>
@@ -103,7 +103,7 @@ public final class RecipeBookScreen extends BookViewScreen {
         return page;
     }
 
-    /** 这一页有没有「看炼法」。 */
+    /** 这一页有没有「炼法」。 */
     public boolean offersSteps() {
         return stepsButton.visible;
     }

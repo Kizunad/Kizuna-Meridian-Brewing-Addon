@@ -16,7 +16,7 @@ import net.minecraft.network.chat.Style;
 
 /**
  * 收到「翻开哪一篇」后，按本机语言取出正文，排成原版书页，用原版的书本界面翻看；药方的书在末页多一颗
- * 「看炼法」（见 {@link RecipeBookScreen}）。
+ * 「炼法」（见 {@link RecipeBookScreen}）。
  *
  * <p>页宽、页高和原版 {@link BookViewScreen} 一样：每页 114 像素宽、128 像素高，按字体行高算能放几行。
  * 第一页先写加粗的篇名（太长时按加粗字宽折成几行），空一行再接正文；段落之间的空行落到页首时不占行；
@@ -56,7 +56,7 @@ final class BrewLoreBook {
         int linesPerPage = PAGE_HEIGHT / client.font.lineHeight;
         List<Component> pages = paginate(lines, linesPerPage);
         BookViewScreen.BookAccess book = new BookViewScreen.BookAccess(pages);
-        // 药方的书在末页多一颗「看炼法」；总纲不是哪一张方，照旧用原版界面。
+        // 药方的书在末页多一颗「炼法」；总纲不是哪一张方，照旧用原版界面。
         if (RecipeKnowledge.kind(document).isPresent()) {
             client.gui.setScreen(new RecipeBookScreen(book, document));
         } else {

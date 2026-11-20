@@ -26,12 +26,12 @@ import net.minecraft.world.entity.player.Inventory;
 
 /**
  * 炼药窗口：空手点成形的大炉打开。左边列出自己读过、这座炉能炼的药方和饮用 / 泼洒两个剂型钮，
- * 右边是炉子的状态（见 {@link FurnaceStatus}），右下角「取回原料」和「看炼法」。没有物品格，也不画背包。
+ * 右边是炉子的状态（见 {@link FurnaceStatus}），右下角「取回原料」和「炼法」。没有物品格，也不画背包。
  *
  * <p>内容全部来自服务端发的 {@code FurnaceView}，每次变化整份换掉，画面不往前推算。点药方、换剂型、取回原料、
- * 看炼法都只发请求，带上手里这一份的选方版本号；版本过期时服务端只回一份新的状态，画面跟着刷新。</p>
+ * 炼法都只发请求，带上手里这一份的选方版本号；版本过期时服务端只回一份新的状态，画面跟着刷新。</p>
  *
- * <p>「看炼法」把窗口换成步骤演示（见 {@link BrewStepsPane}），菜单照旧开着，「返回」或 Esc 切回来。
+ * <p>「炼法」把窗口换成步骤演示（见 {@link BrewStepsPane}），菜单照旧开着，「返回」或 Esc 切回来。
  * 演示拿到以后，选方版本或批号一变就向服务端再要一份。</p>
  */
 public final class FurnaceScreen extends AbstractContainerScreen<FurnaceMenu> {

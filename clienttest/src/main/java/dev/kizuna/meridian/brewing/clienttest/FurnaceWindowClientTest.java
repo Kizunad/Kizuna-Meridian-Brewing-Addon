@@ -121,7 +121,7 @@ public final class FurnaceWindowClientTest implements FabricClientGameTest {
         var missing = List.of(text(KEY + "furnace.missing.water"), text(KEY + "furnace.missing.fire"),
                 text(KEY + "furnace.missing.recipe"));
         expect(shown.missing().equals(missing), "空炉应缺水、火和药方 " + shown);
-        expect(!shown.reclaim() && !shown.steps(), "空炉不该有取回原料和看炼法 " + shown);
+        expect(!shown.reclaim() && !shown.steps(), "空炉不该有取回原料和炼法 " + shown);
         shoot(play, "window_01_empty");
     }
 
@@ -141,7 +141,7 @@ public final class FurnaceWindowClientTest implements FabricClientGameTest {
         String fire = text(KEY + "furnace.missing.fire");
         String glowstone = Items.GLOWSTONE_DUST.getDefaultInstance().getHoverName().getString();
         String honey = Items.HONEY_BOTTLE.getDefaultInstance().getHoverName().getString();
-        expect(shown.doses() == 4 && shown.steps(), "备料中应有四味药和看炼法 " + shown);
+        expect(shown.doses() == 4 && shown.steps(), "备料中应有四味药和炼法 " + shown);
         expect(shown.missing().contains(fire) && shown.missing().contains(glowstone), "应缺火和底料 " + shown);
         expect(!shown.missing().contains(honey), "还没开熬不该催辅料 " + shown);
         play.stage().hover(recipeCenter(play, QI_GATHER));
@@ -192,7 +192,7 @@ public final class FurnaceWindowClientTest implements FabricClientGameTest {
     }
 
     private static void steps(Play play) {
-        // 看炼法：窗口换成步骤，炉里真正走到辅料那一步，演示游标从头自己放；暂停、重播、点行跳步、返回和 Esc 都试一遍。
+        // 炼法：窗口换成步骤，炉里真正走到辅料那一步，演示游标从头自己放；暂停、重播、点行跳步、返回和 Esc 都试一遍。
         play.stage().clickButton(KEY + "furnace.steps");
         play.context().waitFor(client -> screen(client).steps().isPresent(), ACTION_TIMEOUT);
         expect(pane(play, pane -> pane.sentences().size()) == DRINK_STEPS, "饮用苦黄膏应有十步");

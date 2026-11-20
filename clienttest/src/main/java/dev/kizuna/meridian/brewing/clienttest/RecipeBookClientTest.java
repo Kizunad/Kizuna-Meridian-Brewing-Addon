@@ -20,7 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 药方书末页的「看炼法」和它打开的独立演示，窗口 1280×720、界面比例 2：聚气汤药方的首页没有按钮、末页有；
+ * 药方书末页的「炼法」和它打开的独立演示，窗口 1280×720、界面比例 2：聚气汤药方的首页没有按钮、末页有；
  * 往回翻一页按钮收起、再翻回来又出现；点按钮打开演示（没有炉子，只有演示游标），返回还是同一本书的同一页；
  * 《熬药总纲》用原版界面、翻到末页也没有这颗按钮；换一种只排得出一页的语言，翻开就看得到按钮。
  *
@@ -73,12 +73,12 @@ public final class RecipeBookClientTest implements FabricClientGameTest {
     private static int lastPage(Play play) {
         // 多页的药方：首页没有按钮；翻到末页出现；翻回上一页收起，再翻过去又出现。返回末页的页码。
         read(play, RECIPE, RecipeBookScreen.class);
-        expect(page(play) == 0 && !offered(play), "多页药方的首页不该有看炼法");
+        expect(page(play) == 0 && !offered(play), "多页药方的首页不该有炼法");
         play.stage().shoot("book_01_first_page");
         play.context().runOnClient(client -> book(client).setPage(LAST_PAGE));
         play.stage().settle();
         int last = page(play);
-        expect(last > 0 && offered(play), "末页没有看炼法，页码 " + last);
+        expect(last > 0 && offered(play), "末页没有炼法，页码 " + last);
         expect(vanillaPage(play) == last, "记的页码和原版不一致");
         play.stage().shoot("book_02_last_page");
         play.context().getInput().pressKey(InputConstants.KEY_PAGEUP);
@@ -92,7 +92,7 @@ public final class RecipeBookClientTest implements FabricClientGameTest {
     }
 
     private static void demo(Play play, int last) {
-        // 点看炼法：服务端回一套手熬步骤，打开独立演示，没有炉里的进度；演示放到起熬那一步时拍一张。返回还是原来那本书、那一页。
+        // 点炼法：服务端回一套手熬步骤，打开独立演示，没有炉里的进度；演示放到起熬那一步时拍一张。返回还是原来那本书、那一页。
         Screen book = play.context().computeOnClient(client -> client.gui.screen());
         play.stage().clickButton(STEPS);
         play.context().waitForScreen(BrewStepsScreen.class);
@@ -119,7 +119,7 @@ public final class RecipeBookClientTest implements FabricClientGameTest {
     }
 
     private static void manual(Play play) {
-        // 总纲不是哪一张方：用原版书本界面，翻到末页也没有看炼法。
+        // 总纲不是哪一张方：用原版书本界面，翻到末页也没有炼法。
         read(play, MANUAL, BookViewScreen.class);
         play.context().runOnClient(client -> ((BookViewScreen) client.gui.screen()).setPage(LAST_PAGE));
         play.stage().settle();
@@ -127,7 +127,7 @@ public final class RecipeBookClientTest implements FabricClientGameTest {
         boolean plain = play.context().computeOnClient(client -> client.gui.screen().getClass() == BookViewScreen.class
                 && client.gui.screen().children().stream().noneMatch(child -> child instanceof AbstractWidget widget
                 && widget.getMessage().getString().equals(label)));
-        expect(plain, "总纲不该出现看炼法");
+        expect(plain, "总纲不该出现炼法");
         play.stage().shoot("book_05_manual_last");
         close(play);
     }
@@ -136,7 +136,7 @@ public final class RecipeBookClientTest implements FabricClientGameTest {
         // 换成正文只有两三行的测试语言：这张方只排得出一页，翻开就在末页，按钮直接看得到，也点得开。
         play.stage().language(SINGLE_PAGE);
         read(play, RECIPE, RecipeBookScreen.class);
-        expect(page(play) == 0 && offered(play), "只有一页的药方翻开就该有看炼法");
+        expect(page(play) == 0 && offered(play), "只有一页的药方翻开就该有炼法");
         play.stage().shoot("book_06_single_page");
         play.stage().clickButton(STEPS);
         play.context().waitForScreen(BrewStepsScreen.class);

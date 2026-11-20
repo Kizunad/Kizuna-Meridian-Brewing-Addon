@@ -8,7 +8,7 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
 /**
- * 药方书末页「看炼法」打开的独立演示：没有炉子，只有本机的演示游标，画法和炉窗里的步骤视图是同一套
+ * 药方书末页「炼法」打开的独立演示：没有炉子，只有本机的演示游标，画法和炉窗里的步骤视图是同一套
  * （见 {@link BrewStepsPane}）。「返回」或 Esc 回到来时的那本书，书还停在原来那一页。
  */
 public final class BrewStepsScreen extends Screen {
