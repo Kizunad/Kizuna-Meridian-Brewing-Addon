@@ -487,6 +487,11 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
         return stack.is(Items.POTION) && contents != null && contents.is(Potions.WATER);
     }
 
+    static boolean hasReturnedContainer(ItemStack stack) {
+        return isWaterBottle(stack) || stack.is(Items.HONEY_BOTTLE) || stack.is(Items.DRAGON_BREATH)
+                || stack.getItem().getCraftingRemainder() != null;
+    }
+
     private BrewActionResult useWaterBucket() {
         if (cauldron.state() != BrewCauldronState.SCORCHED) {
             return cauldron.addWater(WATER_BUCKET_UNITS);
@@ -513,17 +518,22 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
             return;
         }
         // 水瓶、蜂蜜瓶、龙息用完还一个玻璃瓶；水瓶在原版没有合成剩余物，单独还。
-        ItemStack remainder = ItemStack.EMPTY;
-        ItemStackTemplate craftingRemainder = stack.getItem().getCraftingRemainder();
-        if (isWaterBottle(stack)) {
-            remainder = new ItemStack(Items.GLASS_BOTTLE);
-        } else if (craftingRemainder != null) {
-            remainder = craftingRemainder.create();
-        }
+        ItemStack remainder = returnedContainer(stack);
         stack.shrink(1);
         if (!remainder.isEmpty()) {
             BrewingItemReturns.giveOrDrop(player, remainder);
         }
+    }
+
+    private static ItemStack returnedContainer(ItemStack stack) {
+        if (isWaterBottle(stack) || stack.is(Items.HONEY_BOTTLE) || stack.is(Items.DRAGON_BREATH)) {
+            return new ItemStack(Items.GLASS_BOTTLE);
+        }
+        ItemStackTemplate craftingRemainder = stack.getItem().getCraftingRemainder();
+        if (craftingRemainder == null) {
+            return ItemStack.EMPTY;
+        }
+        return craftingRemainder.create();
     }
 
     /**
@@ -611,7 +621,7 @@ public final class BrewCauldronBlockEntity extends BlockEntity implements Worldl
         BrewActionResult added = cauldron.addIngredient(selectedSlot, dose);
         if (added.accepted()) {
             if (batch.active == null && cauldron.state() == BrewCauldronState.RAW) {
-                batch.refundable.add(stack.copyWithCount(1));
+                batch.addRefundableStack(stack.copyWithCount(1));
             }
             BrewSounds.atBlock(level, worldPosition, BrewSounds.CAULDRON_ADD);
         }

@@ -40,16 +40,21 @@ final class FurnaceCooking {
                 return;
             }
         }
-        var player = ports.level().getServer().getPlayerList().getPlayer(order.owner());
-        if (!present(ports, player) || !BrewRecipeBook.lookup(player).knows(order.kind())) {
+        if (!payerReady(ports, order)) {
             batch.waiting = "payer";
             return;
         }
+        var player = ports.level().getServer().getPlayerList().getPlayer(order.owner());
         if (pot.state() == BrewCauldronState.RAW) {
             start(ports, heat, order, player);
         } else {
             payAndAdvance(ports, heat, order, player);
         }
+    }
+
+    static boolean payerReady(BrewStation ports, FurnaceOrder order) {
+        var player = ports.level().getServer().getPlayerList().getPlayer(order.owner());
+        return present(ports, player) && BrewRecipeBook.lookup(player).knows(order.kind());
     }
 
     private static boolean present(BrewStation ports, ServerPlayer player) {

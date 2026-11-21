@@ -95,7 +95,11 @@ final class FurnaceReadout {
         if (!batch.waiting.isEmpty()) {
             clock.addMissing(batch.waiting);
         }
-        clock.setReclaimable(actual != null && batch.active == null && pot.state() == BrewCauldronState.RAW);
+        boolean rawBatch = batch.active == null && pot.state() == BrewCauldronState.RAW;
+        boolean abandonedBatch = batch.active != null
+                && (pot.state() == BrewCauldronState.RAW || pot.state() == BrewCauldronState.BREWING)
+                && !FurnaceCooking.payerReady(ports, batch.active);
+        clock.setReclaimable(actual != null && (rawBatch || abandonedBatch));
         if (water == 0) {
             clock.addMissing("water");
         }

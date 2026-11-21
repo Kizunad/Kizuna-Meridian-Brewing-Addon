@@ -124,6 +124,9 @@ public final class FurnaceMenu extends AbstractContainerMenu {
         } else if (request.hasReclaim() && request.getReclaim()) {
             var kind = batch.cauldron.recipe();
             if (kind.isPresent() && BrewRecipeBook.lookup(viewer).knows(kind.orElseThrow().kind())) {
+                if (batch.active != null && !FurnaceCooking.payerReady(ports, batch.active)) {
+                    batch.abandonAutomatic();
+                }
                 batch.reclaim(viewer);
             }
         }

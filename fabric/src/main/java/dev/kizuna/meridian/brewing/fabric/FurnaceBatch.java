@@ -1,5 +1,6 @@
 package dev.kizuna.meridian.brewing.fabric;
 
+import dev.kizuna.meridian.brewing.server.BrewActionResult;
 import dev.kizuna.meridian.brewing.server.BrewCauldron;
 import dev.kizuna.meridian.brewing.server.BrewCauldronState;
 import dev.kizuna.meridian.brewing.server.BrewForm;
@@ -89,19 +90,59 @@ final class FurnaceBatch {
         return true;
     }
 
+    void abandonAutomatic() {
+        var state = cauldron.state();
+        if (active == null || state != BrewCauldronState.RAW && state != BrewCauldronState.BREWING) {
+            return;
+        }
+        if (state == BrewCauldronState.BREWING) {
+            BrewActionResult interruption = cauldron.interruptBrew();
+            if (!interruption.accepted()) {
+                return;
+            }
+        }
+        active = null;
+        tally = null;
+        waiting = "";
+        if (refundable.isEmpty()) {
+            restoreRefunds(List.of());
+        }
+        version++;
+    }
+
     void restoreRefunds(List<ItemStack> stacks) {
-        refundable.addAll(stacks);
-        if (!stacks.isEmpty() || active != null || cauldron.state() != BrewCauldronState.RAW) {
+        for (ItemStack stack : stacks) {
+            addRefundableStack(stack);
+        }
+        if (!refundable.isEmpty() || active != null || cauldron.state() != BrewCauldronState.RAW) {
             return;
         }
         // 旧半锅只存了物品、数量和炮制日，按存下来的三项还原。
-        for (var dose : cauldron.ingredients().values()) {
+        refundable.addAll(recoveredIngredients());
+    }
+
+    private List<ItemStack> recoveredIngredients() {
+        List<ItemStack> recovered = new ArrayList<>();
+        for (var entry : cauldron.ingredients().entrySet()) {
+            var dose = entry.getValue();
             var item = BuiltInRegistries.ITEM.getValue(Identifier.parse(dose.itemId()));
             var stack = new ItemStack(item, dose.count());
             if (dose.preparedGameDay() >= 0) {
                 stack.set(BrewingComponents.PREPARED_DAY, dose.preparedGameDay());
             }
-            refundable.add(stack);
+            addRecoveredIngredient(recovered, stack);
+        }
+        return recovered;
+    }
+
+    void addRefundableStack(ItemStack stack) {
+        addRecoveredIngredient(refundable, stack);
+    }
+
+    private static void addRecoveredIngredient(List<ItemStack> target, ItemStack stack) {
+        // 投料已返还空容器时，只退未返还容器的配料。
+        if (!BrewCauldronBlockEntity.hasReturnedContainer(stack)) {
+            target.add(stack);
         }
     }
 
@@ -229,7 +270,7 @@ final class FurnaceBatch {
             return 0;
         }
         if (active == null && cauldron.state() == BrewCauldronState.RAW) {
-            refundable.add(stack.copyWithCount(count));
+            addRefundableStack(stack.copyWithCount(count));
         }
         return count;
     }

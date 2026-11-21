@@ -107,6 +107,15 @@ public final class PortableMenuGameTest {
         FurnaceNetwork.handle(player, request);
     }
 
+    private static void reclaim(ServerPlayer player, FurnaceMenu menu) {
+        var request = FurnaceRequest.newBuilder()
+                .setMenu(menu.containerId)
+                .setVersion(menu.snapshot().getOrders().getVersion())
+                .setReclaim(true /* reclaim */)
+                .build();
+        FurnaceNetwork.handle(player, request);
+    }
+
     @GameTest
     public void copperAutomaticBottlesAndPayment(GameTestHelper test) {
         automatic(test, VesselKind.COPPER_CAULDRON);
@@ -282,6 +291,71 @@ public final class PortableMenuGameTest {
     }
 
     @GameTest
+    public void disconnectedPayerBatchCanBeReclaimedByAnotherPlayer(GameTestHelper test) {
+        var kit = kitchen(test, VesselKind.WITCH_CAULDRON);
+        kit.select(KIND);
+        kit.warm();
+        kit.offer(new ItemStack(Items.HONEY_BOTTLE));
+        kit.second();
+        var batch = kit.pot().batch();
+        test.assertTrue(batch.active != null && kit.pot().cauldron().state() == BrewCauldronState.BREWING,
+                "自动批次没有先开熬");
+
+        BrewingTestPlayers.close(kit.player());
+        var other = BrewingTestPlayers.create(test);
+        other.setPos(Vec3.atCenterOf(kit.pot().getBlockPos().above()));
+        BrewingTestPlayers.readRecipes(other, KIND, BrewKind.QI_GATHER);
+        var guest = new Kitchen(test, other, kit.pot());
+        kit.second();
+        test.assertTrue(batch.active != null && batch.tally != null
+                && kit.pot().cauldron().state() == BrewCauldronState.BREWING, "出元人断线时批次没有暂停");
+
+        var menu = guest.open();
+        test.assertTrue(menu.snapshot().getClock().getReclaimable(), "断线后的半锅没有退料入口");
+        reclaim(other, menu);
+        test.assertTrue(batch.active == null && batch.tally == null
+                && other.getInventory().countItem(BrewingItems.item("dry_moss")) == 1
+                && other.getInventory().countItem(Items.GLOWSTONE_DUST) == 1
+                && other.getInventory().countItem(Items.HONEY_BOTTLE) == 0
+                && kit.pot().cauldron().state() == BrewCauldronState.WATER, "另一玩家未能取回已有药材");
+        choose(other, menu, BrewKind.QI_GATHER, batch.version);
+        test.assertTrue(batch.next != null && batch.next.kind() == BrewKind.QI_GATHER, "退料后仍不能改方");
+        BrewingTestPlayers.close(other);
+        test.succeed();
+    }
+
+    @GameTest
+    public void interruptedManualBrewDoesNotRefundContainerIngredient(GameTestHelper test) {
+        var kit = kitchen(test, VesselKind.WITCH_CAULDRON);
+        kit.warm();
+        startManual(kit);
+        var player = kit.player();
+        for (int second = 0; second < ACCESSORY; second++) {
+            kit.second();
+            kit.pot().advanceTechniqueBrew(player, "portable/refund/" + player.getUUID() + "/" + second);
+        }
+        kit.offer(new ItemStack(Items.HONEY_BOTTLE));
+        test.assertTrue(player.getInventory().countItem(Items.GLASS_BOTTLE) == 1
+                && player.getInventory().countItem(Items.HONEY_BOTTLE) == 0, "蜂蜜瓶投料没有只返空瓶");
+        kit.pot().interruptTechniqueBrew();
+
+        var pot = kit.pot();
+        var position = pot.getBlockPos();
+        var title = pot.getBlockState().getBlock().getName();
+        FurnaceMenu.open(player, new PortableStation(player.level(), pot), position, title);
+        var menu = (FurnaceMenu) player.containerMenu;
+        boolean refundableHoneyBottle = kit.pot().batch().refundable.stream()
+                .anyMatch(stack -> stack.is(Items.HONEY_BOTTLE));
+        test.assertTrue(!refundableHoneyBottle, "重建退料表仍含蜂蜜瓶");
+        reclaim(player, menu);
+        test.assertTrue(player.getInventory().countItem(Items.GLASS_BOTTLE) == 1
+                && player.getInventory().countItem(Items.HONEY_BOTTLE) == 0,
+                "手熬中断退料重复返还了已返空瓶的整瓶材料");
+        BrewingTestPlayers.close(player);
+        test.succeed();
+    }
+
+    @GameTest
     public void interruptedSplashMustBeReclaimedBeforeDrink(GameTestHelper test) {
         var kit = kitchen(test, VesselKind.WITCH_CAULDRON);
         kit.warm();
@@ -300,13 +374,8 @@ public final class PortableMenuGameTest {
         test.assertTrue(pot.batch().active == null && clock.getReclaimable()
                 && clock.getMissingList().contains("message.meridian_brewing.furnace.reclaim_first"),
                 "锅中有火药却按饮剂开熬");
-        var reclaim = FurnaceRequest.newBuilder()
-                .setMenu(menu.containerId)
-                .setVersion(orders.getVersion())
-                .setReclaim(true /* reclaim */)
-                .build();
         var player = kit.player();
-        FurnaceNetwork.handle(player, reclaim);
+        reclaim(player, menu);
         test.assertTrue(player.getInventory().countItem(Items.GUNPOWDER) == 1
                 && pot.cauldron().state() == BrewCauldronState.WATER, "退料没有还回火药或清除旧剂型");
         BrewingTestPlayers.close(player);
