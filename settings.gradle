@@ -52,3 +52,6 @@ kizunaWorkspace.includeSource('human', [
         shared: 'dev.kizuna.meridian.human:shared',
         client: 'dev.kizuna.meridian.human:client'
 ])
+kizunaWorkspace.includeSource('progression', [
+        shared: 'dev.kizuna.meridian.progression:shared'
+])
