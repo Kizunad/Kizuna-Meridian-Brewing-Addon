@@ -3,7 +3,13 @@
   "id": "meridian_brewing",
   "version": "${version}",
   "name": "Kizuna's Meridian Brewing Addon",
-  "description": "炼药规则、巫药注册和巫釜数据",
+  "contact": {
+    "homepage": "https://github.com/Kizunad/Kizuna-Meridian-Brewing-Addon",
+    "sources": "https://github.com/Kizunad/Kizuna-Meridian-Brewing-Addon",
+    "issues": "https://github.com/Kizunad/Kizuna-Meridian-Brewing-Addon/issues"
+  },
+  "icon": "assets/meridian_brewing/icon.png",
+  "description": "Brew medicines in a witch’s cauldron using registered ingredients and recipes.\n按药方配齐药材，用巫釜炼制巫药。",
   "authors": [
     "Kizunad"
   ],

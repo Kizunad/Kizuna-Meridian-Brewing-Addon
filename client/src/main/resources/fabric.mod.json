@@ -3,7 +3,13 @@
   "id": "meridian_brewing_client",
   "version": "${version}",
   "name": "Kizuna's Meridian Brewing Addon - Client",
-  "description": "炼药器具放置模型、枯木染色与药方书",
+  "contact": {
+    "homepage": "https://github.com/Kizunad/Kizuna-Meridian-Brewing-Addon",
+    "sources": "https://github.com/Kizunad/Kizuna-Meridian-Brewing-Addon",
+    "issues": "https://github.com/Kizunad/Kizuna-Meridian-Brewing-Addon/issues"
+  },
+  "icon": "assets/meridian_brewing_client/icon.png",
+  "description": "See brewing vessels in the world and consult the recipe book while preparing medicine.\n查看摆放的炼药器具，照着药方书配药。",
   "authors": ["Kizunad"],
   "license": "PolyForm-Noncommercial-1.0.0",
   "environment": "client",
